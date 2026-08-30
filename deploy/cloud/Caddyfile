@@ -1,0 +1,20 @@
+{$API_DOMAIN} {
+  encode zstd gzip
+
+  header {
+    -Server
+    X-Content-Type-Options "nosniff"
+    Referrer-Policy "strict-origin-when-cross-origin"
+    Permissions-Policy "camera=(), microphone=(), geolocation=(), payment=(), usb=()"
+    X-Frame-Options "DENY"
+    Strict-Transport-Security "max-age=31536000; includeSubDomains"
+    Content-Security-Policy "default-src 'none'; frame-ancestors 'none'; base-uri 'none'"
+  }
+
+  @api path /health /v1/*
+  handle @api {
+    reverse_proxy core-api:4000
+  }
+
+  respond "Not found" 404
+}

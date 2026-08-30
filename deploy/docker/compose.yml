@@ -1,0 +1,254 @@
+name: tablenow-node
+
+x-app-environment: &app-environment
+  NODE_ENV: ${NODE_ENV:-production}
+  LOG_LEVEL: ${LOG_LEVEL:-info}
+  TABLENOW_STACK_ID: ${TABLENOW_STACK_ID:-tablenow-v2}
+  DATABASE_SCOPE: ${DATABASE_SCOPE:-tablenow-v2}
+  DATABASE_URL: postgresql://tablenow_app:${POSTGRES_APP_PASSWORD}@postgres:5432/tablenow_v2
+  PUBLIC_ORIGIN: ${PUBLIC_ORIGIN:-http://localhost:8080}
+  SESSION_SECRET: ${SESSION_SECRET}
+  OTP_PEPPER: ${OTP_PEPPER}
+  SESSION_TTL_HOURS: ${SESSION_TTL_HOURS:-168}
+  OTP_TTL_MINUTES: ${OTP_TTL_MINUTES:-10}
+  AUTH_FIXED_OTP: ${AUTH_FIXED_OTP:-}
+  PLATFORM_ADMIN_EMAIL: ${PLATFORM_ADMIN_EMAIL}
+  EMAIL_TRANSPORT: ${EMAIL_TRANSPORT:-smtp}
+  SMTP_HOST: ${SMTP_HOST:-mailpit}
+  SMTP_PORT: ${SMTP_PORT:-1025}
+  SMTP_SECURE: ${SMTP_SECURE:-false}
+  SMTP_USER: ${SMTP_USER:-}
+  SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+  EMAIL_FROM: ${EMAIL_FROM:-TableNow <access@tablenow.local>}
+  AI_PROVIDER: ${AI_PROVIDER:-deterministic}
+  AI_BASE_URL: ${AI_BASE_URL:-}
+  AI_API_KEY: ${AI_API_KEY:-}
+  AI_MODEL: ${AI_MODEL:-qwen3:8b}
+  AI_MAX_DAILY_EUR: ${AI_MAX_DAILY_EUR:-5}
+  STORAGE_ENCRYPTION_KEY: ${STORAGE_ENCRYPTION_KEY}
+  DATA_RETENTION_MONTHS: ${DATA_RETENTION_MONTHS:-24}
+  EXPORTS_DIR: /data/exports
+  COMPUTER_EVIDENCE_DIR: /data/computer-evidence
+  COMPUTER_SIMULATOR_URL: http://integration-simulator:4200
+  WORKER_POLL_MS: ${WORKER_POLL_MS:-2000}
+  TABLENOW_LEGAL_NAME: ${TABLENOW_LEGAL_NAME:-[DÉNOMINATION SOCIALE À COMPLÉTER]}
+  TABLENOW_LEGAL_FORM: ${TABLENOW_LEGAL_FORM:-[FORME JURIDIQUE À COMPLÉTER]}
+  TABLENOW_LEGAL_CAPITAL: ${TABLENOW_LEGAL_CAPITAL:-[CAPITAL À COMPLÉTER]}
+  TABLENOW_LEGAL_REGISTRATION: ${TABLENOW_LEGAL_REGISTRATION:-[SIREN / RCS À COMPLÉTER]}
+  TABLENOW_LEGAL_ADDRESS: ${TABLENOW_LEGAL_ADDRESS:-[SIÈGE SOCIAL À COMPLÉTER]}
+  TABLENOW_LEGAL_DIRECTOR: ${TABLENOW_LEGAL_DIRECTOR:-[DIRECTEUR DE PUBLICATION À COMPLÉTER]}
+  TABLENOW_LEGAL_HOST: ${TABLENOW_LEGAL_HOST:-TableNow Node local chez le client}
+
+x-platform-service: &platform-service
+  image: tablenow-platform:local
+  build:
+    context: ../..
+    dockerfile: deploy/docker/Dockerfile
+    target: runtime-services
+  restart: unless-stopped
+  init: true
+  networks: [private]
+  environment: *app-environment
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: tablenow_admin
+      POSTGRES_PASSWORD: ${POSTGRES_ADMIN_PASSWORD}
+      POSTGRES_DB: tablenow_v2
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U tablenow_admin -d tablenow_v2"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    networks: [private]
+    security_opt: ["no-new-privileges:true"]
+
+  db-role:
+    image: postgres:17-alpine
+    restart: "no"
+    depends_on:
+      postgres: { condition: service_healthy }
+    environment:
+      PGPASSWORD: ${POSTGRES_ADMIN_PASSWORD}
+      APP_DATABASE_PASSWORD: ${POSTGRES_APP_PASSWORD}
+    volumes:
+      - ./bootstrap-role.sql:/bootstrap/bootstrap-role.sql:ro
+    command: ["/bin/sh", "-ec", "psql -h postgres -U tablenow_admin -d tablenow_v2 -v ON_ERROR_STOP=1 -v app_password=\"$APP_DATABASE_PASSWORD\" -f /bootstrap/bootstrap-role.sql"]
+    networks: [private]
+    security_opt: ["no-new-privileges:true"]
+
+  migrate:
+    <<: *platform-service
+    restart: "no"
+    working_dir: /app/core-api
+    depends_on:
+      db-role: { condition: service_completed_successfully }
+    environment:
+      <<: *app-environment
+      DATABASE_URL: postgresql://tablenow_admin:${POSTGRES_ADMIN_PASSWORD}@postgres:5432/tablenow_v2
+    command: ["node", "dist/migrate.js"]
+
+  db-grants:
+    image: postgres:17-alpine
+    restart: "no"
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+    environment:
+      PGPASSWORD: ${POSTGRES_ADMIN_PASSWORD}
+    volumes:
+      - ./grant-access.sql:/bootstrap/grant-access.sql:ro
+    command: ["psql", "-h", "postgres", "-U", "tablenow_admin", "-d", "tablenow_v2", "-v", "ON_ERROR_STOP=1", "-f", "/bootstrap/grant-access.sql"]
+    networks: [private]
+    security_opt: ["no-new-privileges:true"]
+
+  seed:
+    <<: *platform-service
+    restart: "no"
+    working_dir: /app/core-api
+    depends_on:
+      db-grants: { condition: service_completed_successfully }
+    environment:
+      <<: *app-environment
+      TABLENOW_NODE_TOKEN: ${TABLENOW_NODE_TOKEN}
+      TABLENOW_COMPUTER_NODE_TOKEN: ${TABLENOW_COMPUTER_NODE_TOKEN}
+    command: ["node", "dist/seed.js"]
+
+  core-api:
+    <<: *platform-service
+    working_dir: /app/core-api
+    depends_on:
+      seed: { condition: service_completed_successfully }
+    command: ["node", "dist/server.js"]
+    volumes:
+      - exports:/data/exports
+      - computer-evidence:/data/computer-evidence
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:4000/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+    security_opt: ["no-new-privileges:true"]
+
+  worker:
+    <<: *platform-service
+    working_dir: /app/worker
+    depends_on:
+      core-api: { condition: service_healthy }
+    command: ["node", "dist/index.js"]
+    volumes:
+      - exports:/data/exports
+    security_opt: ["no-new-privileges:true"]
+
+  integration-simulator:
+    <<: *platform-service
+    working_dir: /app/integration-simulator
+    command: ["node", "dist/index.js"]
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:4200/healthz').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+    read_only: true
+    security_opt: ["no-new-privileges:true"]
+
+  computer-runner:
+    image: tablenow-computer-runner:local
+    build:
+      context: ../..
+      dockerfile: deploy/docker/Dockerfile
+      target: runtime-runner
+    restart: unless-stopped
+    init: true
+    depends_on:
+      core-api: { condition: service_healthy }
+      integration-simulator: { condition: service_healthy }
+    environment:
+      COMPUTER_RUNNER_API_URL: http://core-api:4000
+      TABLENOW_COMPUTER_NODE_TOKEN: ${TABLENOW_COMPUTER_NODE_TOKEN}
+      COMPUTER_PROFILE_ROOT: /data/browser-profiles
+      COMPUTER_CHROMIUM_PATH: /usr/bin/chromium
+      COMPUTER_HEADLESS: ${COMPUTER_HEADLESS:-true}
+      COMPUTER_POLL_MS: ${COMPUTER_POLL_MS:-2000}
+      COMPUTER_MAX_MODEL_STEPS: ${COMPUTER_MAX_MODEL_STEPS:-30}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_BASE_URL: ${OPENAI_BASE_URL:-https://api.openai.com/v1}
+      OPENAI_COMPUTER_MODEL: ${OPENAI_COMPUTER_MODEL:-gpt-5.6}
+    volumes:
+      - browser-profiles:/data/browser-profiles
+    networks: [private]
+    read_only: true
+    tmpfs: [/tmp]
+    shm_size: 1gb
+    security_opt: ["no-new-privileges:true"]
+
+  console:
+    <<: *platform-service
+    image: tablenow-console:local
+    build:
+      context: ../..
+      dockerfile: deploy/docker/Dockerfile
+      target: runtime-console
+    working_dir: /app/apps/console
+    depends_on:
+      core-api: { condition: service_healthy }
+    environment:
+      <<: *app-environment
+      CORE_API_INTERNAL_URL: http://core-api:4000
+      NEXT_PUBLIC_API_BASE_URL: /api
+    command: ["node", "server.js"]
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/login').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+    security_opt: ["no-new-privileges:true"]
+
+  proxy:
+    image: caddy:2.10-alpine
+    restart: unless-stopped
+    depends_on:
+      console: { condition: service_healthy }
+    ports:
+      - "127.0.0.1:8080:8080"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+    networks: [private]
+    read_only: true
+    tmpfs: [/config, /data]
+    security_opt: ["no-new-privileges:true"]
+
+  mailpit:
+    image: axllent/mailpit:v1.27
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8025:8025"
+    networks: [private]
+    security_opt: ["no-new-privileges:true"]
+
+  sync-gateway:
+    <<: *platform-service
+    profiles: ["hybrid"]
+    working_dir: /app/sync-gateway
+    depends_on:
+      core-api: { condition: service_healthy }
+    environment:
+      <<: *app-environment
+      SYNC_ENABLED: ${SYNC_ENABLED:-false}
+      SYNC_PORT: ${SYNC_PORT:-4100}
+    command: ["node", "dist/index.js"]
+    security_opt: ["no-new-privileges:true"]
+
+networks:
+  private:
+    internal: false
+
+volumes:
+  postgres-data:
+  exports:
+  computer-evidence:
+  browser-profiles:

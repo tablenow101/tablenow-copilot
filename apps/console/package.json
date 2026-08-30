@@ -1,0 +1,28 @@
+{
+  "name": "@tablenow/console",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev --hostname 0.0.0.0 --port 3000",
+    "build": "next build && node scripts/prepare-standalone.mjs",
+    "build:vercel": "next build",
+    "start": "node .next/standalone/apps/console/server.js",
+    "typecheck": "tsc --noEmit",
+    "lint": "tsc --noEmit",
+    "test": "vitest run --passWithNoTests",
+    "clean": "rimraf .next"
+  },
+  "dependencies": {
+    "@tablenow/core-api": "workspace:*",
+    "lucide-react": "^1.33.0",
+    "next": "16.3.2",
+    "react": "19.2.8",
+    "react-dom": "19.2.8"
+  },
+  "devDependencies": {
+    "@types/react": "^19.2.2",
+    "@types/react-dom": "^19.2.2",
+    "rimraf": "^6.1.2",
+    "vitest": "^4.1.11"
+  }
+}

@@ -1,0 +1,48 @@
+{
+  "name": "@tablenow/core-api",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/server.js",
+  "exports": {
+    "./app": {
+      "types": "./dist/app.d.ts",
+      "default": "./dist/app.js"
+    }
+  },
+  "scripts": {
+    "dev": "tsx watch src/server.ts",
+    "build": "tsc -p tsconfig.build.json",
+    "start": "node dist/server.js",
+    "db:migrate": "tsx src/migrate.ts",
+    "db:migrate:preview": "node dist/migrate-preview.js",
+    "db:seed": "tsx src/seed.ts",
+    "db:seed:preview": "node dist/seed-preview.js",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "lint": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run src",
+    "test:integration": "vitest run src/tenant-isolation.integration.test.ts",
+    "clean": "rimraf dist"
+  },
+  "dependencies": {
+    "@fastify/cookie": "^11.1.2",
+    "@fastify/cors": "^11.3.0",
+    "@fastify/helmet": "^13.1.1",
+    "@fastify/rate-limit": "^11.2.0",
+    "@tablenow/agent-runtime": "workspace:*",
+    "@tablenow/contracts": "workspace:*",
+    "@tablenow/domain": "workspace:*",
+    "@tablenow/provider-adapters": "workspace:*",
+    "dotenv": "^17.3.1",
+    "fastify": "^5.12.1",
+    "pino": "^10.3.1",
+    "postgres": "^3.4.9",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@electric-sql/pglite": "^0.5.8",
+    "rimraf": "^6.1.2",
+    "tsx": "^4.23.12",
+    "vitest": "^4.1.11"
+  }
+}

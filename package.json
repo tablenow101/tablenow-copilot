@@ -1,0 +1,30 @@
+{
+  "name": "tablenow-platform",
+  "version": "0.1.0",
+  "private": true,
+  "packageManager": "pnpm@11.19.0",
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "scripts": {
+    "build": "turbo run build",
+    "build:vercel": "turbo run build --filter=@tablenow/core-api... && pnpm --filter @tablenow/core-api db:migrate:preview && pnpm --filter @tablenow/core-api db:seed:preview && pnpm --filter @tablenow/console build:vercel",
+    "dev": "turbo run dev --parallel",
+    "lint": "turbo run lint",
+    "typecheck": "turbo run typecheck",
+    "test": "turbo run test",
+    "check": "pnpm lint && pnpm typecheck && pnpm test && pnpm build",
+    "db:migrate": "pnpm --filter @tablenow/core-api db:migrate",
+    "db:seed": "pnpm --filter @tablenow/core-api db:seed",
+    "node:init": "./scripts/init-node.sh",
+    "node:verify": "./scripts/verify-node.sh",
+    "node:backup": "./scripts/backup-node.sh",
+    "node:update": "./scripts/update-node.sh",
+    "clean": "turbo run clean"
+  },
+  "devDependencies": {
+    "@types/node": "^24.10.0",
+    "turbo": "^2.10.11",
+    "typescript": "^5.9.3"
+  }
+}
