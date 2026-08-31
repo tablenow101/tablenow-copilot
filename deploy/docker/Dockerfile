@@ -1,4 +1,4 @@
-FROM node:24-bookworm-slim AS build
+FROM node:26-bookworm-slim AS build
 
 ENV PNPM_HOME=/pnpm
 ENV PATH=$PNPM_HOME:$PATH
@@ -34,7 +34,7 @@ RUN pnpm --filter @tablenow/core-api deploy --prod --config.inject-workspace-pac
   && pnpm --filter @tablenow/sync-gateway deploy --prod --config.inject-workspace-packages=true /out/sync-gateway \
   && pnpm --filter @tablenow/mcp-server deploy --prod --config.inject-workspace-packages=true /out/mcp-server
 
-FROM node:24-bookworm-slim AS runtime-services
+FROM node:26-bookworm-slim AS runtime-services
 
 ENV NODE_ENV=production
 WORKDIR /app
@@ -45,7 +45,7 @@ RUN mkdir -p /data/exports /data/computer-evidence && chown -R node:node /data
 USER node
 EXPOSE 4000 4100
 
-FROM node:24-bookworm-slim AS runtime-runner
+FROM node:26-bookworm-slim AS runtime-runner
 
 ENV NODE_ENV=production
 ENV COMPUTER_CHROMIUM_PATH=/usr/bin/chromium
@@ -59,7 +59,7 @@ RUN mkdir -p /data/browser-profiles && chown -R node:node /data
 
 USER node
 
-FROM node:24-bookworm-slim AS runtime-console
+FROM node:26-bookworm-slim AS runtime-console
 
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
