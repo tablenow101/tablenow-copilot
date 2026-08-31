@@ -17,6 +17,7 @@ Le dépôt privé `tablenow101/tablenow-copilot` est l'unique source canonique d
 
 - Les branches ne contiennent aucun secret ni donnée réelle.
 - Les dépendances sont contrôlées chaque semaine par Dependabot.
+- Les correctifs et versions mineures sont proposés ensemble ; toute version majeure exige une décision et une branche dédiées.
 - Les tickets de sécurité passent par une alerte privée.
 - Les branches intégrées sont supprimées automatiquement.
 - Les réécritures forcées et suppressions de `main` sont interdites.
@@ -25,4 +26,3 @@ Le dépôt privé `tablenow101/tablenow-copilot` est l'unique source canonique d
 ## Responsabilité
 
 Le propriétaire TableNow valide les migrations, le domaine métier, le runtime Copilot, la confidentialité et la configuration GitHub. Cette règle pourra devenir une équipe de relecteurs sans modifier le processus.
-

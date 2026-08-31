@@ -6,6 +6,8 @@
 - source synchronisée sur la branche stable `main` ;
 - monorepo TypeScript avec console, API, worker, synchronisation, MCP et runner Computer Use ;
 - documentation d'entrée, contexte permanent, sécurité et gouvernance GitHub structurés ;
+- CI GitHub active et entièrement verte sur le commit `4a47d50` : code, PostgreSQL et Docker ;
+- Dependabot actif, avec correctifs groupés et versions majeures exclues de l'automatisation ;
 - neuf espaces produit, administration, onboarding et centre confidentialité ;
 - accès privé par code e-mail côté serveur ;
 - 66 tables PostgreSQL réparties dans quatre migrations ;
@@ -22,7 +24,8 @@
 - aucun secret réel embarqué ;
 - build Vercel complet réussi ;
 - migrations PostgreSQL, RLS, intégrité et idempotence testées ;
-- documentation et liens relatifs vérifiés.
+- documentation et liens relatifs vérifiés ;
+- migration exécutable depuis une installation vierge vérifiée par GitHub Actions.
 
 ## Cloud
 
