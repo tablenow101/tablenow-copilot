@@ -32,7 +32,7 @@ jobs:
         with:
           persist-credentials: false
       - name: Installer pnpm
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@v6
         with:
           version: 11.19.0
       - name: Installer Node.js
@@ -87,7 +87,7 @@ jobs:
         with:
           persist-credentials: false
       - name: Installer pnpm
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@v6
         with:
           version: 11.19.0
       - name: Installer Node.js
