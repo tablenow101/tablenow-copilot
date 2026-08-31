@@ -4,5 +4,5 @@ Ce dossier explique les grandes pièces et leurs frontières. Les détails d'imp
 
 - `system-map.md` : le système cible pour le pilote.
 - `data-ownership.md` : qui possède quoi.
-- `v1-v2-site-boundaries.md` : séparation des trois produits.
+- `resource-boundaries.md` : isolation des ressources Copilot.
 - `local-mode-future.md` : place du futur fonctionnement local.

@@ -17,5 +17,5 @@
 | RLS | Barrière de base qui empêche un restaurant de voir les données d'un autre. |
 | Responsive | Interface adaptée réellement à chaque taille d'écran. |
 | Source de vérité | Endroit unique dont la donnée fait foi. |
-| Vercel | Plateforme cloud qui construit et héberge TableNow V2. |
+| Vercel | Plateforme cloud qui construit et héberge TableNow Copilot. |
 | Workflow | Suite d'étapes contrôlées menant à un résultat. |

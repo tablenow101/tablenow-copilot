@@ -1,37 +1,34 @@
-# État réel — 30 août 2026
+# État réel — 31 août 2026
 
-## Construit dans le dépôt
+## Code et mémoire
 
+- dépôt privé canonique créé : `tablenow101/tablenow-copilot` ;
+- source synchronisée sur la branche stable `main` ;
 - monorepo TypeScript avec console, API, worker, synchronisation, MCP et runner Computer Use ;
+- documentation d'entrée, contexte permanent, sécurité et gouvernance GitHub structurés ;
 - neuf espaces produit, administration, onboarding et centre confidentialité ;
-- accès par invitation et code e-mail côté serveur ;
+- accès privé par code e-mail côté serveur ;
 - 66 tables PostgreSQL réparties dans quatre migrations ;
 - isolation RLS, intégrité inter-tables et clés anti-doublon ;
-- modes logiciel, calendrier, papier, aucun et hybride ;
-- harness Copilot avec permissions, budgets, risques et validations ;
-- documentation sécurité, RGPD, exploitation et contexte permanent ;
-- Docker conservé pour développement, portabilité et mode local futur.
-- API métier intégrée au même projet Next.js pour le runtime Vercel ;
-- migration Preview automatique, verrouillée et limitée à la base Copilot ;
-- amorçage pilote désactivé par défaut et impossible en Production ;
-- route de disponibilité ne révélant aucune valeur secrète.
+- modes logiciel, calendrier, papier, aucun outil et hybride ;
+- Copilot avec permissions, budgets, risques, preuves et validations humaines ;
+- Docker conservé pour le développement, les tests de portabilité et le mode local futur.
 
-## Vérifié avant cette mise à jour documentaire
+## Vérifié localement
 
 - typage strict, tests et builds de tous les workspaces ;
 - 70 tests effectifs réussis ;
 - audit des dépendances sans vulnérabilité connue ;
 - aucun secret réel embarqué ;
-- build Vercel complet réussi localement ;
-- 80 fichiers Markdown et leurs liens relatifs vérifiés ;
-- quatre tests PostgreSQL embarqués validant migrations, RLS, intégrité et idempotence.
+- build Vercel complet réussi ;
+- migrations PostgreSQL, RLS, intégrité et idempotence testées ;
+- documentation et liens relatifs vérifiés.
 
-## Pas encore réellement raccordé dans le cloud
+## Cloud
 
-- connexion Neon confirmée par le fondateur, à vérifier par une migration Preview ;
-- migrations et données pilotes cloud ;
-- envoi SMTP réel ;
-- stockage privé des exports et preuves ;
-- tâches durables et Computer Use isolé ;
-- login complet jusqu'au cockpit sur la version cloud ;
-- certification de tous les parcours desktop et mobile.
+- projet Vercel Copilot existant et isolé ;
+- base Neon confirmée par le propriétaire ;
+- connexion GitHub → Vercel encore à prouver par un nouveau déploiement Preview ;
+- migrations Neon encore à prouver sur cette Preview ;
+- SMTP réel, stockage privé, tâches durables et Computer Use cloud encore à raccorder ;
+- parcours complet ordinateur et mobile encore à certifier sur la version cloud.

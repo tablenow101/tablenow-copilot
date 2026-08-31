@@ -42,11 +42,11 @@ Every business table includes `tenant_id`. API repositories always include it in
 - Synchronization is opt-in and uses idempotent events, cursors and a per-node credential.
 - Cloud services are deployment choices, never imports in domain code.
 
-## Migration sequence
+## Data onboarding sequence
 
-1. Keep legacy production unchanged.
-2. Run V2 with synthetic pilot data.
-3. Validate workflows with invited restaurants.
-4. Export and map the live Supabase schema in a read-only migration rehearsal.
-5. Design any future synchronization through idempotent adapters and conflict tests; never enable an implicit dual-write path.
-6. Promote only the exact Vercel artifact and migrations verified in preview.
+1. Start every pilot with synthetic data in an isolated Preview.
+2. Validate the operating mode selected by the restaurant.
+3. Map any authorized external export without writing back to its source.
+4. Import through versioned, idempotent adapters with a reconciliation report.
+5. Enable synchronization only after conflict and duplicate tests pass.
+6. Promote only the exact Vercel artifact and migrations verified in Preview.

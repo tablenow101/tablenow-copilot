@@ -1,27 +1,23 @@
-# Blocages connus — 30 août 2026
+# Blocages connus — 31 août 2026
 
 ## Immédiat
 
-### Vérification PostgreSQL dans Preview
+### Preuve de déploiement Preview
 
-Le fondateur a confirmé Neon. L'API Vercel en lecture seule ne révèle pas les variables injectées : un déploiement Preview protégé doit maintenant prouver la connexion, appliquer les quatre migrations et exposer uniquement des indicateurs de disponibilité booléens.
+Le projet Vercel existe et Neon est confirmé, mais aucun déploiement issu du dépôt GitHub actuel n'a encore prouvé la chaîne complète : build, variables Preview, migrations et disponibilité de l'API.
 
 ## Avant partage aux pilotes
 
-### Compte et dépôt source
-
-Le dépôt local n'a pas encore de dépôt GitHub distant connecté ; une sauvegarde et un déploiement continu fiables exigent cette connexion.
-
-### Offre d'hébergement
-
-Le compte d'hébergement doit permettre un usage pilote professionnel et les services nécessaires ; toute évolution d'offre demandera une autorisation séparée.
-
 ### E-mail et identité légale
 
-Le domaine d'envoi, l'adresse expéditrice et les informations juridiques réelles doivent être fournis avant les invitations externes.
+Le domaine d'envoi, l'adresse expéditrice et les informations juridiques réelles doivent être confirmés avant les invitations externes.
 
-### Runtime cloud
+### Services cloud
 
-L'API est intégrée au runtime Vercel. Les tâches durables, le stockage privé et Computer Use doivent encore être raccordés puis testés ensemble.
+Le stockage privé, les tâches durables, les sauvegardes et Computer Use isolé doivent être raccordés et testés ensemble.
 
-Aucun de ces points ne sera masqué par une simulation dans la version destinée aux restaurateurs.
+### Certification produit
+
+Le login, l'onboarding, les neuf espaces, les erreurs, les reprises et tous les boutons doivent être parcourus sur ordinateur et mobile avec des données fictives persistantes.
+
+Aucun de ces points ne sera masqué par une simulation dans une version destinée aux restaurateurs.

@@ -2,24 +2,20 @@
 
 ## Accordées
 
-- Construire et modifier localement TableNow Copilot.
-- Créer la structure de contexte et les migrations nécessaires au produit.
-- Effectuer des vérifications externes en lecture seule.
-- Préparer la configuration des ressources cloud sans les créer.
-- Créer `tablenow-copilot-v2-db` avec Neon Free pour Development et Preview uniquement.
-- Ouvrir une session Vercel terminal révocable pour cette création.
-- Considérer la connexion Neon comme confirmée par le fondateur le 30 août 2026.
+| Date | Cible | Environnement | Portée |
+|---|---|---|---|
+| 2026-08-30 | Code TableNow Copilot | Local | Construire, corriger, tester et documenter toute la plateforme. |
+| 2026-08-30 | Neon Copilot | Development et Preview | Créer ou connecter la base dédiée, appliquer les migrations et utiliser des données fictives. |
+| 2026-08-30 | Vercel Copilot | Preview privée | Relier le dépôt, configurer les variables nécessaires et déployer sans créer de second projet. |
+| 2026-08-31 | `tablenow101/tablenow-copilot` | Dépôt privé GitHub | Créer, connecter, synchroniser et configurer le dépôt et ses protections. |
 
 ## À demander au moment de l'action
 
-- Activer un plan PostgreSQL payant ou connecter la ressource à Production.
-- Installer ou connecter un fournisseur externe.
-- Ajouter ou modifier des secrets cloud.
-- Créer ou connecter un dépôt GitHub.
-- Changer une offre payante.
-- Envoyer des e-mails réels.
+- Activer un service payant ou connecter une ressource à la production.
+- Envoyer des e-mails réels à des testeurs.
 - Modifier un domaine ou le DNS.
-- Publier une version accessible aux testeurs.
-- Importer ou supprimer des données réelles.
+- Publier une version accessible sans protection.
+- Importer, modifier ou supprimer des données réelles.
+- Ajouter un fournisseur externe non encore approuvé.
 
-Chaque accord futur doit indiquer date, cible, environnement et portée.
+Chaque nouvel accord indique la date, la cible, l'environnement et la portée.

@@ -1,63 +1,41 @@
-# Frontières de déploiement TableNow
+# Isolation du déploiement TableNow Copilot
 
-Cette décision est un garde-fou permanent. Aucun projet ne partage son dépôt, son projet Vercel, sa base, ses secrets ou son domaine de production avec un autre.
+Copilot possède ses propres ressources. Aucun dépôt, projet Vercel, secret, domaine ou base de données ne doit être partagé implicitement avec un autre produit.
 
-| Surface | État | Dépôt | Hébergement | Domaine | Données |
-|---|---|---|---|---|---|
-| TableNow V1 | Production protégée | Dépôts historiques | Projet actuel, inchangé | `app.tablenow.io` | Base historique uniquement |
-| TableNow V2 Copilot | Produit en développement | `tablenow-platform` | Control plane Vercel unique | `copilot.tablenow.io` | Nouvelle base PostgreSQL V2 |
-| Site TableNow | Vitrine actuelle | Webflow pour le moment | Webflow, puis projet Vercel séparé | `tablenow.io` et `www.tablenow.io` | Aucune donnée métier |
+| Ressource | Cible Copilot | Règle |
+|---|---|---|
+| Code | `tablenow101/tablenow-copilot` | Dépôt privé et source canonique |
+| Hébergement | Projet Vercel Copilot existant | Console et API dans un seul control plane |
+| Données | Base Neon dédiée par environnement | Une source de vérité PostgreSQL |
+| Preview | URL Vercel protégée | Données fictives et secrets Preview uniquement |
+| Production | Domaine Copilot à attribuer plus tard | Promotion du même artefact vérifié |
 
 ## Règles non négociables
 
-1. V1 ne reçoit aucun commit, aucune migration et aucune variable de V2.
-2. V2 utilise un nouveau projet Vercel nommé `tablenow-copilot-v2` et une nouvelle base PostgreSQL.
-3. Le site utilisera plus tard un dépôt `tablenow-site` et un projet Vercel `tablenow-site` distincts.
-4. Chaque environnement possède ses propres secrets : production, prévisualisation et développement.
-5. Aucun jeton Supabase, VPS ou Vercel historique n'est copié dans V2.
-6. Une prévisualisation testée est promue ; le domaine de production n'est jamais construit directement à l'aveugle.
+1. Development, Preview et Production utilisent des secrets et bases distincts.
+2. Le dépôt ne contient aucune valeur secrète ni donnée réelle.
+3. Aucun second backend cloud n'écrit en parallèle.
+4. Les migrations sont exécutées et testées avant la promotion de l'interface.
+5. Les secrets serveur ne portent jamais le préfixe `NEXT_PUBLIC_`.
+6. Une version Preview testée est promue ; la production n'est jamais reconstruite à l'aveugle.
 
-## Déploiement V2 recommandé
+## Control plane Copilot
 
-### Control plane Copilot
+- Framework : Next.js avec l'API métier intégrée au même projet Vercel.
+- PostgreSQL : Neon derrière l'adaptateur TableNow.
+- Tâches : exécutions durables déclenchées, jamais une boucle serveur cachée.
+- Fichiers : stockage objet privé, référencé depuis PostgreSQL.
+- Computer Use : bac à sable temporaire appelant uniquement l'API métier.
+- Conteneurs : développement, reprise, portabilité et futur mode local ; pas un second backend actif.
 
-- Projet Vercel : `tablenow-copilot-v2`.
-- Dépôt : `tablenow-platform` uniquement.
-- Framework : Next.js avec API métier intégrée au même déploiement logique.
-- Domaine production : `copilot.tablenow.io`.
-- Domaine staging : `copilot-staging.tablenow.io` ou URL de prévisualisation Vercel.
-- Variables minimales :
-  - `TABLENOW_STACK_ID=tablenow-v2` ;
-  - `NEXT_PUBLIC_API_BASE_URL=/api`.
-
-Les secrets serveur de base, SMTP, stockage et modèles ne sont accessibles qu'aux fonctions serveur ; aucun n'utilise le préfixe `NEXT_PUBLIC_`.
-
-Le build refuse automatiquement les domaines réservés à V1 et au site.
-
-### Cœur V2
-
-L'API métier, les tâches déclenchées et la console forment un seul control plane Vercel. Computer Use s'exécute dans un bac à sable temporaire et n'écrit qu'en passant par l'API.
-
-Les conteneurs restent disponibles pour le développement, les tests de portabilité, la reprise et un futur nœud restaurant. Ils ne constituent pas un deuxième backend cloud actif pendant le pilote.
-
-### Données V2
-
-- PostgreSQL séparé ;
-- nom logique `tablenow_v2` ;
-- `DATABASE_SCOPE=tablenow-v2` obligatoire ;
-- sauvegardes et clés de chiffrement séparées ;
-- aucune connexion réseau autorisée vers la base V1 ;
-- migrations exécutées avant la promotion de la console.
+Les identifiants techniques de garde-fou `TABLENOW_STACK_ID` et `DATABASE_SCOPE` doivent correspondre à la configuration versionnée du projet. Le build refuse une cible incohérente.
 
 ## Promotion d'une version
 
-1. Une branche crée une prévisualisation Vercel.
-2. La CI vérifie typage, tests, PostgreSQL, images Docker et dépendances.
-3. Les parcours ordinateur et mobile sont testés sur la prévisualisation.
-4. Le même artefact Vercel validé est promu vers `copilot.tablenow.io`.
-5. Les erreurs et temps de réponse sont contrôlés après promotion.
-6. Un retour instantané vers la version précédente reste disponible.
-
-## Migration future du site Webflow
-
-Le site ne doit pas être migré maintenant. La migration sera un chantier indépendant : inventaire des pages et formulaires, conservation SEO, reconstruction, prévisualisation, comparaison visuelle, redirections, puis changement DNS. `tablenow.io` ne basculera qu'après parité fonctionnelle et validation des formulaires.
+1. Une branche crée une Preview Vercel.
+2. GitHub vérifie typage, tests, PostgreSQL, images Docker et dépendances.
+3. La Preview applique les migrations sous verrou et vérifie la disponibilité.
+4. Les parcours ordinateur et mobile sont testés sur cette Preview.
+5. Le même artefact validé est promu.
+6. Les erreurs et temps de réponse sont surveillés après promotion.
+7. Un retour vers la version précédente reste immédiatement disponible.

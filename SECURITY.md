@@ -1,17 +1,21 @@
-# Security policy
+# Sécurité de TableNow Copilot
 
-Report vulnerabilities privately to `security@tablenow.io`. Do not open a public issue containing credentials, personal data, tenant identifiers or exploit details.
+## Signaler une vulnérabilité
 
-## Baseline controls
+Utiliser exclusivement une [alerte de sécurité privée GitHub](https://github.com/tablenow101/tablenow-copilot/security/advisories/new). Ne jamais ouvrir de ticket public contenant un secret, une donnée personnelle, un identifiant de restaurant ou une méthode d'exploitation.
 
-- Passwordless codes are short-lived, hashed with a deployment-specific pepper, single-use and rate-limited.
-- Session cookies are `HttpOnly`, `SameSite=Lax`, and `Secure` outside local development.
-- Mutating browser requests require a double-submit CSRF token and an allowed origin.
-- Every business record carries `tenant_id`; repositories scope queries and PostgreSQL RLS adds defense in depth.
-- Copilot tools never write directly to PostgreSQL. Sensitive actions require explicit human approval and are audited.
-- Secrets are runtime environment variables. They are never compiled into browser bundles.
-- Production refuses fixed OTPs, weak secrets, wildcard origins and demo-mode configuration.
+Le signalement doit décrire le risque, les étapes minimales de reproduction, la surface touchée et une proposition de correction si elle est connue. Toute donnée d'exemple doit être fictive.
 
-## Supported pilot branch
+## Principes appliqués
 
-Security updates are applied to `main`. Local customer nodes receive signed container releases after pilot acceptance; automatic unattended updates are disabled by default.
+- Les codes d'accès sont courts, hachés, limités, temporaires et utilisables une seule fois.
+- Les sessions utilisent des cookies serveur protégés et les écritures web sont défendues contre le CSRF.
+- Chaque donnée métier appartient à une organisation ; l'API et PostgreSQL vérifient indépendamment cette frontière.
+- Les outils Copilot, MCP et Computer Use passent toujours par l'API métier.
+- Une action sensible exige une validation humaine et laisse une preuve d'audit.
+- Les secrets sont injectés au runtime et ne sont jamais compilés dans le navigateur.
+- La production refuse les secrets faibles, les codes fixes, les origines génériques et le mode démonstration.
+
+## Version maintenue
+
+La branche `main` reçoit les corrections de sécurité. Une version n'est promue qu'après réussite des contrôles obligatoires et vérification de l'environnement visé.

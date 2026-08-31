@@ -40,7 +40,7 @@ x-app-environment: &app-environment
   TABLENOW_LEGAL_HOST: ${TABLENOW_LEGAL_HOST:-TableNow Node local chez le client}
 
 x-platform-service: &platform-service
-  image: tablenow-platform:local
+  image: tablenow-copilot:local
   build:
     context: ../..
     dockerfile: deploy/docker/Dockerfile

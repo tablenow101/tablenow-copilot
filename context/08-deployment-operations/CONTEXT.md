@@ -7,3 +7,4 @@ Ce dossier explique où tourne TableNow Copilot et comment une version devient u
 - `release-process.md` : chemin de publication contrôlé.
 - `observability.md` : comment détecter un problème.
 - `backups-and-recovery.md` : comment récupérer après un incident.
+- `github-governance.md` : comment protéger le code et intégrer un changement.

@@ -1,0 +1,10 @@
+# Le propriétaire du produit relit les surfaces sensibles.
+* @tablenow101
+
+/.github/ @tablenow101
+/services/core-api/migrations/ @tablenow101
+/packages/domain/ @tablenow101
+/packages/agent-runtime/ @tablenow101
+/context/ @tablenow101
+/docs/privacy/ @tablenow101
+

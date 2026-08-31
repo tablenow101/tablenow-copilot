@@ -1,4 +1,4 @@
-# ADR 0003 — Vercel-first et control plane V2 unique
+# ADR 0003 — Vercel-first et control plane Copilot unique
 
 - Statut : accepté
 - Date : 2026-08-30

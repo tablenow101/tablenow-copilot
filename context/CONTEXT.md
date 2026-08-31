@@ -1,4 +1,4 @@
-# Mémoire permanente de TableNow V2
+# Mémoire permanente de TableNow Copilot
 
 Ce dossier est le point d'entrée humain du projet. Il explique ce que TableNow construit, pourquoi, où se trouve chaque vérité et ce qui reste à faire.
 
