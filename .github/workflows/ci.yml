@@ -28,7 +28,7 @@ jobs:
     timeout-minutes: 20
     steps:
       - name: Récupérer le code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           persist-credentials: false
       - name: Installer pnpm
@@ -83,7 +83,7 @@ jobs:
       EMAIL_TRANSPORT: log
     steps:
       - name: Récupérer le code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           persist-credentials: false
       - name: Installer pnpm
@@ -109,7 +109,7 @@ jobs:
     timeout-minutes: 25
     steps:
       - name: Récupérer le code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           persist-credentials: false
       - name: Valider Docker Compose
