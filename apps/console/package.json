@@ -21,7 +21,7 @@
   },
   "devDependencies": {
     "@types/react": "^19.2.2",
-    "@types/react-dom": "^19.2.2",
+    "@types/react-dom": "^19.2.5",
     "rimraf": "^6.1.2",
     "vitest": "^4.1.11"
   }
