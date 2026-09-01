@@ -1,5 +1,6 @@
 const publicPilotHosts = new Set([
   "copilot.tablenow.io",
+  "tablenow-copilot-v2.vercel.app",
   "tablenow-copilot-v2-tablenow101.vercel.app",
 ]);
 
