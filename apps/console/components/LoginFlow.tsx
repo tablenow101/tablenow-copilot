@@ -7,9 +7,9 @@ import { ArrowRight, Check, LockKeyhole, Mail, RotateCcw, ShieldCheck } from "lu
 import { api, ApiError } from "@/lib/api";
 import { isPublicPilotRuntime } from "@/lib/public-pilot-host";
 
-export function LoginFlow() {
+export function LoginFlow({ initialPublicPilot = false }: { initialPublicPilot?: boolean }) {
   const router = useRouter();
-  const [publicPilot, setPublicPilot] = useState(false);
+  const [publicPilot, setPublicPilot] = useState(initialPublicPilot);
   const [step, setStep] = useState<"email" | "code">("email");
   const [email, setEmail] = useState("");
   const [code, setCode] = useState("");
