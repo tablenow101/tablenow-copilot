@@ -46,6 +46,35 @@ describe("runtime safety configuration", () => {
     expect(config.PUBLIC_ORIGIN).toBe("https://tablenow-copilot-preview.vercel.app");
   });
 
+  it("creates isolated defaults only for a protected Vercel preview", () => {
+    const config = loadRuntimeConfig({
+      NODE_ENV: "production",
+      VERCEL: "1",
+      VERCEL_ENV: "preview",
+      VERCEL_URL: "tablenow-copilot-preview.vercel.app",
+      TABLENOW_STACK_ID: "tablenow-v2",
+      DATABASE_SCOPE: "tablenow-v2",
+      DATABASE_URL: valid.DATABASE_URL,
+    });
+    expect(config.SESSION_SECRET).toHaveLength(64);
+    expect(config.OTP_PEPPER).toHaveLength(64);
+    expect(config.AUTH_FIXED_OTP).toBe("424242");
+    expect(config.PLATFORM_ADMIN_EMAIL).toBe("preview@tablenow.local");
+    expect(config.EMAIL_TRANSPORT).toBe("log");
+  });
+
+  it("does not create preview defaults for production", () => {
+    expect(() => loadRuntimeConfig({
+      NODE_ENV: "production",
+      VERCEL: "1",
+      VERCEL_ENV: "production",
+      VERCEL_PROJECT_PRODUCTION_URL: "copilot.tablenow.io",
+      TABLENOW_STACK_ID: "tablenow-v2",
+      DATABASE_SCOPE: "tablenow-v2",
+      DATABASE_URL: valid.DATABASE_URL,
+    })).toThrow();
+  });
+
   it("rejects V1 and website origins for the V2 runtime", () => {
     expect(() => loadRuntimeConfig({ ...valid, PUBLIC_ORIGIN: "https://app.tablenow.io" })).toThrow("V2 cannot use");
     expect(() => loadRuntimeConfig({ ...valid, PUBLIC_ORIGIN: "https://www.tablenow.io" })).toThrow("V2 cannot use");

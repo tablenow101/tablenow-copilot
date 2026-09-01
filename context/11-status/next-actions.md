@@ -1,10 +1,10 @@
 # Prochaines actions
 
-1. Relier le dépôt au projet Vercel Copilot existant, sans créer de doublon.
-2. Déployer une Preview privée et vérifier que Neon est injecté sans révéler ses secrets.
-3. Appliquer les migrations `001` à `004` et tester l'isolation sur Neon.
-4. Créer puis réinitialiser un jeu de données pilote entièrement fictif.
-5. Vérifier le parcours e-mail, code, onboarding et cockpit.
-6. Raccorder e-mail, stockage privé, tâches durables et Copilot.
-7. Boucler les tests et corrections sur tous les parcours ordinateur et mobile.
-8. Demander un accord séparé avant toute ouverture publique, donnée réelle, DNS ou dépense supplémentaire.
+1. Déployer le commit canonique `main` en Preview privée sur le projet Vercel Copilot existant.
+2. Vérifier les migrations `001` à `004`, l'isolation Neon et le jeu de données fictif.
+3. Vérifier le parcours e-mail, code, onboarding et cockpit sur ordinateur et mobile.
+4. Configurer l'environnement Production pilote, l'e-mail réel, le stockage privé et les sauvegardes.
+5. Rattacher `copilot.tablenow.io` sans modifier `app.tablenow.io`.
+6. Promouvoir exactement l'artefact certifié et retirer la protection uniquement de la Production.
+7. Vérifier le domaine public, les journaux et le retour arrière.
+8. Raccorder ensuite les tâches durables, le Copilot et les intégrations autorisées.

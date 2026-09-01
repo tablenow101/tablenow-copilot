@@ -1,0 +1,19 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": "nextjs",
+  "installCommand": "pnpm install --frozen-lockfile",
+  "buildCommand": "TABLENOW_STACK_ID=tablenow-v2 DATABASE_SCOPE=tablenow-v2 NEXT_PUBLIC_API_BASE_URL=/api TABLENOW_PREVIEW_SEED=true pnpm build:vercel",
+  "outputDirectory": "apps/console/.next",
+  "build": {
+    "env": {
+      "TABLENOW_STACK_ID": "tablenow-v2",
+      "DATABASE_SCOPE": "tablenow-v2",
+      "NEXT_PUBLIC_API_BASE_URL": "/api"
+    }
+  },
+  "env": {
+    "TABLENOW_STACK_ID": "tablenow-v2",
+    "DATABASE_SCOPE": "tablenow-v2",
+    "NEXT_PUBLIC_API_BASE_URL": "/api"
+  }
+}

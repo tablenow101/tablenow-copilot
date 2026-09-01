@@ -24,6 +24,7 @@
     "lint": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run src",
     "test:integration": "vitest run src/tenant-isolation.integration.test.ts",
+    "test:preview": "node dist/preview-smoke.js",
     "clean": "rimraf dist"
   },
   "dependencies": {

@@ -3,11 +3,14 @@ export const runtime = "nodejs";
 
 export function GET(): Response {
   const database = Boolean(process.env.DATABASE_URL || process.env.POSTGRES_URL);
-  const serverSecrets = Boolean(process.env.SESSION_SECRET && process.env.OTP_PEPPER);
-  const administrator = Boolean(process.env.PLATFORM_ADMIN_EMAIL);
+  const isolatedPreviewDefaults = process.env.VERCEL === "1"
+    && process.env.VERCEL_ENV === "preview"
+    && database;
+  const serverSecrets = Boolean(process.env.SESSION_SECRET && process.env.OTP_PEPPER) || isolatedPreviewDefaults;
+  const administrator = Boolean(process.env.PLATFORM_ADMIN_EMAIL) || isolatedPreviewDefaults;
   const email = process.env.EMAIL_TRANSPORT === "smtp"
     ? Boolean(process.env.SMTP_HOST && process.env.EMAIL_FROM)
-    : process.env.VERCEL_ENV === "preview" && process.env.EMAIL_TRANSPORT === "log";
+    : isolatedPreviewDefaults || (process.env.VERCEL_ENV === "preview" && process.env.EMAIL_TRANSPORT === "log");
   const storage = process.env.VERCEL_ENV === "preview" || Boolean(process.env.BLOB_READ_WRITE_TOKEN);
 
   return Response.json({

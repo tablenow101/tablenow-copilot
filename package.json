@@ -8,7 +8,7 @@
   },
   "scripts": {
     "build": "turbo run build",
-    "build:vercel": "turbo run build --filter=@tablenow/core-api... && pnpm --filter @tablenow/core-api db:migrate:preview && pnpm --filter @tablenow/core-api db:seed:preview && pnpm --filter @tablenow/console build:vercel",
+    "build:vercel": "turbo run build --filter=@tablenow/core-api... && pnpm --filter @tablenow/core-api db:migrate:preview && pnpm --filter @tablenow/core-api db:seed:preview && pnpm --filter @tablenow/core-api test:preview && pnpm --filter @tablenow/console build:vercel",
     "dev": "turbo run dev --parallel",
     "lint": "turbo run lint",
     "typecheck": "turbo run typecheck",
@@ -24,6 +24,9 @@
   },
   "devDependencies": {
     "@types/node": "^24.10.0",
+    "next": "16.3.2",
+    "react": "19.2.8",
+    "react-dom": "19.2.8",
     "turbo": "^2.10.11",
     "typescript": "^5.9.3"
   }
