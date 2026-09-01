@@ -40,6 +40,8 @@ import type { Workspace } from "@/lib/types";
 import { aggregateWorkspaceMetrics, scopeWorkspace } from "@/lib/workspace";
 import { addLocalHours, formatRestaurantDate, formatRestaurantTime, nextServiceLocal, restaurantLocalToIso } from "@/lib/timezone";
 import { useSession } from "@/hooks/useSession";
+import { publicPilotSystems, publicPilotWorkspace } from "@/lib/public-pilot";
+import { isPublicPilotRuntime } from "@/lib/public-pilot-host";
 import { AppChrome } from "./AppChrome";
 import { LoadingScreen } from "./LoadingScreen";
 import { ModalFrame } from "./ModalFrame";
@@ -75,6 +77,12 @@ export function ProductShell({ section }: { section: ProductSection }) {
 
   const refresh = useCallback(async (silent = false) => {
     if (!silent) setRefreshing(true);
+    if (isPublicPilotRuntime()) {
+      setWorkspace(publicPilotWorkspace);
+      setError("");
+      setRefreshing(false);
+      return;
+    }
     try { setWorkspace(await api<Workspace>("/v1/workspace")); setError(""); }
     catch (caught) {
       if (caught instanceof ApiError && caught.status === 401) router.replace("/login");
@@ -96,12 +104,19 @@ export function ProductShell({ section }: { section: ProductSection }) {
   const visibleWorkspace = useMemo(() => scopeWorkspace(workspace, effectiveRestaurantId), [workspace, effectiveRestaurantId]);
 
   const mutate = async (path: string, method: string, body: unknown, success: string) => {
+    if (session?.membership.role === "viewer") {
+      setToast("Version publique en lecture seule — aucune donnée n'a été modifiée.");
+      return;
+    }
     try { await api(path, { method, body: JSON.stringify(body) }); await refresh(true); setToast(success); }
     catch (caught) { setToast(caught instanceof Error ? caught.message : "L'action n'a pas abouti."); }
   };
 
   if (sessionLoading || !session || !workspace || !visibleWorkspace || !restaurantContextReady) return <LoadingScreen />;
   const pageMeta = meta[section];
+  const publicPilot = isPublicPilotRuntime();
+  const readOnly = session.membership.role === "viewer";
+  const requestWriteAccess = () => setToast("Version publique en lecture seule — connectez un espace invité pour agir.");
   const selectRestaurant = (restaurantId: string | null) => {
     setActiveRestaurantId(restaurantId);
     try { localStorage.setItem("tablenow.copilot.restaurant-context.v1", JSON.stringify({ tenantId: session.tenant.id, restaurantId })); }
@@ -111,17 +126,18 @@ export function ProductShell({ section }: { section: ProductSection }) {
   const notifications = visibleWorkspace.decisions.filter((item) => item.status === "open").slice(0, 4).map((item) => ({ id: item.id, title: item.title, detail: item.priority === "critical" ? "Décision critique" : "Décision à traiter", href: "/today" }));
 
   return <AppChrome session={session} active={section} title={pageMeta.title} subtitle={pageMeta.subtitle} refreshing={refreshing} onRefresh={() => void refresh()} notifications={notifications} restaurants={workspace.restaurants} activeRestaurantId={effectiveRestaurantId} onRestaurantChange={selectRestaurant}>
+    {readOnly && <div className="public-pilot-banner"><ShieldCheck size={16} /><span><strong>Version pilote publique</strong> Données fictives, navigation complète, actions désactivées.</span></div>}
     {error && <div className="inline-error"><AlertTriangle size={16} />{error}<button onClick={() => void refresh()}>Réessayer</button></div>}
-    {section === "today" && <TodayView workspace={visibleWorkspace} mutate={mutate} onNewReservation={() => setReservationOpen(true)} />}
+    {section === "today" && <TodayView workspace={visibleWorkspace} mutate={mutate} onNewReservation={readOnly ? requestWriteAccess : () => setReservationOpen(true)} />}
     {section === "communications" && <CommunicationsView workspace={visibleWorkspace} mutate={mutate} />}
-    {section === "reservations" && <ReservationsView workspace={visibleWorkspace} mutate={mutate} onNew={() => setReservationOpen(true)} />}
+    {section === "reservations" && <ReservationsView workspace={visibleWorkspace} mutate={mutate} onNew={readOnly ? requestWriteAccess : () => setReservationOpen(true)} />}
     {section === "operations" && <OperationsView workspace={visibleWorkspace} mutate={mutate} onNew={["platform_admin", "owner", "group_admin", "manager", "operator"].includes(session.membership.role) ? () => setManualEntry("task") : undefined} />}
     {section === "team" && <TeamView workspace={visibleWorkspace} onNew={["platform_admin", "owner", "group_admin", "manager"].includes(session.membership.role) ? () => setManualEntry("shift") : undefined} />}
     {section === "inventory" && <InventoryView workspace={visibleWorkspace} mutate={mutate} onNew={["platform_admin", "owner", "group_admin", "manager", "operator"].includes(session.membership.role) ? () => setManualEntry("inventory") : undefined} />}
     {section === "performance" && <PerformanceView workspace={visibleWorkspace} />}
     {section === "locations" && <LocationsView workspace={workspace} onOpen={selectRestaurant} onNew={() => setRestaurantOpen(true)} canManage={["platform_admin", "owner", "group_admin"].includes(session.membership.role)} />}
-    {section === "systems" && <SystemsCenter restaurants={workspace.restaurants} role={session.membership.role} activeRestaurantId={effectiveRestaurantId} />}
-    {section === "copilot" && <CopilotView key={effectiveRestaurantId || "group"} workspace={visibleWorkspace} activeRestaurantId={effectiveRestaurantId} mutate={mutate} refresh={() => refresh(true)} />}
+    {section === "systems" && <SystemsCenter restaurants={workspace.restaurants} role={session.membership.role} activeRestaurantId={effectiveRestaurantId} {...(publicPilot ? { publicOverview: publicPilotSystems } : {})} />}
+    {section === "copilot" && <CopilotView key={effectiveRestaurantId || "group"} workspace={visibleWorkspace} activeRestaurantId={effectiveRestaurantId} mutate={mutate} refresh={() => refresh(true)} readOnly={publicPilot} />}
     {reservationOpen && <NewReservationModal restaurants={workspace.restaurants} activeRestaurantId={effectiveRestaurantId} onClose={() => setReservationOpen(false)} onCreated={async () => { setReservationOpen(false); await refresh(true); setToast("Réservation ajoutée au service."); }} />}
     {restaurantOpen && <NewRestaurantModal onClose={() => setRestaurantOpen(false)} onCreated={async (restaurantId) => { setRestaurantOpen(false); await refresh(true); selectRestaurant(restaurantId); setToast("Établissement créé et contexte activé."); }} />}
     {manualEntry && <ManualEntryModal kind={manualEntry} restaurants={workspace.restaurants} activeRestaurantId={effectiveRestaurantId} onClose={() => setManualEntry(null)} onCreated={async () => { const label = manualEntry === "task" ? "Tâche ajoutée aux opérations." : manualEntry === "shift" ? "Service ajouté au planning." : "Article ajouté au stock."; setManualEntry(null); await refresh(true); setToast(label); }} />}
@@ -203,7 +219,7 @@ function LocationsView({ workspace, onOpen, onNew, canManage }: { workspace: Wor
   return <div className="view-stack"><section className="group-overview"><div><span className="eyebrow">Vue groupe</span><h2>{workspace.restaurants.length} établissement{workspace.restaurants.length > 1 ? "s" : ""}, un seul langage opérationnel.</h2></div><div className="group-actions"><Link className="secondary-button" href="/systems"><ShieldCheck size={16} /> Configurer les systèmes</Link>{canManage && <button className="primary-button" onClick={onNew}><Plus size={16} /> Ajouter un établissement</button>}</div></section><div className="location-grid">{workspace.restaurants.map((restaurant) => { const summary = workspace.restaurantSummaries.find((item) => item.restaurantId === restaurant.id); return <article className="location-card" key={restaurant.id}><header><div className="location-monogram">{initials(restaurant.name)}</div><span className="live-badge"><i /> En direct</span></header><h3>{restaurant.name}</h3><p><MapPin size={14} />{restaurant.address || "Adresse à compléter"}</p><div className="location-stats"><span><small>Occupation</small><strong>{summary?.occupancyPercent || 0} %</strong></span><span><small>Décisions</small><strong>{summary?.openDecisions || 0}</strong></span><span><small>Capacité</small><strong>{restaurant.capacity}</strong></span></div><footer><span>{restaurant.isDemo ? "Données de démonstration" : "Données réelles"}</span><Link href="/today" onClick={() => onOpen(restaurant.id)}>Ouvrir <ArrowUpRight size={14} /></Link></footer></article>; })}</div><section className="panel local-panel"><div><ShieldCheck size={21} /><span><strong>Installation locale disponible</strong><p>Cette console et son API peuvent fonctionner sur le réseau de l'établissement. La synchronisation vers le cloud reste désactivable.</p></span></div><span className="node-pill">LOCAL-FIRST · CONFIGURABLE</span></section></div>;
 }
 
-function CopilotView({ workspace, activeRestaurantId, mutate, refresh }: { workspace: Workspace; activeRestaurantId: string | null; mutate: Mutation; refresh: () => Promise<void> }) {
+function CopilotView({ workspace, activeRestaurantId, mutate, refresh, readOnly }: { workspace: Workspace; activeRestaurantId: string | null; mutate: Mutation; refresh: () => Promise<void>; readOnly: boolean }) {
   const contextLabel = activeRestaurantId ? workspace.restaurants[0]?.name || "Établissement sélectionné" : "Vue groupe";
   const [messages, setMessages] = useState<Array<{ role: "user" | "assistant"; text: string; evidence?: Array<{ label: string; value: string }>; action?: { id: string; title: string; rationale: string; risk: string; status: string } }>>([{ role: "assistant", text: activeRestaurantId ? `J’analyse uniquement ${contextLabel}. Le service est chargé à ${workspace.summary.occupancyPercent} %. Je peux expliquer un écart, repérer un risque ou préparer une action — elle restera bloquée jusqu'à votre validation.` : `J’analyse la vue groupe, soit ${workspace.restaurants.length} établissements. Je peux comparer les signaux ; sélectionnez une adresse avant de préparer une action.` }]);
   const [input, setInput] = useState("");
@@ -212,6 +228,11 @@ function CopilotView({ workspace, activeRestaurantId, mutate, refresh }: { works
   const send = async (text = input) => {
     if (!text.trim() || busy) return;
     setMessages((current) => [...current, { role: "user", text }]); setInput(""); setBusy(true);
+    if (readOnly) {
+      setMessages((current) => [...current, { role: "assistant", text: "La version publique montre le contexte et les garde-fous sans exécuter d’analyse ni d’action. Un espace invité active le Copilot sur les données isolées du restaurant." }]);
+      setBusy(false);
+      return;
+    }
     try {
       const reply = await api<{ answer: string; evidence: Array<{ label: string; value: string }>; proposedAction: null | { id: string; title: string; rationale: string; risk: string; status: string } }>("/v1/copilot/messages", { method: "POST", body: JSON.stringify({ message: text, ...(activeRestaurantId ? { restaurantId: activeRestaurantId } : {}) }) });
       setMessages((current) => [...current, { role: "assistant", text: reply.answer, evidence: reply.evidence, ...(reply.proposedAction ? { action: reply.proposedAction } : {}) }]);

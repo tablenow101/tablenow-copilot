@@ -540,6 +540,9 @@ button:disabled { cursor: not-allowed; opacity: .45; }
 .model-state small { color: var(--muted-2); font-size: 7px; }
 
 /* Pilot administration and privacy */
+.public-pilot-banner { margin-bottom: 15px; padding: 12px 15px; border: 1px solid rgba(184,239,70,.2); border-radius: 11px; background: var(--lime-soft); color: var(--muted); display: flex; align-items: center; gap: 10px; font-size: 10px; line-height: 1.5; }
+.public-pilot-banner svg { flex: 0 0 auto; color: var(--lime); }
+.public-pilot-banner strong { color: var(--text); margin-right: 5px; }
 .cohort-note { color: var(--muted); font-size: 9px; display: flex; align-items: center; gap: 8px; }
 .pilot-table { display: grid; grid-template-columns: 1.2fr 1.35fr .85fr .7fr .65fr .55fr; gap: 13px; padding: 13px 17px; align-items: center; }
 .table-actions { display: flex; gap: 5px; justify-content: flex-end; }

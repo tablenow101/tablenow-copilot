@@ -4,6 +4,8 @@ import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { api, ApiError } from "@/lib/api";
 import type { Session } from "@/lib/types";
+import { publicPilotSession } from "@/lib/public-pilot";
+import { isPublicPilotRuntime } from "@/lib/public-pilot-host";
 
 export function useSession(options: { requireOnboarding?: boolean } = {}) {
   const router = useRouter();
@@ -14,6 +16,12 @@ export function useSession(options: { requireOnboarding?: boolean } = {}) {
   const refresh = useCallback(async () => {
     setLoading(true);
     setError(null);
+    if (isPublicPilotRuntime()) {
+      setSession(publicPilotSession);
+      if (options.requireOnboarding === true) router.replace("/today");
+      setLoading(false);
+      return publicPilotSession;
+    }
     try {
       const next = await api<Session>("/v1/auth/session");
       setSession(next);

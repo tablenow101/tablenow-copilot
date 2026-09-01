@@ -1,4 +1,5 @@
 import { buildApp } from "@tablenow/core-api/app";
+import { isPublicPilotHostname } from "@/lib/public-pilot-host";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -12,9 +13,15 @@ function getApp(): ReturnType<typeof buildApp> {
 }
 
 async function handler(request: Request, context: RouteContext): Promise<Response> {
+  const incomingUrl = new URL(request.url);
+  if (isPublicPilotHostname(incomingUrl.hostname)) {
+    return Response.json({ error: { code: "PUBLIC_PILOT_READ_ONLY", message: "La version publique ne se connecte à aucune donnée ni action serveur." } }, {
+      status: 403,
+      headers: { "cache-control": "no-store" },
+    });
+  }
   const app = await getApp();
   const { path = [] } = await context.params;
-  const incomingUrl = new URL(request.url);
   const url = `/${path.map(encodeURIComponent).join("/")}${incomingUrl.search}`;
   const headers: Record<string, string> = {};
   request.headers.forEach((value, key) => { headers[key] = value; });

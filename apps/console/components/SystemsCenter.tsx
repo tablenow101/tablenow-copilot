@@ -60,9 +60,9 @@ const providerLabels: Record<string, string> = {
   paper: "Papier / cahier",
 };
 
-export function SystemsCenter({ restaurants, role, activeRestaurantId }: { restaurants: Workspace["restaurants"]; role: Role; activeRestaurantId: string | null }) {
-  const [overview, setOverview] = useState<ComputerUseOverview | null>(null);
-  const [loading, setLoading] = useState(true);
+export function SystemsCenter({ restaurants, role, activeRestaurantId, publicOverview }: { restaurants: Workspace["restaurants"]; role: Role; activeRestaurantId: string | null; publicOverview?: ComputerUseOverview }) {
+  const [overview, setOverview] = useState<ComputerUseOverview | null>(publicOverview || null);
+  const [loading, setLoading] = useState(!publicOverview);
   const [error, setError] = useState("");
   const [toast, setToast] = useState("");
   const [busy, setBusy] = useState("");
@@ -70,8 +70,14 @@ export function SystemsCenter({ restaurants, role, activeRestaurantId }: { resta
   const [workflow, setWorkflow] = useState<ComputerUseOverview["workflows"][number] | null>(null);
   const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
   const canConfigure = ["platform_admin", "owner", "group_admin"].includes(role);
+  const readOnly = role === "viewer";
 
   const refresh = useCallback(async (silent = false) => {
+    if (publicOverview) {
+      setOverview(publicOverview);
+      setLoading(false);
+      return;
+    }
     if (!silent) setLoading(true);
     try {
       setOverview(await api<ComputerUseOverview>("/v1/computer-use"));
@@ -81,14 +87,14 @@ export function SystemsCenter({ restaurants, role, activeRestaurantId }: { resta
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [publicOverview]);
 
   useEffect(() => { void refresh(); }, [refresh]);
   useEffect(() => {
-    if (!overview?.runs.some((run) => ["queued", "claimed", "running"].includes(run.status))) return;
+    if (publicOverview || !overview?.runs.some((run) => ["queued", "claimed", "running"].includes(run.status))) return;
     const timer = window.setInterval(() => void refresh(true), 3_000);
     return () => window.clearInterval(timer);
-  }, [overview?.runs, refresh]);
+  }, [overview?.runs, publicOverview, refresh]);
   useEffect(() => {
     if (!toast) return;
     const timer = window.setTimeout(() => setToast(""), 3_500);
@@ -101,6 +107,10 @@ export function SystemsCenter({ restaurants, role, activeRestaurantId }: { resta
   }, [activeRestaurantId]);
 
   const act = async (key: string, path: string, body: unknown, success: string, method = "POST") => {
+    if (readOnly) {
+      setToast("Version publique en lecture seule — aucune action n'a été lancée.");
+      return;
+    }
     setBusy(key);
     try {
       await api(path, { method, body: JSON.stringify(body) });
@@ -154,14 +164,14 @@ export function SystemsCenter({ restaurants, role, activeRestaurantId }: { resta
       <header className="systems-panel-head"><div><span>Connexions pilotables</span><h3>Tests et protocoles</h3></div><span className="quiet-label">{displayedConnections.length} connexion{displayedConnections.length > 1 ? "s" : ""}</span></header>
       <div className="connection-list">{displayedConnections.map((connection) => {
         const workflows = displayedWorkflows.filter((item) => item.connectionId === connection.id);
-        return <article className="connection-card" key={connection.id}><header><div><span className="connection-logo"><Link2 size={18} /></span><span><strong>{connection.displayName}</strong><small>{providerLabels[connection.provider] || connection.provider} · {methodLabels[connection.surface] || connection.surface}</small></span></div><StatusPill status={connection.status} /></header><p>{connection.healthMessage || "La connexion doit être testée avant une action réelle."}</p><div className="workflow-list">{workflows.map((item) => <button key={item.id} onClick={() => setWorkflow(item)} disabled={connection.status !== "ready" && item.key !== "connection.health_check"}><span><strong>{item.name}</strong><small>{item.description}</small></span><span><RiskPill risk={item.risk} /><CirclePlay size={17} /></span></button>)}</div><footer><button onClick={() => void act(`test-${connection.id}`, `/v1/computer-use/connections/${connection.id}/test`, {}, "Test ajouté à la file d’exécution.")} disabled={busy === `test-${connection.id}`}><Activity size={14} />{busy === `test-${connection.id}` ? "Ajout…" : "Tester"}</button>{canConfigure && <button onClick={() => void act(`pause-${connection.id}`, `/v1/computer-use/connections/${connection.id}`, connection.mode === "paused" ? { mode: "assist", status: "ready" } : { mode: "paused", status: "paused" }, connection.mode === "paused" ? "Connexion reprise." : "Connexion mise en pause.", "PATCH")}><CirclePause size={14} />{connection.mode === "paused" ? "Reprendre" : "Mettre en pause"}</button>}<span>Domaines autorisés : {connection.allowedHosts.join(", ")}</span></footer></article>;
+        return <article className="connection-card" key={connection.id}><header><div><span className="connection-logo"><Link2 size={18} /></span><span><strong>{connection.displayName}</strong><small>{providerLabels[connection.provider] || connection.provider} · {methodLabels[connection.surface] || connection.surface}</small></span></div><StatusPill status={connection.status} /></header><p>{connection.healthMessage || "La connexion doit être testée avant une action réelle."}</p><div className="workflow-list">{workflows.map((item) => <button key={item.id} onClick={() => setWorkflow(item)} disabled={readOnly || (connection.status !== "ready" && item.key !== "connection.health_check")}><span><strong>{item.name}</strong><small>{item.description}</small></span><span><RiskPill risk={item.risk} /><CirclePlay size={17} /></span></button>)}</div><footer><button onClick={() => void act(`test-${connection.id}`, `/v1/computer-use/connections/${connection.id}/test`, {}, "Test ajouté à la file d’exécution.")} disabled={readOnly || busy === `test-${connection.id}`}><Activity size={14} />{busy === `test-${connection.id}` ? "Ajout…" : "Tester"}</button>{canConfigure && <button onClick={() => void act(`pause-${connection.id}`, `/v1/computer-use/connections/${connection.id}`, connection.mode === "paused" ? { mode: "assist", status: "ready" } : { mode: "paused", status: "paused" }, connection.mode === "paused" ? "Connexion reprise." : "Connexion mise en pause.", "PATCH")}><CirclePause size={14} />{connection.mode === "paused" ? "Reprendre" : "Mettre en pause"}</button>}<span>Domaines autorisés : {connection.allowedHosts.join(", ")}</span></footer></article>;
       })}{!displayedConnections.length && <EmptySystems title="Aucune connexion d’écran" text="Ce n’est pas un blocage : TableNow reste utilisable en natif, via calendrier ou en mode manuel." />}</div>
     </section>
 
     <div className="execution-grid">
       <section className="panel run-panel"><header className="systems-panel-head"><div><span>Exécutions</span><h3>À valider et en cours</h3></div></header><div className="run-list">{displayedRuns.length ? displayedRuns.map((run) => <button key={run.id} className={selectedRun?.id === run.id ? "active" : ""} onClick={() => setSelectedRunId(run.id)}><span className={`run-state status-${run.status}`}>{run.status === "running" ? <LoaderCircle className="spinning" size={15} /> : run.status === "succeeded" ? <CheckCircle2 size={15} /> : run.status === "failed" || run.status === "blocked" ? <XCircle size={15} /> : <Clock3 size={15} />}</span><span><strong>{run.workflowName}</strong><small>{run.connectionName} · {relativeTime(run.createdAt)}</small></span><StatusPill status={run.cancellationRequested ? "cancelling" : run.status} /></button>) : <EmptyRuns />}</div></section>
 
-      <section className="panel run-detail">{selectedRun ? <><header className="systems-panel-head"><div><span>Détail vérifiable</span><h3>{selectedRun.workflowName}</h3></div><StatusPill status={selectedRun.cancellationRequested ? "cancelling" : selectedRun.status} /></header><div className="run-objective"><span>Objectif autorisé</span><p>{selectedRun.objective}</p>{selectedRun.summary && <><span>Résultat</span><p>{selectedRun.summary}</p></>}</div><div className="run-actions">{selectedRun.status === "awaiting_approval" && canApprove(role, selectedRun.risk) && <><button onClick={() => void act(`reject-${selectedRun.id}`, `/v1/computer-use/runs/${selectedRun.id}/decision`, { approved: false, note: "Refusé depuis le centre de contrôle" }, "Exécution refusée.")}><X size={14} /> Refuser</button><button className="approve" onClick={() => void act(`approve-${selectedRun.id}`, `/v1/computer-use/runs/${selectedRun.id}/decision`, { approved: true, note: "Validé depuis le centre de contrôle" }, "Exécution validée et mise en file.")}><Check size={14} /> Valider précisément cette action</button></>}{["awaiting_approval", "queued", "claimed", "running"].includes(selectedRun.status) && !selectedRun.cancellationRequested && <button onClick={() => void act(`cancel-${selectedRun.id}`, `/v1/computer-use/runs/${selectedRun.id}/cancel`, {}, "Arrêt demandé au nœud local.")}><CirclePause size={14} /> Arrêter</button>}{["failed", "blocked"].includes(selectedRun.status) && selectedRun.attempts < selectedRun.maxAttempts && <button onClick={() => void act(`retry-${selectedRun.id}`, `/v1/computer-use/runs/${selectedRun.id}/retry`, {}, "Nouvelle tentative mise en file.")}><RotateCcw size={14} /> Réessayer</button>}</div><div className="timeline">{selectedEvents.map((event) => <div key={event.id}><i className={`event-${event.status}`} /><span><strong>{event.message}</strong><small>{relativeTime(event.occurredAt)}</small></span>{event.hasEvidence && <a href={apiHref(`/v1/computer-use/evidence/${event.id}`)} target="_blank" rel="noreferrer">Preuve <ExternalLink size={12} /></a>}</div>)}{!selectedEvents.length && <p>Aucun événement enregistré pour le moment.</p>}</div></> : <div className="empty-run-detail"><FileCheck2 size={27} /><strong>Aucune exécution</strong><p>Lancez un protocole pour suivre chaque étape et sa preuve.</p></div>}</section>
+      <section className="panel run-detail">{selectedRun ? <><header className="systems-panel-head"><div><span>Détail vérifiable</span><h3>{selectedRun.workflowName}</h3></div><StatusPill status={selectedRun.cancellationRequested ? "cancelling" : selectedRun.status} /></header><div className="run-objective"><span>Objectif autorisé</span><p>{selectedRun.objective}</p>{selectedRun.summary && <><span>Résultat</span><p>{selectedRun.summary}</p></>}</div><div className="run-actions">{selectedRun.status === "awaiting_approval" && canApprove(role, selectedRun.risk) && <><button onClick={() => void act(`reject-${selectedRun.id}`, `/v1/computer-use/runs/${selectedRun.id}/decision`, { approved: false, note: "Refusé depuis le centre de contrôle" }, "Exécution refusée.")}><X size={14} /> Refuser</button><button className="approve" onClick={() => void act(`approve-${selectedRun.id}`, `/v1/computer-use/runs/${selectedRun.id}/decision`, { approved: true, note: "Validé depuis le centre de contrôle" }, "Exécution validée et mise en file.")}><Check size={14} /> Valider précisément cette action</button></>}{!readOnly && ["awaiting_approval", "queued", "claimed", "running"].includes(selectedRun.status) && !selectedRun.cancellationRequested && <button onClick={() => void act(`cancel-${selectedRun.id}`, `/v1/computer-use/runs/${selectedRun.id}/cancel`, {}, "Arrêt demandé au nœud local.")}><CirclePause size={14} /> Arrêter</button>}{!readOnly && ["failed", "blocked"].includes(selectedRun.status) && selectedRun.attempts < selectedRun.maxAttempts && <button onClick={() => void act(`retry-${selectedRun.id}`, `/v1/computer-use/runs/${selectedRun.id}/retry`, {}, "Nouvelle tentative mise en file.")}><RotateCcw size={14} /> Réessayer</button>}</div><div className="timeline">{selectedEvents.map((event) => <div key={event.id}><i className={`event-${event.status}`} /><span><strong>{event.message}</strong><small>{relativeTime(event.occurredAt)}</small></span>{event.hasEvidence && (readOnly ? <em>Preuve simulée</em> : <a href={apiHref(`/v1/computer-use/evidence/${event.id}`)} target="_blank" rel="noreferrer">Preuve <ExternalLink size={12} /></a>)}</div>)}{!selectedEvents.length && <p>Aucun événement enregistré pour le moment.</p>}</div></> : <div className="empty-run-detail"><FileCheck2 size={27} /><strong>Aucune exécution</strong><p>Lancez un protocole pour suivre chaque étape et sa preuve.</p></div>}</section>
     </div>
 
     <section className="safety-band"><ShieldCheck size={20} /><div><strong>Le téléphone pilote, le nœud exécute.</strong><p>Sur mobile, vous consultez et validez ; l’action reste isolée sur le serveur local ou cloud, même si vous fermez l’écran.</p></div><Bot size={20} /></section>

@@ -260,7 +260,7 @@ export async function buildApp(dependencies: AppDependencies = {}): Promise<Fast
     return reply.code(202).send(await computerUse.createRun(request.actor!, computerRunCreateSchema.parse(request.body)));
   });
 
-  app.post("/v1/computer-use/runs/:id/decision", { preHandler: authGuard(database, "computer_use.read") }, async (request) => {
+  app.post("/v1/computer-use/runs/:id/decision", { preHandler: authGuard(database, "computer_use.execute") }, async (request) => {
     const { id } = idParams.parse(request.params);
     const input = computerRunDecisionSchema.parse(request.body);
     return computerUse.decideRun(request.actor!, id, input.approved, input.note);

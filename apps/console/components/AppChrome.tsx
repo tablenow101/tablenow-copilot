@@ -28,6 +28,7 @@ import {
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import type { Session, Workspace } from "@/lib/types";
 import { api } from "@/lib/api";
+import { isPublicPilotRuntime } from "@/lib/public-pilot-host";
 
 const nav = [
   { key: "today", href: "/today", label: "Aujourd'hui", icon: Activity },
@@ -110,7 +111,7 @@ export function AppChrome({
     };
   }, [moreOpen]);
   const logout = async () => {
-    await api("/v1/auth/logout", { method: "POST" }).catch(() => undefined);
+    if (!isPublicPilotRuntime()) await api("/v1/auth/logout", { method: "POST" }).catch(() => undefined);
     router.replace("/login");
     router.refresh();
   };

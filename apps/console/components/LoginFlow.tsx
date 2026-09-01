@@ -5,9 +5,11 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { ArrowRight, Check, LockKeyhole, Mail, RotateCcw, ShieldCheck } from "lucide-react";
 import { api, ApiError } from "@/lib/api";
+import { isPublicPilotRuntime } from "@/lib/public-pilot-host";
 
 export function LoginFlow() {
   const router = useRouter();
+  const [publicPilot, setPublicPilot] = useState(false);
   const [step, setStep] = useState<"email" | "code">("email");
   const [email, setEmail] = useState("");
   const [code, setCode] = useState("");
@@ -16,7 +18,9 @@ export function LoginFlow() {
   const codeRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    api("/v1/auth/session").then(() => router.replace("/today")).catch(() => undefined);
+    const isPublic = isPublicPilotRuntime();
+    setPublicPilot(isPublic);
+    if (!isPublic) api("/v1/auth/session").then(() => router.replace("/today")).catch(() => undefined);
   }, [router]);
 
   const requestCode = async () => {
@@ -42,13 +46,23 @@ export function LoginFlow() {
     } finally { setBusy(false); }
   };
 
+  const openPublicPilot = async () => {
+    setBusy(true); setError("");
+    try {
+      router.replace("/today");
+      router.refresh();
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "L'accès pilote n'est pas disponible.");
+    } finally { setBusy(false); }
+  };
+
   return (
     <main className="auth-layout">
       <section className="auth-story">
         <div className="story-glow" />
         <div className="logo-lockup logo-auth"><span className="brand-mark brand-mark-small">T<span>N</span></span><span>TableNow<small>Operating Copilot</small></span></div>
         <div className="story-content">
-          <span className="eyebrow"><span className="live-dot" /> Accès pilote privé</span>
+          <span className="eyebrow"><span className="live-dot" /> {publicPilot ? "Pilote officiel TableNow" : "Accès pilote privé"}</span>
           <h1>Votre restaurant.<br /><em>Enfin lisible.</em></h1>
           <p>TableNow rassemble le service, les clients et les opérations — puis transforme chaque signal en décision claire.</p>
           <div className="story-proof">
@@ -63,13 +77,19 @@ export function LoginFlow() {
         <div className="auth-card">
           {step === "email" ? <>
             <span className="step-number">01 — IDENTITÉ</span>
-            <h2>Entrez dans votre espace.</h2>
-            <p>Utilisez l'adresse invitée par TableNow. Nous vous enverrons un code à six chiffres.</p>
-            <label className="field-label" htmlFor="email">Adresse e-mail professionnelle</label>
-            <div className="input-with-icon"><Mail size={17} /><input id="email" type="email" autoComplete="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="direction@restaurant.fr" onKeyDown={(event) => { if (event.key === "Enter" && email) void requestCode(); }} /></div>
-            {error && <p className="form-error" role="alert">{error}</p>}
-            <button className="primary-button full-button" disabled={busy || !/^\S+@\S+\.\S+$/.test(email)} onClick={requestCode}>{busy ? "Envoi…" : "Recevoir mon code"}<ArrowRight size={17} /></button>
-            <p className="privacy-note"><ShieldCheck size={14} /> Aucun compte n'est créé sans invitation active.</p>
+            <h2>{publicPilot ? "Découvrez TableNow." : "Entrez dans votre espace."}</h2>
+            <p>{publicPilot ? "Parcourez le produit final avec un restaurant entièrement fictif, sans compte ni connexion à une donnée réelle." : "Utilisez l'adresse invitée par TableNow. Nous vous enverrons un code à six chiffres."}</p>
+            {publicPilot ? <>
+              {error && <p className="form-error" role="alert">{error}</p>}
+              <button className="primary-button full-button" disabled={busy} onClick={openPublicPilot}>{busy ? "Ouverture…" : "Découvrir la version pilote"}<ArrowRight size={17} /></button>
+              <p className="privacy-note"><ShieldCheck size={14} /> Données fictives, navigation complète et actions désactivées.</p>
+            </> : <>
+              <label className="field-label" htmlFor="email">Adresse e-mail professionnelle</label>
+              <div className="input-with-icon"><Mail size={17} /><input id="email" type="email" autoComplete="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="direction@restaurant.fr" onKeyDown={(event) => { if (event.key === "Enter" && email) void requestCode(); }} /></div>
+              {error && <p className="form-error" role="alert">{error}</p>}
+              <button className="primary-button full-button" disabled={busy || !/^\S+@\S+\.\S+$/.test(email)} onClick={requestCode}>{busy ? "Envoi…" : "Recevoir mon code"}<ArrowRight size={17} /></button>
+              <p className="privacy-note"><ShieldCheck size={14} /> Aucun compte n'est créé sans invitation active.</p>
+            </>}
           </> : <>
             <button className="back-link" onClick={() => { setStep("email"); setCode(""); setError(""); }}>← Changer d'adresse</button>
             <span className="step-number">02 — VÉRIFICATION</span>
