@@ -12,6 +12,9 @@ Toutes les portes suivantes doivent être vertes :
 - sauvegarde et restauration testées ;
 - erreurs et alertes opérationnelles visibles ;
 - parcours desktop et mobile conformes à la matrice ;
+- chaque parcours critique a passé un test grandeur nature dans le navigateur selon `real-world-user-testing.md` ;
+- aucun parcours critique n'a un verdict `FRICTION`, `WRONG_FLOW`, `BLOCKED` ou `UNSAFE` non résolu ;
+- les preuves de test montrent le résultat réellement observé, pas seulement les résultats de tests automatisés ;
 - documents légaux complétés avec les informations réelles ;
 - support et procédure d'incident prêts.
 
