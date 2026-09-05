@@ -14,3 +14,4 @@
 | D-010 | 2026-08-31 | Le dépôt privé `tablenow101/tablenow-copilot` est la source canonique du code. | Sauvegarder, auditer et déployer une seule version officielle. | Actif |
 | D-011 | 2026-08-31 | `main` reste déployable et chaque évolution passe les contrôles GitHub avant intégration. | Empêcher qu'une modification cassée atteigne l'environnement partagé. | Actif |
 | D-012 | 2026-09-01 | Le pilote V2 est publié sans lien secret sur `copilot.tablenow.io`; les previews restent privées et `app.tablenow.io` reste sur le legacy pendant la validation. | Donner aux testeurs une adresse officielle et stable sans perdre le filet de retour arrière. | Actif |
+| D-013 | 2026-09-05 | Aucun parcours utilisateur n'est validé par les seuls tests code : un test grandeur nature dans le navigateur, joué comme un restaurateur ou membre d'équipe, est obligatoire. | Détecter les mauvais workflows, frictions et erreurs de produit que les tests techniques ne voient pas. | Actif |
