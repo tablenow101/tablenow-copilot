@@ -1,10 +1,10 @@
 # Prochaines actions
 
-1. Déployer le commit canonique `main` en Preview privée sur le projet Vercel Copilot existant.
-2. Vérifier les migrations `001` à `004`, l'isolation Neon et le jeu de données fictif.
-3. Vérifier le parcours e-mail, code, onboarding et cockpit sur ordinateur et mobile.
-4. Configurer l'environnement Production pilote, l'e-mail réel, le stockage privé et les sauvegardes.
-5. Rattacher `copilot.tablenow.io` sans modifier `app.tablenow.io`.
-6. Promouvoir exactement l'artefact certifié et retirer la protection uniquement de la Production.
-7. Vérifier le domaine public, les journaux et le retour arrière.
-8. Raccorder ensuite les tâches durables, le Copilot et les intégrations autorisées.
+1. Intégrer le protocole Codex de tests grandeur nature et le rendre obligatoire dans `main`.
+2. Déployer le commit canonique `main` en Preview Vercel sur le projet Copilot existant.
+3. Vérifier les migrations, l'isolation Neon et le jeu de données fictif.
+4. Jouer le parcours réel propriétaire : e-mail → code → onboarding → premier résultat utile → cockpit, sans raccourci développeur.
+5. Rejouer ce parcours sur mobile et consigner chaque friction, blocage ou mauvais modus operandi.
+6. Corriger jusqu'au verdict `PASS`, puis étendre aux parcours réservations, téléphone, équipe, demandes d'aide, stocks et fournisseurs.
+7. Configurer ensuite Production pilote, e-mail réel, stockage privé et sauvegardes.
+8. Promouvoir uniquement un artefact ayant passé les tests techniques ET les tests métier grandeur nature.
