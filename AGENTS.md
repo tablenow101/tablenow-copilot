@@ -22,6 +22,19 @@ Avant toute intervention, lire `context/CONTEXT.md`, puis le `CONTEXT.md` du dos
 - Mettre à jour `context/11-status/` et `context/10-decisions/decision-log.md` après toute décision ou modification matérielle.
 - Conserver les détails techniques dans `docs/` et la synthèse compréhensible dans `context/`.
 
+## Test produit obligatoire en conditions réelles
+
+- Les tests unitaires, intégration et E2E ne suffisent jamais à valider un parcours utilisateur.
+- Après toute modification visible ou opérationnelle, tester le parcours réellement dans un navigateur sur une version déployée ou un environnement équivalent.
+- Jouer le rôle du restaurateur ou du membre d'équipe concerné, sans raccourci développeur ni connaissance implicite du système.
+- Tester le scénario métier complet, pas uniquement l'écran modifié.
+- Vérifier desktop et mobile lorsque le parcours est pertinent sur les deux.
+- Capturer les étapes clés, erreurs, blocages, hésitations et incohérences métier.
+- Un parcours qui fonctionne techniquement mais dont le modus operandi est mauvais doit être marqué `WRONG_FLOW` et repensé avant livraison.
+- Lire et appliquer `context/09-pilot/real-world-user-testing.md` pour le protocole complet.
+
 ## Vérification minimale
 
 Avant livraison : vérifier le diff, les tests concernés, les liens de documentation, les secrets, l'isolation des ressources et les parcours ordinateur/mobile touchés.
+
+Pour tout parcours utilisateur modifié, ajouter en plus une preuve de test grandeur nature et son verdict produit.
