@@ -1,1 +1,0 @@
-Ce fichier est un pointeur temporaire. Voir `world-class-standard.md` comme référence canonique.
