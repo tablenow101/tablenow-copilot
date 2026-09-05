@@ -22,6 +22,17 @@ Avant toute intervention, lire `context/CONTEXT.md`, puis le `CONTEXT.md` du dos
 - Mettre à jour `context/11-status/` et `context/10-decisions/decision-log.md` après toute décision ou modification matérielle.
 - Conserver les détails techniques dans `docs/` et la synthèse compréhensible dans `context/`.
 
+## Architecture événementielle obligatoire
+
+- Lire et appliquer `context/10-decisions/D-014-event-driven-preview-shadow.md` pour toute donnée métier, Preview, simulation ou intégration.
+- Un chargement initial canonique est autorisé ; après ce chargement, les mises à jour métier sont poussées par événements.
+- Le polling métier est interdit : aucun `setInterval`, `refreshInterval`, `refetchInterval` ou boucle de rafraîchissement équivalente.
+- La reprise après déconnexion utilise un curseur et le rejeu des événements manquants.
+- Aucun fallback, double chemin, double-write ni rétrocompatibilité ne doit rester après le cutover.
+- Chaque Vercel Preview utilise une base ou branche PostgreSQL éphémère dédiée et un seed déterministe.
+- En mode `shadow` ou `test`, aucun fournisseur, destinataire, moyen de paiement ou secret de production n'est accessible.
+- Tout effet externe passe par un Effect Gateway unique et auditable.
+
 ## Test produit obligatoire en conditions réelles
 
 - Les tests unitaires, intégration et E2E ne suffisent jamais à valider un parcours utilisateur.
