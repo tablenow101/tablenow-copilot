@@ -1,10 +1,10 @@
-# Prochaines actions
+# Prochaines actions — onboarding prioritaire
 
-1. Intégrer le protocole Codex de tests grandeur nature et le rendre obligatoire dans `main`.
-2. Déployer le commit canonique `main` en Preview Vercel sur le projet Copilot existant.
-3. Vérifier les migrations, l'isolation Neon et le jeu de données fictif.
-4. Jouer le parcours réel propriétaire : e-mail → code → onboarding → premier résultat utile → cockpit, sans raccourci développeur.
-5. Rejouer ce parcours sur mobile et consigner chaque friction, blocage ou mauvais modus operandi.
-6. Corriger jusqu'au verdict `PASS`, puis étendre aux parcours réservations, téléphone, équipe, demandes d'aide, stocks et fournisseurs.
-7. Configurer ensuite Production pilote, e-mail réel, stockage privé et sauvegardes.
-8. Promouvoir uniquement un artefact ayant passé les tests techniques ET les tests métier grandeur nature.
+1. Lire [la reprise factuelle](onboarding-handoff-2026-09-06.md) et [le contrat produit](../../docs/product/ONBOARDING_FINAL.fr.md).
+2. Implémenter le parcours complet, son état serveur et son premier livrable sauvegardé sur la branche produit dédiée. Ne pas modifier la PR #12 ni ouvrir un chantier d'infrastructure.
+3. Vérifier les branches conditionnelles, erreurs, autorisations, sauvegardes, reprise de session et finalisation idempotente.
+4. Jouer le parcours complet comme un restaurateur dans un navigateur desktop/mobile, avec des données synthétiques isolées et sans effets extérieurs réels.
+5. Tester la Preview Vercel uniquement après preuve d'isolation de sa base et de ses services tiers. Documenter séparément les capacités bloquées et les tests non exécutés.
+6. Livrer le lien testable, les captures/traces et les verdicts métier ; obtenir la validation de l'expérience avant fusion dans main.
+
+Une demande @codex envoyée ne constitue pas un lancement confirmé. Un build READY ne constitue pas une recette produit.
