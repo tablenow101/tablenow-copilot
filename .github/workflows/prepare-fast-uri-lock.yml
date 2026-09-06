@@ -40,21 +40,8 @@ jobs:
           node-version: 24
       - name: Install locked dependencies without lifecycle scripts
         run: pnpm install --frozen-lockfile --ignore-scripts
-      - name: Capture the complete original audit
-        run: |
-          set +e
-          pnpm audit --json > /tmp/audit-before.json
-          code=$?
-          set -e
-          if [ "$code" -gt 1 ]; then exit "$code"; fi
-          node --input-type=module <<'NODE'
-          import { readFileSync } from 'node:fs';
-          const report = JSON.parse(readFileSync('/tmp/audit-before.json', 'utf8'));
-          if (report.error) throw new Error('Registry audit failed; no advisory is being ignored.');
-          console.log(JSON.stringify(report, null, 2));
-          NODE
-      - name: Resolve only fast-uri within existing dependency ranges
-        run: pnpm --recursive update fast-uri --depth 100 --lockfile-only --ignore-scripts
+      - name: Resolve only the two affected packages within existing dependency ranges
+        run: pnpm --recursive update fast-uri qs --depth 100 --lockfile-only --ignore-scripts
       - name: Verify the repair scope and package-major compatibility
         run: |
           node --input-type=module <<'NODE'
@@ -66,23 +53,28 @@ jobs:
           }
           const before = execFileSync('git', ['show', 'HEAD:pnpm-lock.yaml'], { encoding: 'utf8' });
           const after = readFileSync('pnpm-lock.yaml', 'utf8');
+          if (before.split('\npackages:\n')[0] !== after.split('\npackages:\n')[0]) {
+            throw new Error('Refusing changes to importers, direct dependency ranges or lockfile settings.');
+          }
           const keys = text => [...text.split('\npackages:\n')[1].split('\nsnapshots:\n')[0].matchAll(/^  (\S[^\n]*):$/gm)].map(m => m[1]);
           const oldKeys = new Set(keys(before));
           const newKeys = new Set(keys(after));
           const removed = [...oldKeys].filter(k => !newKeys.has(k));
           const added = [...newKeys].filter(k => !oldKeys.has(k));
-          if (!removed.length || !added.length || [...removed, ...added].some(k => !/^fast-uri@\d+\.\d+\.\d+$/.test(k))) {
+          if (removed.length !== 3 || added.length !== 3 || [...removed, ...added].some(k => !/^(fast-uri|qs)@\d+\.\d+\.\d+$/.test(k))) {
             throw new Error(`Unexpected dependency changes: ${JSON.stringify({ removed, added })}`);
           }
-          const major = key => key.split('@')[1].split('.')[0];
-          if (removed.some(k => !added.some(a => major(a) === major(k))) || added.some(a => !removed.some(k => major(k) === major(a)))) {
-            throw new Error('Refusing a fast-uri major-version change.');
+          const releaseLine = key => key.split('@')[0] + '@' + key.split('@')[1].split('.')[0];
+          if (removed.some(k => !added.some(a => releaseLine(a) === releaseLine(k))) || added.some(a => !removed.some(k => releaseLine(k) === releaseLine(a)))) {
+            throw new Error('Refusing any package major-version change.');
           }
           for (const key of added) {
+            const name = key.split('@')[0];
             const [ma, mi, pa] = key.split('@')[1].split('.').map(Number);
-            if (!((ma === 3 && (mi > 1 || (mi === 1 && pa >= 6))) || (ma === 4 && (mi > 1 || (mi === 1 && pa >= 3))))) {
-              throw new Error(`Version is not an approved patched release line: ${key}`);
-            }
+            const patched = name === 'qs'
+              ? ma === 6 && mi >= 16
+              : (ma === 3 && (mi > 1 || (mi === 1 && pa >= 6))) || (ma === 4 && (mi > 1 || (mi === 1 && pa >= 3)));
+            if (!patched) throw new Error(`Version is not an approved patched release line: ${key}`);
           }
           console.log('TARGETED_REPAIR', JSON.stringify({ removed, added }));
           NODE
@@ -92,17 +84,15 @@ jobs:
         run: pnpm install --frozen-lockfile --ignore-scripts
       - name: Keep the existing high-severity audit gate
         run: pnpm audit --audit-level=high
-      - name: Capture the complete resulting audit
+      - name: Require a clean full audit for this repair
         run: |
-          set +e
           pnpm audit --json > /tmp/audit-after.json
-          code=$?
-          set -e
-          if [ "$code" -gt 1 ]; then exit "$code"; fi
           node --input-type=module <<'NODE'
           import { readFileSync } from 'node:fs';
           const report = JSON.parse(readFileSync('/tmp/audit-after.json', 'utf8'));
-          if (report.error) throw new Error('Registry audit failed.');
+          if (report.error || !report.metadata?.vulnerabilities) throw new Error('Registry audit failed.');
+          const counts = report.metadata.vulnerabilities;
+          if (Object.values(counts).some(count => count !== 0)) throw new Error('The candidate still has audit findings.');
           console.log(JSON.stringify(report, null, 2));
           NODE
       - name: Store the verified lockfile as an unreferenced Git blob for review
