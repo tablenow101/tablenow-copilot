@@ -21,7 +21,7 @@
     "dotenv": "^17.3.1",
     "fastify": "^5.12.1",
     "postgres": "^3.4.9",
-    "zod": "^4.4.3"
+    "zod": "^4.5.4"
   },
   "devDependencies": {
     "rimraf": "^6.1.2",
