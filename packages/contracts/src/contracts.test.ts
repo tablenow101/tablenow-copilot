@@ -1,6 +1,6 @@
 import crypto from "node:crypto";
 import { describe, expect, it } from "vitest";
-import { copilotMessageSchema, inventoryCreateSchema, onboardingSchema, privacyRequestSchema, reservationCreateSchema, restaurantCreateSchema, shiftCreateSchema, syncPushSchema, taskCreateSchema } from "./index.js";
+import { copilotMessageSchema, inventoryCreateSchema, onboardingAnswersSchema, onboardingCompleteSchema, onboardingDraftSaveSchema, onboardingLegalVersions, onboardingSchema, privacyRequestSchema, reservationCreateSchema, restaurantCreateSchema, shiftCreateSchema, syncPushSchema, taskCreateSchema } from "./index.js";
 
 describe("public contracts", () => {
   it("requires explicit legal acceptance before onboarding", () => {
@@ -18,6 +18,60 @@ describe("public contracts", () => {
       acceptDpa: true,
     });
     expect(result.success).toBe(false);
+  });
+
+  it("keeps the final onboarding draft versioned and strict", () => {
+    const restaurantId = crypto.randomUUID();
+    const valid = onboardingDraftSaveSchema.safeParse({
+      restaurantId,
+      expectedRevision: 1,
+      currentSection: "operations",
+      answers: {
+        establishment: {
+          identificationMode: "manual",
+          restaurantName: "Maison Test",
+          cityCountry: "Paris, France",
+          identityConfirmed: true,
+          siteCount: "single",
+          sourceReferences: [],
+        },
+        priorities: { scope: "targeted", timeConsumers: ["supplier_orders"], outcomes: [], primaryFocus: "supplier_orders" },
+        reservations: { providers: [], methods: ["paper"], authoritativeSystem: "paper", connectionStatus: "declared" },
+        operations: { suppliers: { intent: "prepare_order", items: [{ name: "Tomates", quantity: 12, unit: "kg" }], supplierName: "unknown", deliveryDate: "unknown", unknownFields: ["supplierName"] } },
+      },
+      provenance: [],
+    });
+    expect(valid.success).toBe(true);
+
+    const unknownField = onboardingDraftSaveSchema.safeParse({
+      restaurantId,
+      expectedRevision: 1,
+      currentSection: "operations",
+      answers: { establishment: { identityConfirmed: true, siteCount: "single", sourceReferences: [], unsafe: true } },
+      provenance: [],
+    });
+    expect(unknownField.success).toBe(false);
+  });
+
+  it("requires an idempotency key and explicit documents to complete onboarding", () => {
+    const completion = {
+      restaurantId: crypto.randomUUID(),
+      expectedRevision: 2,
+      idempotencyKey: "onboarding-test-123",
+      termsVersion: onboardingLegalVersions.terms,
+      dpaVersion: onboardingLegalVersions.dpa,
+      acceptTerms: true,
+      acceptDpa: true,
+    } as const;
+    expect(onboardingCompleteSchema.safeParse(completion).success).toBe(true);
+    expect(onboardingCompleteSchema.safeParse({ ...completion, idempotencyKey: "short" }).success).toBe(false);
+    expect(onboardingCompleteSchema.safeParse({ ...completion, acceptDpa: false }).success).toBe(false);
+  });
+
+  it("keeps interaction unconfirmed by default and limits onboarding to FR/EN", () => {
+    expect(onboardingAnswersSchema.parse({}).interaction).toMatchObject({ locale: "fr", preferredMode: "mixed", preferredModeConfirmed: false });
+    expect(onboardingAnswersSchema.safeParse({ interaction: { locale: "en" } }).success).toBe(true);
+    expect(onboardingAnswersSchema.safeParse({ interaction: { locale: "ar" } }).success).toBe(false);
   });
 
   it("limits privacy requests to supported rights", () => {

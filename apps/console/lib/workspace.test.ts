@@ -21,6 +21,10 @@ const workspace = {
     { id: "a1", restaurantId: firstRestaurantId, conversationId: "c1", tool: "workspace.explain", title: "Analyse", rationale: "Test", risk: "low", approvalRequired: false, status: "proposed", createdAt: new Date().toISOString() },
     { id: "a2", restaurantId: secondRestaurantId, conversationId: "c2", tool: "workspace.explain", title: "Analyse", rationale: "Test", risk: "low", approvalRequired: false, status: "proposed", createdAt: new Date().toISOString() },
   ],
+  firstResults: [
+    { id: "f1", restaurantId: firstRestaurantId, profileRevision: 1, kind: "service", status: "ready_for_review", title: "Votre préparation de service est prête", confirmedFacts: [], recommendations: [], unknownFields: [], sourceFieldPaths: [], businessArtifact: {}, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
+    { id: "f2", restaurantId: secondRestaurantId, profileRevision: 1, kind: "service", status: "ready_for_review", title: "Votre préparation de service est prête", confirmedFacts: [], recommendations: [], unknownFields: [], sourceFieldPaths: [], businessArtifact: {}, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
+  ],
 } satisfies Workspace;
 
 describe("restaurant workspace scope", () => {
@@ -33,6 +37,7 @@ describe("restaurant workspace scope", () => {
     expect(scoped?.restaurants.map((item) => item.id)).toEqual([firstRestaurantId]);
     expect(scoped?.reservations.map((item) => item.id)).toEqual(["r1"]);
     expect(scoped?.actions.map((item) => item.id)).toEqual(["a1"]);
+    expect(scoped?.firstResults.map((item) => item.id)).toEqual(["f1"]);
     expect(scoped?.summary).toMatchObject({ occupancyPercent: 90, coversToday: 90, availableTables: 2 });
   });
 

@@ -1,21 +1,38 @@
 import crypto from "node:crypto";
-import type {
-  InvitePilotInput,
-  InventoryCreateInput,
-  OnboardingInput,
-  PrivacyRequestInput,
-  ReservationCreateInput,
-  ReservationUpdateInput,
-  RestaurantCreateInput,
-  Role,
-  ShiftCreateInput,
-  TaskCreateInput,
+import { isDeepStrictEqual } from "node:util";
+import {
+  onboardingAnswersSchema,
+  onboardingLegalVersions,
+  type InvitePilotInput,
+  type OnboardingAnswers,
+  type OnboardingCompleteInput,
+  type OnboardingDraftSaveInput,
+  type InventoryCreateInput,
+  type OnboardingInput,
+  type PrivacyRequestInput,
+  type ReservationCreateInput,
+  type ReservationUpdateInput,
+  type RestaurantCreateInput,
+  type Role,
+  type ShiftCreateInput,
+  type TaskCreateInput,
 } from "@tablenow/contracts";
 import { idempotencyKey, type Database, type Transaction, withPlatformAccess, withTenant } from "@tablenow/provider-adapters";
 import { tenantSlug } from "@tablenow/domain";
 import type { JSONValue } from "postgres";
 import type { AuthActor } from "./types.js";
 import { ensureDemoWorkspace } from "./demo.js";
+import {
+  buildOnboardingFirstResult,
+  declaredOperatingSetup as onboardingOperatingSetup,
+  displayRole as onboardingDisplayRole,
+  initialOnboardingAnswers as createInitialOnboardingAnswers,
+  normalizeOnboardingAnswers,
+  OnboardingIncompleteError,
+  onboardingSectionOrder,
+  updateConfirmedSections,
+  validateOnboardingCompletion,
+} from "./onboarding.js";
 
 export class PlatformRepository {
   public constructor(public readonly database: Database) {}
@@ -140,71 +157,178 @@ export class PlatformRepository {
         from agent_actions where tenant_id = ${tenantId}
         order by created_at desc limit 30
       `;
-      return { summary, restaurantSummaries, restaurants, reservations, communications, decisions, tasks, shifts, inventory, metrics, actions };
+      const firstResults = await transaction`
+        select distinct on (restaurant_id) id, restaurant_id as "restaurantId", profile_revision as "profileRevision",
+          kind, status, title, confirmed_facts as "confirmedFacts", recommendations, unknown_fields as "unknownFields",
+          source_field_paths as "sourceFieldPaths", business_artifact as "businessArtifact", created_at as "createdAt",
+          updated_at as "updatedAt"
+        from onboarding_first_results
+        where tenant_id = ${tenantId}
+        order by restaurant_id, created_at desc
+      `;
+      return { summary, restaurantSummaries, restaurants, reservations, communications, decisions, tasks, shifts, inventory, metrics, actions, firstResults };
     });
   }
 
-  public async updateOnboarding(
+  public async readOnboardingDraft(actor: AuthActor, restaurantId?: string) {
+    return withTenant(this.database, actor.tenantId, async (transaction) => {
+      if (!actor.userId) throw new Error("USER_REQUIRED");
+      const restaurants = await tenantRestaurants(transaction, actor.tenantId);
+      const restaurant = selectTenantRestaurant(restaurants, restaurantId);
+      const interaction = await readUserInteraction(transaction, actor.userId);
+      const [existing] = await transaction<OnboardingDraftRow[]>`
+        select id, tenant_id, restaurant_id, schema_version, revision, status, current_section, confirmed_sections, answers,
+          provenance, first_result_id, completed_at, updated_at
+        from onboarding_drafts
+        where tenant_id = ${actor.tenantId} and restaurant_id = ${restaurant.id}
+      `;
+      if (existing) return onboardingDraftView(existing, restaurants, interaction);
+
+      const answers = createInitialOnboardingAnswers({
+        tenantName: actor.tenantName,
+        restaurantName: restaurant.name,
+        address: restaurant.address,
+        phone: restaurant.phone,
+        timezone: restaurant.timezone,
+        interaction,
+      });
+      const [created] = await transaction<OnboardingDraftRow[]>`
+        insert into onboarding_drafts (tenant_id, restaurant_id, answers)
+        values (${actor.tenantId}, ${restaurant.id}, ${transaction.json(answers as JSONValue)})
+        returning id, tenant_id, restaurant_id, schema_version, revision, status, current_section, confirmed_sections, answers,
+          provenance, first_result_id, completed_at, updated_at
+      `;
+      if (!created) throw new Error("CREATE_FAILED");
+      return onboardingDraftView(created, restaurants, interaction);
+    });
+  }
+
+  public async saveOnboardingDraft(actor: AuthActor, input: OnboardingDraftSaveInput) {
+    return withTenant(this.database, actor.tenantId, async (transaction) => {
+      if (!actor.userId) throw new Error("USER_REQUIRED");
+      const restaurants = await tenantRestaurants(transaction, actor.tenantId);
+      const restaurant = selectTenantRestaurant(restaurants, input.restaurantId);
+      const current = await lockedDraft(transaction, actor, restaurant);
+      if (current.revision !== input.expectedRevision) throw new Error("ONBOARDING_REVISION_CONFLICT");
+      const answers = normalizeOnboardingAnswers(input.answers);
+      await validateApprovalAssignee(transaction, actor.tenantId, answers);
+      const previousAnswers = normalizeOnboardingAnswers(onboardingAnswersSchema.parse(current.answers));
+      const answersChanged = !isDeepStrictEqual(previousAnswers, answers);
+      const provenance = trustedOnboardingProvenance(input.provenance, current.provenance, actor.userId);
+      if (!answersChanged && current.status === "completed") {
+        return onboardingDraftView(current, restaurants, answers.interaction);
+      }
+      const movesForward = onboardingSectionOrder.indexOf(input.currentSection) > onboardingSectionOrder.indexOf(current.current_section);
+      if (movesForward && current.current_section !== "final_note" && hasUnconfirmedOnboardingProvenance(provenance, current.current_section)) {
+        throw new OnboardingIncompleteError({ provenance: ["Confirmez ou corrigez les informations interprétées avant de continuer."] });
+      }
+      const confirmedSections = updateConfirmedSections(current.current_section, input.currentSection, current.confirmed_sections, answers, answersChanged);
+      const status = !answersChanged && current.status === "completed"
+        ? "completed"
+        : input.currentSection === "review" && !canCompleteOnboarding(actor.role) ? "awaiting_authority" : "draft";
+
+      if (answersChanged && current.first_result_id) {
+        await transaction`
+          update onboarding_first_results set status = 'needs_information'
+          where id = ${current.first_result_id} and tenant_id = ${actor.tenantId} and restaurant_id = ${restaurant.id}
+        `;
+      }
+
+      const [saved] = await transaction<OnboardingDraftRow[]>`
+        update onboarding_drafts set
+          revision = revision + 1,
+          status = ${status},
+          current_section = ${input.currentSection},
+          confirmed_sections = ${confirmedSections},
+          answers = ${transaction.json(answers as JSONValue)},
+          provenance = ${transaction.json(provenance as JSONValue)},
+          first_result_id = case when ${answersChanged} then null else first_result_id end,
+          completed_at = case when ${answersChanged} then null else completed_at end
+        where id = ${current.id} and tenant_id = ${actor.tenantId}
+        returning id, tenant_id, restaurant_id, schema_version, revision, status, current_section, confirmed_sections, answers,
+          provenance, first_result_id, completed_at, updated_at
+      `;
+      if (!saved) throw new Error("NOT_FOUND");
+      await saveUserInteraction(transaction, actor.userId, answers.interaction, confirmedSections.includes("interaction"));
+      await this.audit(transaction, actor, "onboarding.draft_saved", "onboarding_draft", saved.id, { revision: saved.revision, section: input.currentSection });
+      return onboardingDraftView(saved, restaurants, answers.interaction);
+    });
+  }
+
+  public async completeOnboardingDraft(
     actor: AuthActor,
-    input: OnboardingInput,
+    input: OnboardingCompleteInput,
     context: { ipHash: string; userAgent: string | undefined },
   ) {
     return withTenant(this.database, actor.tenantId, async (transaction) => {
-      const [restaurant] = await transaction<{ id: string }[]>`
-        select id from restaurants where tenant_id = ${actor.tenantId} order by created_at limit 1
+      const restaurants = await tenantRestaurants(transaction, actor.tenantId);
+      const restaurant = selectTenantRestaurant(restaurants, input.restaurantId);
+      const current = await lockedDraft(transaction, actor, restaurant);
+      const [existingKey] = await transaction<{ firstResultId: string }[]>`
+        select first_result_id as "firstResultId" from onboarding_completion_keys
+        where tenant_id = ${actor.tenantId} and restaurant_id = ${restaurant.id} and idempotency_key = ${input.idempotencyKey}
       `;
-      if (!restaurant) throw new Error("RESTAURANT_NOT_FOUND");
-      await transaction`
-        update tenants set name = ${input.organizationName}, updated_at = now() where id = ${actor.tenantId}
-      `;
-      await transaction`
-        update restaurants set name = ${input.restaurantName}, phone = ${input.phone}, address = ${input.address},
-          timezone = ${input.timezone}, is_demo = ${input.demoMode}
-        where id = ${restaurant.id} and tenant_id = ${actor.tenantId}
-      `;
-      await transaction`
-        insert into onboarding_profiles (tenant_id, restaurant_id, owner_name, role_title, phone, address, timezone, service_goals, operating_setup)
-        values (${actor.tenantId}, ${restaurant.id}, ${input.ownerName}, ${input.roleTitle}, ${input.phone}, ${input.address}, ${input.timezone},
-          ${transaction.json(input.serviceGoals)}, ${transaction.json(input.operatingSetup)})
-        on conflict (tenant_id) do update set
-          restaurant_id = excluded.restaurant_id, owner_name = excluded.owner_name, role_title = excluded.role_title,
-          phone = excluded.phone, address = excluded.address, timezone = excluded.timezone,
-          service_goals = excluded.service_goals, operating_setup = excluded.operating_setup, updated_at = now()
-      `;
-      await configureReservationSystems(transaction, actor.tenantId, restaurant.id, input.operatingSetup);
-      if (actor.userId) await transaction`update users set display_name = ${input.ownerName} where id = ${actor.userId}`;
-      if (!actor.userId) throw new Error("USER_REQUIRED");
+      if (existingKey) return { completed: true, firstResultId: existingKey.firstResultId, idempotent: true };
+      if (current.revision !== input.expectedRevision) throw new Error("ONBOARDING_REVISION_CONFLICT");
+      if (current.status === "completed" && current.first_result_id) {
+        return { completed: true, firstResultId: current.first_result_id, idempotent: true };
+      }
+      const answers = validateOnboardingCompletion(actor.role, actor.userId, onboardingAnswersSchema.parse(current.answers), current.current_section, current.confirmed_sections);
+      await validateApprovalAssignee(transaction, actor.tenantId, answers);
+      const firstResult = buildOnboardingFirstResult(answers);
+
       await transaction`
         insert into legal_acceptances (tenant_id, user_id, document_type, document_version, ip_hash, user_agent)
         values
-          (${actor.tenantId}, ${actor.userId}, 'terms', 'pilot-2026-08-23', ${context.ipHash}, ${context.userAgent || null}),
-          (${actor.tenantId}, ${actor.userId}, 'dpa', 'pilot-2026-08-23', ${context.ipHash}, ${context.userAgent || null})
+          (${actor.tenantId}, ${actor.userId}, 'terms', ${input.termsVersion}, ${context.ipHash}, ${context.userAgent || null}),
+          (${actor.tenantId}, ${actor.userId}, 'dpa', ${input.dpaVersion}, ${context.ipHash}, ${context.userAgent || null})
         on conflict (tenant_id, user_id, document_type, document_version) do nothing
       `;
-      await this.audit(transaction, actor, "onboarding.updated", "tenant", actor.tenantId);
-      return { saved: true };
-    });
-  }
-
-  public async completeOnboarding(actor: AuthActor) {
-    return withTenant(this.database, actor.tenantId, async (transaction) => {
-      const [profile] = await transaction<{ restaurant_id: string | null; owner_name: string | null; phone: string | null; address: string | null }[]>`
-        select restaurant_id, owner_name, phone, address from onboarding_profiles where tenant_id = ${actor.tenantId}
+      const [result] = await transaction<{ id: string }[]>`
+        insert into onboarding_first_results (
+          tenant_id, restaurant_id, profile_revision, kind, status, title, confirmed_facts,
+          recommendations, unknown_fields, source_field_paths, business_artifact
+        )
+        values (
+          ${actor.tenantId}, ${restaurant.id}, ${current.revision}, ${firstResult.kind}, ${firstResult.status},
+          ${firstResult.title}, ${transaction.json(firstResult.confirmedFacts as JSONValue)},
+          ${transaction.json(firstResult.recommendations as JSONValue)},
+          ${transaction.json(firstResult.unknownFields as JSONValue)},
+          ${transaction.json(firstResult.sourceFieldPaths as JSONValue)},
+          ${transaction.json(firstResult.businessArtifact as JSONValue)}
+        )
+        on conflict (tenant_id, restaurant_id, profile_revision) do update set
+          kind = excluded.kind, status = excluded.status, title = excluded.title,
+          confirmed_facts = excluded.confirmed_facts, recommendations = excluded.recommendations,
+          unknown_fields = excluded.unknown_fields, source_field_paths = excluded.source_field_paths,
+          business_artifact = excluded.business_artifact, updated_at = now()
+        returning id
       `;
-      if (!profile?.restaurant_id || !profile.owner_name || !profile.phone || !profile.address) {
-        throw new Error("ONBOARDING_INCOMPLETE");
-      }
-      const [acceptance] = await transaction<{ count: number }[]>`
-        select count(distinct document_type)::int as count from legal_acceptances
-        where tenant_id = ${actor.tenantId} and user_id = ${actor.userId}
-          and document_version = 'pilot-2026-08-23' and document_type in ('terms', 'dpa')
+      if (!result) throw new Error("CREATE_FAILED");
+      await transaction`
+        update onboarding_drafts set status = 'completed', current_section = 'review',
+          first_result_id = ${result.id}, completed_at = now()
+        where id = ${current.id} and tenant_id = ${actor.tenantId}
       `;
-      if (acceptance?.count !== 2) throw new Error("LEGAL_ACCEPTANCE_REQUIRED");
-      await transaction`update onboarding_profiles set completed_at = now() where tenant_id = ${actor.tenantId}`;
-      await transaction`update tenants set onboarding_complete = true, status = 'active' where id = ${actor.tenantId}`;
-      await ensureDemoWorkspace(transaction, actor.tenantId, profile.restaurant_id);
+      await transaction`
+        insert into onboarding_completion_keys (tenant_id, restaurant_id, idempotency_key, draft_revision, first_result_id)
+        values (${actor.tenantId}, ${restaurant.id}, ${input.idempotencyKey}, ${current.revision}, ${result.id})
+      `;
+      await syncConfirmedRestaurant(transaction, actor, restaurant.id, answers);
+      await transaction`
+        insert into onboarding_profiles (tenant_id, restaurant_id, owner_name, role_title, phone, address, timezone, service_goals, operating_setup)
+        values (${actor.tenantId}, ${restaurant.id}, ${actor.displayName || actor.email}, ${onboardingDisplayRole(answers)}, ${knownString(answers.establishment.phone)}, ${knownString(answers.establishment.address)}, ${answers.establishment.timezone || restaurant.timezone},
+          ${transaction.json(resultGoals(answers) as JSONValue)}, ${transaction.json(onboardingOperatingSetup(answers) as JSONValue)})
+        on conflict (tenant_id, restaurant_id) do update set
+          owner_name = excluded.owner_name, role_title = excluded.role_title,
+          phone = excluded.phone, address = excluded.address, timezone = excluded.timezone,
+          service_goals = excluded.service_goals, operating_setup = excluded.operating_setup,
+          completed_at = now(), updated_at = now()
+      `;
+      await saveUserInteraction(transaction, actor.userId!, answers.interaction, true);
+      await transaction`update tenants set onboarding_complete = true where id = ${actor.tenantId}`;
       await this.audit(transaction, actor, "onboarding.completed", "tenant", actor.tenantId);
-      return { completed: true };
+      return { completed: true, firstResultId: result.id, idempotent: false };
     });
   }
 
@@ -388,7 +512,7 @@ export class PlatformRepository {
       await transaction`select set_config('app.tenant_id', ${tenant.id}, true)`;
       const [restaurant] = await transaction<{ id: string }[]>`
         insert into restaurants (tenant_id, name, slug, is_demo)
-        values (${tenant.id}, ${input.restaurantName || input.organizationName}, 'espace-demo', true) returning id
+        values (${tenant.id}, ${input.restaurantName || input.organizationName}, ${tenantSlug(input.restaurantName || input.organizationName)}, false) returning id
       `;
       if (!restaurant) throw new Error("RESTAURANT_CREATE_FAILED");
       const [invitation] = await transaction<{ id: string }[]>`
@@ -396,7 +520,6 @@ export class PlatformRepository {
         values (${tenant.id}, ${input.email}, ${input.role}, ${input.locale}, ${actor.userId}) returning id
       `;
       if (!invitation) throw new Error("INVITATION_CREATE_FAILED");
-      await ensureDemoWorkspace(transaction, tenant.id, restaurant.id);
       await this.audit(transaction, actor, "pilot.invited", "invitation", invitation.id, { email: input.email, tenantId: tenant.id });
       return { invitationId: invitation.id, tenantId: tenant.id, tenantSlug: slug };
     });
@@ -693,6 +816,199 @@ export class PlatformRepository {
       values (${tenantId}, ${aggregateType}, ${aggregateId}, ${eventType}, ${transaction.json(payload as JSONValue)})
     `;
   }
+}
+
+interface OnboardingDraftRow {
+  id: string;
+  tenant_id: string;
+  restaurant_id: string;
+  schema_version: number;
+  revision: number;
+  status: "draft" | "awaiting_authority" | "completed";
+  current_section: "establishment" | "priorities" | "interaction" | "reservations" | "operations" | "authority" | "final_note" | "review";
+  confirmed_sections: Array<"establishment" | "priorities" | "interaction" | "reservations" | "operations" | "authority" | "final_note">;
+  answers: unknown;
+  provenance: unknown;
+  first_result_id: string | null;
+  completed_at: string | null;
+  updated_at: string;
+}
+
+interface RestaurantIdentity {
+  id: string;
+  name: string;
+  address: string | null;
+  phone: string | null;
+  timezone: string;
+}
+
+interface RestaurantChoice extends RestaurantIdentity {
+  cityCountry: string | null;
+}
+
+function trustedOnboardingProvenance(
+  input: OnboardingDraftSaveInput["provenance"],
+  current: unknown,
+  userId: string,
+): OnboardingDraftSaveInput["provenance"] {
+  const stored = Array.isArray(current) ? current as OnboardingDraftSaveInput["provenance"] : [];
+  const now = new Date().toISOString();
+  return input.map((entry) => {
+    const trusted = stored.find((candidate) => candidate.fieldPath === entry.fieldPath
+      && candidate.sourceType === entry.sourceType
+      && candidate.sourceReference === entry.sourceReference);
+    if (entry.sourceType === "connected_source" && !trusted) throw new Error("ONBOARDING_PROVENANCE_INVALID");
+    const { confirmedAt: _untrustedConfirmedAt, confirmedBy: _untrustedConfirmedBy, ...safeEntry } = entry;
+    if (entry.confirmationStatus !== "confirmed") return safeEntry;
+    return {
+      ...safeEntry,
+      confirmedBy: trusted?.confirmedBy || userId,
+      confirmedAt: trusted?.confirmedAt || now,
+    };
+  });
+}
+
+function hasUnconfirmedOnboardingProvenance(
+  provenance: OnboardingDraftSaveInput["provenance"],
+  section: OnboardingDraftRow["current_section"],
+): boolean {
+  return provenance.some((entry) => entry.confirmationStatus === "suggested"
+    && ["user_text", "user_voice", "public_suggestion"].includes(entry.sourceType)
+    && onboardingProvenanceSection(entry.fieldPath) === section);
+}
+
+function onboardingProvenanceSection(fieldPath: string): OnboardingDraftRow["current_section"] | undefined {
+  if (fieldPath.startsWith("answers.establishment")) return "establishment";
+  if (fieldPath.startsWith("answers.priorities")) return "priorities";
+  if (fieldPath.startsWith("answers.interaction")) return "interaction";
+  if (fieldPath.startsWith("answers.reservations")) return "reservations";
+  if (fieldPath.startsWith("answers.operations")) return "operations";
+  if (fieldPath.startsWith("answers.authority")) return "authority";
+  if (fieldPath.startsWith("answers.finalNote")) return "final_note";
+  return undefined;
+}
+
+async function tenantRestaurants(transaction: Transaction, tenantId: string): Promise<RestaurantChoice[]> {
+  return transaction<RestaurantChoice[]>`
+    select id, name, null::text as "cityCountry", address, phone, timezone
+    from restaurants where tenant_id = ${tenantId} order by created_at, id
+  `;
+}
+
+function selectTenantRestaurant(restaurants: RestaurantChoice[], restaurantId?: string): RestaurantChoice {
+  const restaurant = restaurantId ? restaurants.find((candidate) => candidate.id === restaurantId) : restaurants[0];
+  if (!restaurant) throw new Error("RESTAURANT_NOT_FOUND");
+  return restaurant;
+}
+
+async function lockedDraft(transaction: Transaction, actor: AuthActor, restaurant: RestaurantIdentity): Promise<OnboardingDraftRow> {
+  const [draft] = await transaction<OnboardingDraftRow[]>`
+    select id, tenant_id, restaurant_id, schema_version, revision, status, current_section, confirmed_sections, answers,
+      provenance, first_result_id, completed_at, updated_at
+    from onboarding_drafts
+    where tenant_id = ${actor.tenantId} and restaurant_id = ${restaurant.id}
+    for update
+  `;
+  if (draft) return draft;
+  const interaction = actor.userId ? await readUserInteraction(transaction, actor.userId) : undefined;
+  const answers = createInitialOnboardingAnswers({
+    tenantName: actor.tenantName,
+    restaurantName: restaurant.name,
+    address: restaurant.address,
+    phone: restaurant.phone,
+    timezone: restaurant.timezone,
+    ...(interaction ? { interaction } : {}),
+  });
+  const [created] = await transaction<OnboardingDraftRow[]>`
+    insert into onboarding_drafts (tenant_id, restaurant_id, answers)
+    values (${actor.tenantId}, ${restaurant.id}, ${transaction.json(answers as JSONValue)})
+    returning id, tenant_id, restaurant_id, schema_version, revision, status, current_section, confirmed_sections, answers,
+      provenance, first_result_id, completed_at, updated_at
+  `;
+  if (!created) throw new Error("CREATE_FAILED");
+  return created;
+}
+
+function onboardingDraftView(
+  row: OnboardingDraftRow,
+  restaurants: RestaurantChoice[],
+  interaction: OnboardingAnswers["interaction"],
+) {
+  const answers = onboardingAnswersSchema.parse(row.answers);
+  return {
+    id: row.id,
+    tenantId: row.tenant_id,
+    restaurantId: row.restaurant_id,
+    schemaVersion: row.schema_version,
+    revision: row.revision,
+    status: row.status,
+    currentSection: row.current_section,
+    confirmedSections: row.confirmed_sections,
+    answers: { ...answers, interaction },
+    provenance: Array.isArray(row.provenance) ? row.provenance : [],
+    updatedAt: row.updated_at,
+    completedAt: row.completed_at,
+    firstResultId: row.first_result_id,
+    restaurants: restaurants.map(({ id, name, cityCountry, timezone }) => ({ id, name, cityCountry, timezone })),
+    legalVersions: onboardingLegalVersions,
+  };
+}
+
+async function readUserInteraction(transaction: Transaction, userId: string): Promise<OnboardingAnswers["interaction"]> {
+  const [preferences] = await transaction<Array<{ preferredMode: "text" | "voice" | "mixed"; preferredModeConfirmed: boolean; spokenReplies: boolean; locale: "fr" | "en"; theme: "dark" | "clear" }>>`
+    select preferred_interaction as "preferredMode", spoken_replies as "spokenReplies",
+      interaction_configured as "preferredModeConfirmed", interface_locale as locale, interface_theme as theme
+    from users where id = ${userId}
+  `;
+  if (!preferences) throw new Error("USER_REQUIRED");
+  return preferences;
+}
+
+async function saveUserInteraction(transaction: Transaction, userId: string, interaction: OnboardingAnswers["interaction"], configured: boolean): Promise<void> {
+  await transaction`
+    update users set interface_locale = ${interaction.locale}, interface_theme = ${interaction.theme},
+      preferred_interaction = case when ${configured} then ${interaction.preferredMode} else preferred_interaction end,
+      spoken_replies = case when ${configured} then ${interaction.spokenReplies} else spoken_replies end,
+      interaction_configured = interaction_configured or ${configured}, updated_at = now()
+    where id = ${userId}
+  `;
+}
+
+async function validateApprovalAssignee(transaction: Transaction, tenantId: string, answers: OnboardingAnswers): Promise<void> {
+  const assigneeId = answers.authority.approvalAssigneeUserId;
+  if (!assigneeId || assigneeId === "unknown") return;
+  const [membership] = await transaction<Array<{ role: Role }>>`
+    select role from memberships where tenant_id = ${tenantId} and user_id = ${assigneeId}
+  `;
+  if (!membership || !canCompleteOnboarding(membership.role)) throw new Error("ONBOARDING_ASSIGNEE_INVALID");
+}
+
+function canCompleteOnboarding(role: Role): boolean {
+  return ["platform_admin", "owner", "group_admin"].includes(role);
+}
+
+async function syncConfirmedRestaurant(transaction: Transaction, actor: AuthActor, restaurantId: string, answers: OnboardingAnswers): Promise<void> {
+  if (!answers.establishment.identityConfirmed || !answers.establishment.restaurantName || !answers.establishment.cityCountry) return;
+  const address = knownString(answers.establishment.address);
+  const phone = knownString(answers.establishment.phone);
+  await transaction`
+    update restaurants set
+      name = ${answers.establishment.restaurantName},
+      address = coalesce(${address}, address),
+      phone = coalesce(${phone}, phone),
+      timezone = coalesce(${answers.establishment.timezone || null}, timezone),
+      is_demo = false
+    where id = ${restaurantId} and tenant_id = ${actor.tenantId}
+  `;
+}
+
+function knownString(value: string | undefined): string | null {
+  if (!value || value === "unknown" || value === "not_applicable") return null;
+  return value;
+}
+
+function resultGoals(answers: OnboardingAnswers): string[] {
+  return [answers.priorities.primaryFocus || "global", ...answers.priorities.outcomes].filter(Boolean);
 }
 
 async function configureReservationSystems(

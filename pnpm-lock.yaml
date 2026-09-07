@@ -29,6 +29,9 @@ importers:
 
   apps/console:
     dependencies:
+      '@tablenow/contracts':
+        specifier: workspace:*
+        version: link:../../packages/contracts
       '@tablenow/core-api':
         specifier: workspace:*
         version: link:../../services/core-api

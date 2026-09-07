@@ -7,7 +7,7 @@ import type { Session } from "@/lib/types";
 import { publicPilotSession } from "@/lib/public-pilot";
 import { isPublicPilotRuntime } from "@/lib/public-pilot-host";
 
-export function useSession(options: { requireOnboarding?: boolean } = {}) {
+export function useSession(options: { requireOnboarding?: boolean; allowCompletedOnboarding?: boolean } = {}) {
   const router = useRouter();
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
@@ -25,7 +25,7 @@ export function useSession(options: { requireOnboarding?: boolean } = {}) {
     try {
       const next = await api<Session>("/v1/auth/session");
       setSession(next);
-      if (options.requireOnboarding === true && next.tenant.onboardingComplete) router.replace("/today");
+      if (options.requireOnboarding === true && next.tenant.onboardingComplete && !options.allowCompletedOnboarding) router.replace("/today");
       if (options.requireOnboarding !== true && !next.tenant.onboardingComplete) router.replace("/onboarding");
       return next;
     } catch (caught) {
@@ -35,7 +35,7 @@ export function useSession(options: { requireOnboarding?: boolean } = {}) {
     } finally {
       setLoading(false);
     }
-  }, [options.requireOnboarding, router]);
+  }, [options.allowCompletedOnboarding, options.requireOnboarding, router]);
 
   useEffect(() => { void refresh(); }, [refresh]);
   return { session, loading, error, refresh };

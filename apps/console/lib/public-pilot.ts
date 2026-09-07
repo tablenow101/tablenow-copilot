@@ -544,6 +544,23 @@ export const publicPilotWorkspace: Workspace = {
       createdAt: relativeIso(-3 * hour),
     },
   ],
+  firstResults: [
+    {
+      id: "public-first-result-1",
+      restaurantId: "public-pilot-paris",
+      profileRevision: 1,
+      kind: "service",
+      status: "ready_for_review",
+      title: "Votre préparation de service est prête",
+      confirmedFacts: ["Établissement confirmé : Maison Sillage", "Priorité de départ : gestion opérationnelle"],
+      recommendations: ["Vérifier la mise en place prioritaire.", "Désigner la personne responsable des validations."],
+      unknownFields: ["source de métriques réelle"],
+      sourceFieldPaths: ["answers.establishment", "answers.priorities", "answers.operations.global"],
+      businessArtifact: { type: "service_preparation", publicPilot: true },
+      createdAt: relativeIso(-8 * hour),
+      updatedAt: relativeIso(-8 * hour),
+    },
+  ],
 };
 
 export const publicPilotSystems: ComputerUseOverview = {
