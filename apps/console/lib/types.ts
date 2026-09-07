@@ -36,6 +36,21 @@ export interface Workspace {
   inventory: Array<{ id: string; restaurantId: string; name: string; unit: string; quantity: number; reorderThreshold: number; status: string; updatedAt: string }>;
   metrics: Array<{ restaurantId: string; date: string; revenueCaptured: number; covers: number; callsHandled: number; conversionRate: number; timeSavedMinutes: number }>;
   actions: Array<{ id: string; restaurantId: string | null; conversationId: string; tool: string; title: string; rationale: string; risk: string; approvalRequired: boolean; status: string; createdAt: string }>;
+  firstResults: Array<{
+    id: string;
+    restaurantId: string;
+    profileRevision: number;
+    kind: string;
+    status: string;
+    title: string;
+    confirmedFacts: string[];
+    recommendations: string[];
+    unknownFields: string[];
+    sourceFieldPaths: string[];
+    businessArtifact: Record<string, unknown>;
+    createdAt: string;
+    updatedAt: string;
+  }>;
 }
 
 export interface ComputerUseOverview {

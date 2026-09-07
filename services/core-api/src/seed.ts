@@ -40,7 +40,7 @@ export async function seed(): Promise<void> {
       await transaction`
         insert into onboarding_profiles (tenant_id, restaurant_id, owner_name, role_title, phone, address, timezone, service_goals, completed_at)
         values (${tenant.id}, ${restaurant.id}, 'TableNow Founder', 'Direction', '+33100000000', '12 rue du Service, Paris', 'Europe/Paris', '["capture_demand","improve_service","group_visibility"]'::jsonb, now())
-        on conflict (tenant_id) do update set completed_at = excluded.completed_at
+        on conflict (tenant_id, restaurant_id) do update set completed_at = excluded.completed_at
       `;
       await transaction`
         insert into privacy_preferences (tenant_id, user_id)

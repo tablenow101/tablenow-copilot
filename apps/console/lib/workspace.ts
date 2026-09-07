@@ -26,6 +26,7 @@ export function scopeWorkspace(workspace: Workspace | null, restaurantId: string
     inventory: belongsToRestaurant(workspace.inventory),
     metrics: belongsToRestaurant(workspace.metrics),
     actions: workspace.actions.filter((item) => item.restaurantId === restaurantId),
+    firstResults: belongsToRestaurant(workspace.firstResults),
   };
 }
 

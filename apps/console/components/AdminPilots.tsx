@@ -59,7 +59,7 @@ export function AdminPilots() {
 
   const invite = async (event: FormEvent) => {
     event.preventDefault(); setBusy(true); setNotice("");
-    try { await api("/v1/admin/pilots", { method: "POST", body: JSON.stringify(form) }); await refresh(); setFormOpen(false); setForm({ email: "", organizationName: "", restaurantName: "", role: "owner", locale: "fr" }); setNotice("Invitation envoyée et espace de démonstration créé."); }
+    try { await api("/v1/admin/pilots", { method: "POST", body: JSON.stringify(form) }); await refresh(); setFormOpen(false); setForm({ email: "", organizationName: "", restaurantName: "", role: "owner", locale: "fr" }); setNotice("Invitation envoyée et espace d'onboarding créé sans données de démonstration."); }
     catch (caught) { setNotice(caught instanceof Error ? caught.message : "Impossible de créer l'invitation."); }
     finally { setBusy(false); }
   };

@@ -21,7 +21,8 @@ import {
   inventoryCreateSchema,
   inventoryUpdateSchema,
   invitePilotSchema,
-  onboardingSchema,
+  onboardingCompleteSchema,
+  onboardingDraftSaveSchema,
   privacyAdminDecisionSchema,
   privacyPreferencesSchema,
   privacyRequestSchema,
@@ -54,6 +55,7 @@ import { AuthService } from "./auth-service.js";
 import { PlatformRepository } from "./repository.js";
 import { ComputerUseRepository } from "./computer-use-repository.js";
 import { publicCopilotReply } from "./copilot-scope.js";
+import { OnboardingIncompleteError } from "./onboarding.js";
 import "./types.js";
 
 export interface AppDependencies {
@@ -139,15 +141,20 @@ export async function buildApp(dependencies: AppDependencies = {}): Promise<Fast
     return repository.getWorkspace(request.actor!.tenantId);
   });
 
-  app.put("/v1/onboarding", { preHandler: authGuard(database, "tenant.manage") }, async (request) => {
-    return repository.updateOnboarding(request.actor!, onboardingSchema.parse(request.body), {
+  app.get("/v1/onboarding", { preHandler: authGuard(database) }, async (request) => {
+    const { restaurantId } = onboardingQuery.parse(request.query);
+    return repository.readOnboardingDraft(request.actor!, restaurantId);
+  });
+
+  app.patch("/v1/onboarding", { preHandler: authGuard(database) }, async (request) => {
+    return repository.saveOnboardingDraft(request.actor!, onboardingDraftSaveSchema.parse(request.body));
+  });
+
+  app.post("/v1/onboarding/complete", { preHandler: authGuard(database) }, async (request) => {
+    return repository.completeOnboardingDraft(request.actor!, onboardingCompleteSchema.parse(request.body), {
       ipHash: hashSecret(request.ip, config.SESSION_SECRET),
       userAgent: request.headers["user-agent"],
     });
-  });
-
-  app.post("/v1/onboarding/complete", { preHandler: authGuard(database, "tenant.manage") }, async (request) => {
-    return repository.completeOnboarding(request.actor!);
   });
 
   app.post("/v1/restaurants", { preHandler: authGuard(database, "tenant.manage") }, async (request, reply) => {
@@ -381,8 +388,12 @@ export async function buildApp(dependencies: AppDependencies = {}): Promise<Fast
 
   app.setErrorHandler((error, request, reply) => {
     request.log.warn({ err: error, requestId: request.id }, "request failed");
+    if (error instanceof OnboardingIncompleteError) {
+      return reply.code(422).send({ error: { code: error.message, message: "Complétez les informations essentielles avant de terminer.", details: error.fieldErrors } });
+    }
     if (error instanceof ZodError) {
-      return reply.code(400).send({ error: { code: "INVALID_INPUT", message: "Certains champs sont invalides.", details: z.flattenError(error).fieldErrors } });
+      const status = request.url.startsWith("/v1/onboarding") ? 422 : 400;
+      return reply.code(status).send({ error: { code: "INVALID_INPUT", message: "Certains champs sont invalides.", details: z.flattenError(error).fieldErrors } });
     }
     const errorMessage = error instanceof Error ? error.message : "UNKNOWN_ERROR";
     const known = errorMap[errorMessage];
@@ -396,6 +407,7 @@ export async function buildApp(dependencies: AppDependencies = {}): Promise<Fast
 
 const idParams = z.object({ id: z.uuid() });
 const eventParams = z.object({ eventId: z.string().regex(/^\d+$/) });
+const onboardingQuery = z.object({ restaurantId: z.uuid().optional() }).strict();
 
 const errorMap: Record<string, { status: number; message: string }> = {
   INVALID_CODE: { status: 400, message: "Code invalide ou expiré." },
@@ -404,7 +416,7 @@ const errorMap: Record<string, { status: number; message: string }> = {
   NOT_FOUND: { status: 404, message: "Élément introuvable." },
   NOT_FOUND_OR_ALREADY_RESOLVED: { status: 409, message: "Cette décision a déjà été traitée." },
   NOT_FOUND_OR_ALREADY_DECIDED: { status: 409, message: "Cette action a déjà été traitée." },
-  ONBOARDING_INCOMPLETE: { status: 409, message: "Complétez les informations essentielles avant de terminer." },
+  ONBOARDING_INCOMPLETE: { status: 422, message: "Complétez les informations essentielles avant de terminer." },
   LEGAL_ACCEPTANCE_REQUIRED: { status: 409, message: "L'acceptation des documents du pilote est requise." },
   HIGH_RISK_APPROVAL_REQUIRED: { status: 403, message: "Cette action nécessite la validation d'un propriétaire ou administrateur." },
   AI_DAILY_BUDGET_EXCEEDED: { status: 429, message: "Le budget quotidien du copilote est atteint." },
@@ -414,6 +426,12 @@ const errorMap: Record<string, { status: number; message: string }> = {
   PRIVACY_REQUEST_NOT_REVIEWABLE: { status: 409, message: "Cette demande ne peut plus être revue." },
   PROTECTED_ADMIN_ACCOUNT: { status: 409, message: "Le compte administrateur initial doit d'abord être transféré à un autre responsable." },
   RESTAURANT_NOT_FOUND: { status: 404, message: "Cet établissement est introuvable." },
+  ONBOARDING_REVISION_CONFLICT: { status: 409, message: "Ces réponses ont été modifiées dans une autre session." },
+  ONBOARDING_INVALID_TRANSITION: { status: 422, message: "Le parcours doit être confirmé dans l'ordre avant la finalisation." },
+  ONBOARDING_AUTHORITY_REQUIRED: { status: 403, message: "Ces réglages doivent être confirmés par une personne autorisée." },
+  ONBOARDING_ASSIGNEE_INVALID: { status: 422, message: "Le destinataire de validation doit être une personne autorisée de cet établissement." },
+  ONBOARDING_PROVENANCE_INVALID: { status: 422, message: "La source déclarée pour cette réponse n'est pas autorisée." },
+  USER_REQUIRED: { status: 403, message: "Une session utilisateur est requise pour terminer l'onboarding." },
   WORKFLOW_NOT_FOUND: { status: 404, message: "Ce protocole d'exécution est introuvable ou inactif." },
   HEALTH_WORKFLOW_NOT_FOUND: { status: 404, message: "Le protocole de vérification est introuvable." },
   COMPUTER_CONNECTION_NOT_READY: { status: 409, message: "Cette connexion doit d'abord être vérifiée." },

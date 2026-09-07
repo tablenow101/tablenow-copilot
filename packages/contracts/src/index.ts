@@ -53,6 +53,233 @@ export const operatingSetupSchema = z.object({
   }
 });
 
+export const onboardingSectionSchema = z.enum([
+  "establishment",
+  "priorities",
+  "interaction",
+  "reservations",
+  "operations",
+  "authority",
+  "final_note",
+  "review",
+]);
+
+export const onboardingSourceTypeSchema = z.enum(["user_form", "user_text", "user_voice", "public_suggestion", "connected_source"]);
+export const onboardingConfirmationStatusSchema = z.enum(["suggested", "confirmed", "rejected", "unknown"]);
+export const onboardingLegalVersions = {
+  terms: "pilot-2026-08-23",
+  dpa: "pilot-2026-08-23",
+} as const;
+
+const optionalText = (max = 500) => z.string().trim().max(max).optional();
+const unknownableText = (max = 500) => z.union([z.string().trim().max(max), z.literal("unknown"), z.literal("not_applicable")]).optional();
+const ianaTimezone = z.string().trim().min(3).max(80).refine((value) => {
+  try {
+    new Intl.DateTimeFormat("fr-FR", { timeZone: value });
+    return true;
+  } catch {
+    return false;
+  }
+}, "Le fuseau horaire doit être un identifiant IANA valide.");
+const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "La date doit être absolue au format AAAA-MM-JJ.").refine((value) => {
+  const parsed = new Date(`${value}T00:00:00.000Z`);
+  return !Number.isNaN(parsed.getTime()) && parsed.toISOString().startsWith(value);
+}, "La date n'existe pas.");
+const isoInstant = z.string().trim().max(80).refine((value) => {
+  return /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2}(?:\.\d{1,3})?)?(?:Z|[+-]\d{2}:\d{2})$/.test(value)
+    && !Number.isNaN(Date.parse(value));
+}, "La date et l'heure doivent être un instant ISO avec décalage horaire.");
+const unknownableDate = z.union([isoDate, z.literal("unknown"), z.literal("not_applicable")]).optional();
+const unknownableInstant = z.union([isoInstant, z.literal("unknown"), z.literal("not_applicable")]).optional();
+
+export const onboardingAnswersSchema = z.object({
+  establishment: z.object({
+    query: optionalText(240),
+    identificationMode: z.enum(["public_search", "manual"]).optional(),
+    restaurantName: z.string().trim().min(2).max(120).optional(),
+    cityCountry: z.string().trim().min(2).max(160).optional(),
+    address: unknownableText(300),
+    phone: unknownableText(40),
+    timezone: ianaTimezone.optional(),
+    identityConfirmed: z.boolean().default(false),
+    siteCount: z.enum(["single", "multiple", "unknown"]).default("unknown"),
+    sourceReferences: z.array(z.object({
+      label: z.string().trim().min(1).max(120),
+      value: z.string().trim().min(1).max(500),
+      confirmationStatus: onboardingConfirmationStatusSchema.default("suggested"),
+    }).strict()).max(12).default([]),
+  }).strict().default({ identityConfirmed: false, siteCount: "unknown", sourceReferences: [] }),
+  priorities: z.object({
+    scope: z.enum(["global", "targeted"]).default("global"),
+    timeConsumers: z.array(z.enum(["team", "reservations", "supplier_orders", "customer_communication", "operations", "other"])).max(8).default([]),
+    otherText: optionalText(500),
+    outcomes: z.array(z.enum(["profitability", "occupancy", "customer_requests", "team_coordination", "service_disruptions", "stock_control", "customer_loyalty"])).max(8).default([]),
+    primaryFocus: z.enum(["team", "reservations", "supplier_orders", "customer_communication", "operations", "profitability", "occupancy", "customer_loyalty", "global", "other"]).optional(),
+  }).strict().default({ scope: "global", timeConsumers: [], outcomes: [] }),
+  interaction: z.object({
+    preferredMode: z.enum(["text", "voice", "mixed"]).default("mixed"),
+    preferredModeConfirmed: z.boolean().default(false),
+    spokenReplies: z.boolean().default(false),
+    locale: z.enum(["fr", "en"]).default("fr"),
+    theme: z.enum(["dark", "clear"]).default("dark"),
+  }).strict().default({ preferredMode: "mixed", preferredModeConfirmed: false, spokenReplies: false, locale: "fr", theme: "dark" }),
+  reservations: z.object({
+    providers: z.array(z.enum(["zenchef", "sevenrooms", "thefork", "other"])).max(6).default([]),
+    otherProvider: optionalText(120),
+    methods: z.array(z.enum(["software", "paper", "calendar", "messages", "none", "other"])).max(6).default([]),
+    calendarProvider: z.enum(["google_calendar", "outlook", "other"]).optional(),
+    otherMethod: optionalText(160),
+    authoritativeSystem: z.string().trim().min(1).max(120).or(z.literal("unknown")).default("unknown"),
+    connectionStatus: z.literal("declared").default("declared"),
+  }).strict().default({ providers: [], methods: [], authoritativeSystem: "unknown", connectionStatus: "declared" }),
+  operations: z.object({
+    communications: z.object({
+      channels: z.array(z.enum(["calls", "whatsapp", "emails", "instagram", "sms", "other"])).max(8).default([]),
+      peakContext: z.array(z.enum(["during_service", "when_team_unavailable", "outside_hours", "other"])).max(6).default([]),
+      phoneNumber: unknownableText(40),
+      overflowTriggers: z.array(z.enum(["busy_line", "no_answer", "outside_hours"])).max(6).default([]),
+      humanReviewCategories: z.array(z.enum(["groups", "allergies_sensitive", "privatizations", "complaints", "other"])).max(8).default([]),
+      otherText: optionalText(500),
+    }).strict().default({ channels: [], peakContext: [], overflowTriggers: [], humanReviewCategories: [] }),
+    reservations: z.object({
+      friction: z.array(z.enum(["taking_reservations", "changes_cancellations", "groups", "special_requests", "no_shows", "other"])).max(8).default([]),
+      groupApprovalThreshold: z.number().int().min(1).max(100).or(z.literal("unknown")).optional(),
+      confirmationRuleStatus: z.enum(["yes", "no", "to_define"]).optional(),
+      confirmationRuleText: optionalText(500),
+      specialRequests: z.array(z.string().trim().min(1).max(120)).max(12).default([]),
+      otherText: optionalText(500),
+    }).strict().default({ friction: [], specialRequests: [] }),
+    team: z.object({
+      friction: z.array(z.enum(["planning", "absences", "tasks", "floor_kitchen_coordination", "other"])).max(8).default([]),
+      stations: z.array(z.enum(["floor", "kitchen", "bar", "host_reservations", "other"])).max(8).default([]),
+      headcount: z.number().int().positive().max(500).or(z.literal("unknown")).optional(),
+      otherText: optionalText(500),
+    }).strict().default({ friction: [], stations: [] }),
+    suppliers: z.object({
+      intent: z.enum(["prepare_order", "monitor_stock", "prepare_delivery", "other"]).optional(),
+      items: z.array(z.object({
+        name: z.string().trim().min(1).max(120).optional(),
+        quantity: z.number().positive().max(1_000_000).optional(),
+        unit: z.string().trim().min(1).max(40).optional(),
+        stockQuantity: z.number().min(0).max(1_000_000).optional(),
+        reorderThreshold: z.number().min(0).max(1_000_000).optional(),
+      }).strict()).max(20).default([]),
+      supplierName: unknownableText(160),
+      deliveryDate: unknownableDate,
+      deliveryTimeZone: ianaTimezone.optional(),
+      unknownFields: z.array(z.string().trim().min(1).max(120)).max(20).default([]),
+      otherText: optionalText(500),
+    }).strict().default({ items: [], unknownFields: [] }),
+    service: z.object({
+      phase: z.enum(["before_service", "during_service", "after_service", "other"]).optional(),
+      checks: z.array(z.enum(["mise_en_place", "coordination", "special_requests", "closing", "other"])).max(8).default([]),
+      nextServiceAt: unknownableInstant,
+      timezone: ianaTimezone.optional(),
+      scheduleStatus: z.enum(["known", "unknown", "no_fixed_schedule"]).optional(),
+      otherText: optionalText(500),
+    }).strict().default({ checks: [] }),
+    business: z.object({
+      focus: z.enum(["purchases", "team", "waste", "unknown", "regulars", "requests_followup", "next_contacts"]).optional(),
+      targetServices: z.array(z.string().trim().min(1).max(120)).max(14).default([]),
+      knownDataSources: z.array(z.string().trim().min(1).max(120)).max(12).default([]),
+      otherText: optionalText(500),
+    }).strict().default({ targetServices: [], knownDataSources: [] }),
+    global: z.object({
+      startingMoment: z.enum(["before_service", "during_service", "after_service", "overview"]).optional(),
+      otherSituation: optionalText(500),
+      confirmedSummary: optionalText(800),
+    }).strict().default({}),
+  }).strict().default({
+    communications: { channels: [], peakContext: [], overflowTriggers: [], humanReviewCategories: [] },
+    reservations: { friction: [], specialRequests: [] },
+    team: { friction: [], stations: [] },
+    suppliers: { items: [], unknownFields: [] },
+    service: { checks: [] },
+    business: { targetServices: [], knownDataSources: [] },
+    global: {},
+  }),
+  authority: z.object({
+    declaredJobTitle: z.enum(["owner", "general_management", "station_manager", "team", "other"]).optional(),
+    station: optionalText(120),
+    approvalAssigneeUserId: z.uuid().or(z.literal("unknown")).optional(),
+    proposedRules: z.array(z.object({
+      id: z.string().trim().min(1).max(80),
+      label: z.string().trim().min(1).max(240),
+      status: z.enum(["proposed", "confirmed", "rejected"]),
+    }).strict()).max(20).default([]),
+    rulesAcknowledged: z.boolean().default(false),
+  }).strict().default({ proposedRules: [], rulesAcknowledged: false }),
+  finalNote: z.object({
+    text: optionalText(2000),
+    statements: z.array(z.object({
+      id: z.string().trim().min(1).max(80),
+      kind: z.enum(["fact", "preference", "proposed_rule", "unknown"]),
+      fieldPath: z.string().trim().min(1).max(240),
+      value: z.string().trim().min(1).max(800),
+      source: onboardingSourceTypeSchema,
+      status: z.enum(["proposed", "confirmed", "rejected", "needs_clarification"]),
+    }).strict()).max(30).default([]),
+    conflicts: z.array(z.string().trim().min(1).max(500)).max(12).default([]),
+    confirmedStatementIds: z.array(z.string().trim().min(1).max(80)).max(30).default([]),
+  }).strict().default({ statements: [], conflicts: [], confirmedStatementIds: [] }),
+}).strict().superRefine((answers, context) => {
+  const { providers, methods, authoritativeSystem, otherProvider, otherMethod, calendarProvider } = answers.reservations;
+  if (providers.length > 0 && !methods.includes("software")) {
+    context.addIssue({ code: "custom", path: ["reservations", "methods"], message: "Un logiciel déclaré doit conserver la méthode software." });
+  }
+  if (providers.length === 0 && methods.includes("software")) {
+    context.addIssue({ code: "custom", path: ["reservations", "methods"], message: "La méthode software exige un fournisseur déclaré." });
+  }
+  if (methods.includes("none") && methods.length > 1) {
+    context.addIssue({ code: "custom", path: ["reservations", "methods"], message: "Je ne les note pas encore est exclusif des autres méthodes." });
+  }
+  const declaredSystems = new Set<string>([
+    ...providers.filter((provider) => provider !== "other"),
+    ...(providers.includes("other") && otherProvider ? [otherProvider] : []),
+    ...methods.filter((method) => method !== "software" && method !== "other"),
+    ...(methods.includes("other") && otherMethod ? [otherMethod] : []),
+    ...(methods.includes("calendar") && calendarProvider ? [calendarProvider] : []),
+  ]);
+  if (authoritativeSystem !== "unknown" && !declaredSystems.has(authoritativeSystem)) {
+    context.addIssue({ code: "custom", path: ["reservations", "authoritativeSystem"], message: "La source de référence doit être l'une des méthodes déclarées." });
+  }
+  if (answers.operations.reservations.confirmationRuleStatus !== "yes" && answers.operations.reservations.confirmationRuleText) {
+    context.addIssue({ code: "custom", path: ["operations", "reservations", "confirmationRuleText"], message: "Une règle détaillée exige une réponse Oui." });
+  }
+  const confirmedIds = new Set(answers.finalNote.statements.filter((statement) => statement.status === "confirmed").map((statement) => statement.id));
+  if (answers.finalNote.confirmedStatementIds.some((id) => !confirmedIds.has(id))) {
+    context.addIssue({ code: "custom", path: ["finalNote", "confirmedStatementIds"], message: "Seule la version actuelle d'une proposition confirmée peut être référencée." });
+  }
+});
+
+export const onboardingProvenanceSchema = z.object({
+  fieldPath: z.string().trim().min(1).max(240),
+  sourceType: onboardingSourceTypeSchema,
+  sourceReference: z.string().trim().max(500).optional(),
+  observedAt: z.iso.datetime(),
+  confirmationStatus: onboardingConfirmationStatusSchema,
+  confirmedBy: z.uuid().optional(),
+  confirmedAt: z.iso.datetime().optional(),
+}).strict();
+
+export const onboardingDraftSaveSchema = z.object({
+  restaurantId: z.uuid(),
+  expectedRevision: z.number().int().min(0),
+  currentSection: onboardingSectionSchema,
+  answers: onboardingAnswersSchema,
+  provenance: z.array(onboardingProvenanceSchema).max(80).default([]),
+}).strict();
+
+export const onboardingCompleteSchema = z.object({
+  restaurantId: z.uuid(),
+  expectedRevision: z.number().int().min(0),
+  idempotencyKey: z.string().trim().min(12).max(120),
+  termsVersion: z.literal(onboardingLegalVersions.terms),
+  dpaVersion: z.literal(onboardingLegalVersions.dpa),
+  acceptTerms: z.literal(true),
+  acceptDpa: z.literal(true),
+}).strict();
+
 export const onboardingSchema = z.object({
   organizationName: z.string().trim().min(2).max(120),
   restaurantName: z.string().trim().min(2).max(120),
@@ -301,6 +528,9 @@ export type RequestCodeInput = z.infer<typeof requestCodeSchema>;
 export type VerifyCodeInput = z.infer<typeof verifyCodeSchema>;
 export type InvitePilotInput = z.infer<typeof invitePilotSchema>;
 export type OnboardingInput = z.infer<typeof onboardingSchema>;
+export type OnboardingAnswers = z.infer<typeof onboardingAnswersSchema>;
+export type OnboardingDraftSaveInput = z.infer<typeof onboardingDraftSaveSchema>;
+export type OnboardingCompleteInput = z.infer<typeof onboardingCompleteSchema>;
 export type RestaurantCreateInput = z.infer<typeof restaurantCreateSchema>;
 export type TaskCreateInput = z.infer<typeof taskCreateSchema>;
 export type ShiftCreateInput = z.infer<typeof shiftCreateSchema>;
@@ -324,6 +554,24 @@ export interface SessionView {
   tenant: { id: string; name: string; slug: string; onboardingComplete: boolean };
   membership: { role: Role };
   csrfToken: string | null;
+}
+
+export interface OnboardingDraftView {
+  id: string;
+  tenantId: string;
+  restaurantId: string;
+  schemaVersion: number;
+  revision: number;
+  status: "draft" | "awaiting_authority" | "completed";
+  currentSection: z.infer<typeof onboardingSectionSchema>;
+  confirmedSections: Array<Exclude<z.infer<typeof onboardingSectionSchema>, "review">>;
+  answers: OnboardingAnswers;
+  provenance: Array<z.infer<typeof onboardingProvenanceSchema>>;
+  updatedAt: string;
+  completedAt: string | null;
+  firstResultId: string | null;
+  restaurants: Array<{ id: string; name: string; cityCountry: string | null; timezone: string }>;
+  legalVersions: typeof onboardingLegalVersions;
 }
 
 export interface CopilotReply {
