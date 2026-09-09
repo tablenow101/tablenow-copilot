@@ -1,21 +1,25 @@
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
+/** Configuration prerequisites only; this endpoint performs no live service probes. */
 export function GET(): Response {
-  const database = Boolean(process.env.DATABASE_URL || process.env.POSTGRES_URL);
-  const isolatedPreviewDefaults = process.env.VERCEL === "1"
-    && process.env.VERCEL_ENV === "preview"
-    && database;
-  const serverSecrets = Boolean(process.env.SESSION_SECRET && process.env.OTP_PEPPER) || isolatedPreviewDefaults;
-  const administrator = Boolean(process.env.PLATFORM_ADMIN_EMAIL) || isolatedPreviewDefaults;
+  const configured = (name: string): boolean => Boolean(process.env[name]?.trim());
+  const database = configured("DATABASE_URL") || configured("POSTGRES_URL");
+  const serverSecrets = configured("SESSION_SECRET") && configured("OTP_PEPPER");
+  const administrator = configured("PLATFORM_ADMIN_EMAIL");
   const email = process.env.EMAIL_TRANSPORT === "smtp"
-    ? Boolean(process.env.SMTP_HOST && process.env.EMAIL_FROM)
-    : isolatedPreviewDefaults || (process.env.VERCEL_ENV === "preview" && process.env.EMAIL_TRANSPORT === "log");
-  const storage = process.env.VERCEL_ENV === "preview" || Boolean(process.env.BLOB_READ_WRITE_TOKEN);
+    && configured("SMTP_HOST")
+    && configured("EMAIL_FROM");
+  const storage = configured("BLOB_READ_WRITE_TOKEN");
 
+  // A Preview label or a log transport never proves a usable external service.
+  // The readyFor* flags describe explicit prerequisites, not successful delivery,
+  // a live database connection, or end-to-end product certification.
   return Response.json({
     service: "tablenow-copilot",
     environment: process.env.VERCEL_ENV || process.env.APP_ENV || "local",
+    verification: "configuration-only",
+    runtimeVerified: false,
     checks: { database, serverSecrets, administrator, email, storage },
     readyForMigrations: database,
     readyForLogin: database && serverSecrets && administrator && email,
