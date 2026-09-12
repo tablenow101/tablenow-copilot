@@ -29,7 +29,6 @@ import {
   LogOut,
   Mail,
   MessageSquareText,
-  Mic,
   Phone,
   Plus,
   RefreshCw,
@@ -64,6 +63,7 @@ import {
 import type { Workspace } from "@/lib/types";
 import { Brand } from "./Brand";
 import { OwnerDialog } from "./OwnerDialog";
+import { ConversationInput } from "./ConversationInput";
 
 const mainNav = [
   { key: "today", label: "Aujourd’hui", icon: Activity },
@@ -162,9 +162,11 @@ export function OwnerShell({ section }: { section: string }) {
   const [modal, setModal] = useState<Modal | null>(null);
   const draftRequestId = useRef("");
   const [busy, setBusy] = useState(false);
+  const mutationInFlight = useRef(false);
   const [formError, setFormError] = useState("");
   const [message, setMessage] = useState("");
   const [chatBusy, setChatBusy] = useState(false);
+  const chatInFlight = useRef(false);
   const refreshNumber = useRef(0);
   const heading = useRef<HTMLHeadingElement>(null);
   const dictation = useDictation((text) =>
@@ -247,7 +249,8 @@ export function OwnerShell({ section }: { section: string }) {
     success: string,
     method = "PATCH",
   ) {
-    if (busy) return false;
+    if (mutationInFlight.current) return false;
+    mutationInFlight.current = true;
     setBusy(true);
     setFormError("");
     try {
@@ -265,6 +268,7 @@ export function OwnerShell({ section }: { section: string }) {
       if (!modal) setError(text);
       return false;
     } finally {
+      mutationInFlight.current = false;
       setBusy(false);
     }
   }
@@ -362,15 +366,17 @@ export function OwnerShell({ section }: { section: string }) {
     }
   }
   async function sendChat() {
-    if (chatBusy || !message.trim() || !restaurantId) return;
+    if (chatInFlight.current || !message.trim() || !restaurantId) return;
+    chatInFlight.current = true;
+    const submittedMessage = message;
     setChatBusy(true);
     setError("");
     try {
       await api("/v1/operating/chat", {
         method: "POST",
-        body: JSON.stringify({ restaurantId, message: message.trim() }),
+        body: JSON.stringify({ restaurantId, message: submittedMessage.trim() }),
       });
-      setMessage("");
+      setMessage((current) => current === submittedMessage ? "" : current);
       await refresh();
       if (active !== "copilot") router.push("/copilot");
     } catch (caught) {
@@ -380,6 +386,7 @@ export function OwnerShell({ section }: { section: string }) {
           : "Votre message n’a pas pu être traité. Il est conservé ici.",
       );
     } finally {
+      chatInFlight.current = false;
       setChatBusy(false);
     }
   }
@@ -686,7 +693,7 @@ export function OwnerShell({ section }: { section: string }) {
                       setMessage(
                         "Aide-moi à préparer le prochain service à partir de nos résultats.",
                       );
-                      document.getElementById("owner-composer")?.focus();
+                      document.querySelector<HTMLTextAreaElement>(".tn-composer-dock textarea")?.focus();
                     }}
                   >
                     Préparer la suite <ArrowRight size={16} />
@@ -1150,54 +1157,18 @@ export function OwnerShell({ section }: { section: string }) {
         )}
       </main>
       <div className="tn-composer-dock">
-        <form
-          className="tn-composer"
-          onSubmit={(event) => {
-            event.preventDefault();
-            void sendChat();
-          }}
-        >
-          <Sparkles size={21} />
-          <textarea
-            id="owner-composer"
-            rows={1}
-            aria-label="Parler à TableNow"
-            placeholder="Parlez à TableNow, ou écrivez ici…"
-            maxLength={4000}
-            value={message}
-            onChange={(event) => setMessage(event.target.value)}
-            onKeyDown={(event) => {
-              if (event.key === "Enter" && !event.shiftKey) {
-                event.preventDefault();
-                void sendChat();
-              }
-            }}
-          />
-          <button
-            className="tn-icon"
-            type="button"
-            onClick={dictation.toggle}
-            aria-label={
-              dictation.listening ? "Arrêter la dictée" : "Dicter mon message"
-            }
-            aria-pressed={dictation.listening}
-          >
-            {dictation.listening ? <Square size={20} /> : <Mic size={22} />}
-          </button>
-          {message.trim() && (
-            <button
-              className="tn-primary"
-              disabled={chatBusy || !restaurantId}
-              aria-label="Envoyer mon message"
-            >
-              {chatBusy ? (
-                <LoaderCircle size={19} className="spinning" />
-              ) : (
-                <ArrowRight size={19} />
-              )}
-            </button>
-          )}
-        </form>
+        <ConversationInput
+          value={message}
+          onChange={setMessage}
+          onSend={() => void sendChat()}
+          onVoice={dictation.toggle}
+          recording={dictation.listening}
+          voiceBusy={false}
+          placeholder="Parlez à TableNow, ou écrivez ici…"
+          sendLabel={chatBusy ? "Message en cours de traitement" : "Envoyer mon message"}
+          voiceLabel={dictation.listening ? "Arrêter la dictée" : "Dicter mon message"}
+        />
+        {chatBusy && <div className="tn-composer-note" role="status">Votre message est en cours de traitement…</div>}
         {dictation.notice && (
           <div className="tn-composer-note" role="status">
             {dictation.notice}
@@ -2034,6 +2005,13 @@ function Inbox({
                   <span className="tn-pill">{statusLabel(item.status)}</span>
                 </div>
                 <p style={{ whiteSpace: "pre-wrap" }}>{item.body}</p>
+                {item.status === "queued" && (
+                  <p role="status">
+                    Le service d’envoi n’a pas confirmé le résultat. Vérifiez
+                    l’envoi avant de préparer un autre message au même
+                    destinataire pour éviter un doublon.
+                  </p>
+                )}
                 {item.status === "draft" && (
                   <div className="tn-modal-actions">
                     <button

@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import "./stitch.css";
+import "./components.css";
 
 export const metadata: Metadata = {
   title: "TableNow Copilot",

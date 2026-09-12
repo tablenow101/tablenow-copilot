@@ -32,7 +32,9 @@ import {
   X,
 } from "lucide-react";
 import { api, ApiError } from "@/lib/api";
+import { allPrioritiesSelected, priorityActivities, priorityOutcomes, toggleAllPriorities } from "@/lib/priority-selection";
 import { BusinessSearch } from "./BusinessSearch";
+import { ConversationInput } from "./ConversationInput";
 import { onboardingCopy, labelFor, type OnboardingCopy } from "@/lib/onboarding-copy";
 import {
   applyFreeText,
@@ -102,8 +104,8 @@ const progressGroups: Array<{ key: string; sections: SectionKey[]; target: Secti
   { key: "review", sections: ["review"], target: "review" },
 ];
 
-const timeConsumers = ["team", "reservations", "customer_communication", "operations", "other"] as const;
-const outcomes = ["profitability", "occupancy", "customer_requests", "team_coordination", "service_disruptions", "customer_loyalty"] as const;
+const timeConsumers = [...priorityActivities, "other"] as const;
+const outcomes = priorityOutcomes;
 
 type StepProps = {
   answers: OnboardingAnswers;
@@ -578,7 +580,7 @@ export function OnboardingFlow({ initialRestaurantId, initialSection }: { initia
         {section === "final_note" && <FinalNote answers={answers} copy={copy} locale={locale} update={updateAnswers} />}
         {section === "review" && <Review answers={answers} copy={copy} locale={locale} role={session.membership.role} userId={session.user.id} legalVersions={draft.legalVersions} acceptTerms={acceptTerms} acceptDpa={acceptDpa} setAcceptTerms={setAcceptTerms} setAcceptDpa={setAcceptDpa} edit={moveTo} />}
 
-        {section !== "review" && <Composer compact={isWelcome} value={composer} setValue={setComposer} voiceState={voiceState} voiceReview={voiceReview} reading={reading} copy={copy} onSend={() => {
+        {section !== "review" && <Composer locale={locale} compact={isWelcome} value={composer} setValue={setComposer} voiceState={voiceState} voiceReview={voiceReview} reading={reading} copy={copy} onSend={() => {
           if (!composer.trim()) return;
           if (sectionRef.current === "establishment") setManualOpen(true);
           updateAnswers((next) => applyFreeText(next, sectionRef.current, composer, "user_text"), {
@@ -641,23 +643,27 @@ function Establishment({ answers, copy, update, identityOpen, openManual, confir
 }
 
 function Priorities({ answers, copy, locale, update, confirmInterpretation, branchNotice }: StepProps & { confirmInterpretation: () => void; branchNotice: () => void }) {
+  const [expanded, setExpanded] = useState(false);
+  const allSelected = allPrioritiesSelected(answers.priorities);
   const textCandidates = inferPriorityCandidates(answers.priorities.otherText || "");
   const primaryOptions = priorityOptions(answers);
   const changeFocus = (next: OnboardingAnswers, focus: PrimaryFocus) => {
     if (setPrimaryFocus(next, focus)) branchNotice();
   };
   return <div className="onboarding-step"><StepHead copy={copy} eyebrow="priorityEyebrow" title="priorityTitle" subtitle="priorityQuestion" promise="priorityPromise" />
-    <div className="choice-grid">{timeConsumers.map((key) => <ToggleCard key={key} selected={answers.priorities.timeConsumers.includes(key)} onClick={() => update((next) => {
+    <div className="priority-toolbar"><button type="button" className="priority-select-all" onClick={() => update((next) => { toggleAllPriorities(next.priorities); return next; })}>{locale === "fr" ? allSelected ? "Tout désélectionner" : "Tout sélectionner" : allSelected ? "Deselect all" : "Select all"}</button></div>
+    <div className="choice-grid" id="priority-choices">{timeConsumers.filter((key, index) => expanded || index < 3 || answers.priorities.timeConsumers.includes(key)).map((key) => <ToggleCard key={key} selected={answers.priorities.timeConsumers.includes(key)} onClick={() => update((next) => {
       next.priorities.scope = "targeted";
       next.priorities.timeConsumers = toggle(next.priorities.timeConsumers, key);
       const focuses = next.priorities.timeConsumers.map(timeConsumerToFocus);
       if (focuses.length === 1) changeFocus(next, focuses[0]!);
       else if (!focuses.includes(next.priorities.primaryFocus as PrimaryFocus)) next.priorities.primaryFocus = undefined;
       return next;
-    })} title={labelFor(locale, key)} />)}<ToggleCard selected={answers.priorities.scope === "global" && answers.priorities.primaryFocus === "global"} onClick={() => update((next) => { next.priorities.scope = "global"; changeFocus(next, "global"); return next; })} title={labelFor(locale, "global")} /></div>
+    })} title={labelFor(locale, key)} />)}<button type="button" className="priority-expand" aria-expanded={expanded} aria-controls="priority-choices priority-outcomes" aria-label={locale === "fr" ? expanded ? "Réduire la liste" : "Afficher les autres enjeux" : expanded ? "Show fewer priorities" : "Show more priorities"} onClick={() => setExpanded(value => !value)}>{expanded ? "−" : "+"}</button></div>
     {answers.priorities.timeConsumers.includes("other") && <label><span>{copy.common.otherSituation}</span><textarea rows={3} value={answers.priorities.otherText || ""} onChange={(event) => update((next) => { next.priorities.otherText = event.target.value; return next; })} /></label>}
     {!!textCandidates.length && <div className="confirm-box"><Sparkles size={17} /><span><strong>{copy.common.priorityInterpretation}</strong><small>{textCandidates.map((candidate) => labelFor(locale, candidate)).join(" · ")}</small></span><button type="button" onClick={() => { update((next) => { const previous = next.priorities.primaryFocus; const candidates = confirmPriorityText(next); if (candidates.length === 1 && previous && previous !== candidates[0]) branchNotice(); return next; }); confirmInterpretation(); }}>{copy.common.confirm}</button></div>}
-    <details className="onboarding-details"><summary>{copy.common.desiredOutcomes}</summary><div className="choice-grid compact">{outcomes.map((key) => <ToggleCard key={key} selected={answers.priorities.outcomes.includes(key)} onClick={() => update((next) => { next.priorities.outcomes = toggle(next.priorities.outcomes, key); return next; })} title={labelFor(locale, key)} />)}</div></details>
+    <div id="priority-outcomes" hidden={!expanded}><p>{copy.common.desiredOutcomes}</p><div className="choice-grid compact">{outcomes.map((key) => <ToggleCard key={key} selected={answers.priorities.outcomes.includes(key)} onClick={() => update((next) => { next.priorities.outcomes = toggle(next.priorities.outcomes, key); return next; })} title={labelFor(locale, key)} />)}</div></div>
+    <p className="subtle-note" role="status">{answers.priorities.timeConsumers.length + answers.priorities.outcomes.length} {locale === "fr" ? "choix sélectionnés" : "choices selected"}</p>
     {primaryOptions.length > 1 && <label><span>{copy.common.startWith}</span><select value={answers.priorities.primaryFocus || ""} onChange={(event) => update((next) => { changeFocus(next, event.target.value as PrimaryFocus); return next; })}><option value="">{copy.common.startWith}</option>{primaryOptions.map((key) => <option key={key} value={key}>{labelFor(locale, key)}</option>)}</select></label>}
   </div>;
 }
@@ -830,12 +836,9 @@ function Question({ title, options, values, update, locale, single = false, opti
   return <fieldset className="question-block"><legend>{title}</legend><div className="choice-grid compact">{options.map((option) => <ToggleCard key={option} title={labelFor(locale, option)} selected={values.includes(option)} onClick={() => update(single ? [option] : toggle(values, option))} />)}</div>{optional && <button type="button" className="unknown-button" onClick={() => update([])}>{labelFor(locale, "unknown")}</button>}</fieldset>;
 }
 
-function Composer(props: { compact?: boolean; value: string; setValue: (value: string) => void; voiceState: VoiceState; voiceReview: string; reading: boolean; copy: OnboardingCopy; onSend: () => void; onStart: () => void; onStop: () => void; onUseVoice: () => void; onCancelVoice: () => void; onListen: () => void }) {
+function Composer(props: { locale: LocaleMode; compact?: boolean; value: string; setValue: (value: string) => void; voiceState: VoiceState; voiceReview: string; reading: boolean; copy: OnboardingCopy; onSend: () => void; onStart: () => void; onStop: () => void; onUseVoice: () => void; onCancelVoice: () => void; onListen: () => void }) {
   return <section className={`onboarding-composer${props.compact ? " welcome-composer" : ""}`} aria-label={props.copy.common.composerPlaceholder}>
-    {props.compact ? <div className="welcome-composer-input"><Sparkles size={24} strokeWidth={1.5} /><textarea rows={1} maxLength={2000} aria-label={props.copy.common.composerPlaceholder} value={props.value} onChange={(event) => props.setValue(event.target.value)} placeholder={props.copy.common.composerPlaceholder} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); props.onSend(); } }} />{props.value.trim() && <button type="button" aria-label={props.copy.common.send} title={props.copy.common.send} onClick={props.onSend}><ArrowRight size={22} /></button>}<button type="button" aria-label={props.voiceState === "recording" ? props.copy.common.stop : props.copy.common.dictate} title={props.voiceState === "recording" ? props.copy.common.stop : props.copy.common.dictate} onClick={props.voiceState === "recording" ? props.onStop : props.onStart} disabled={["requesting_permission", "transcribing"].includes(props.voiceState)}>{props.voiceState === "recording" ? <Square size={22} /> : <Mic size={25} strokeWidth={1.5} />}</button></div> : <>
-    <textarea rows={2} maxLength={2000} value={props.value} onChange={(event) => props.setValue(event.target.value)} placeholder={props.copy.common.composerPlaceholder} />
-    <div><button type="button" onClick={props.onSend} disabled={!props.value.trim()}>{props.copy.common.send}</button><button type="button" onClick={props.voiceState === "recording" ? props.onStop : props.onStart} disabled={["requesting_permission", "transcribing"].includes(props.voiceState)}><Mic size={15} />{props.voiceState === "recording" ? props.copy.common.stop : props.copy.common.dictate}</button></div>
-    </>}
+    <ConversationInput value={props.value} onChange={props.setValue} onSend={props.onSend} onVoice={props.voiceState === "recording" ? props.onStop : props.onStart} recording={props.voiceState === "recording"} voiceBusy={["requesting_permission", "transcribing"].includes(props.voiceState)} placeholder={props.copy.common.composerPlaceholder} sendLabel={props.copy.common.send} voiceLabel={props.voiceState === "recording" ? props.copy.common.stop : props.copy.common.dictate} french={props.locale === "fr"} />
     {props.voiceState !== "idle" && <div className="voice-review" role="status"><span>{voiceLabel(props.voiceState, props.copy)}</span>{props.voiceReview && <p>{props.voiceReview}</p>}{props.voiceState === "reviewing" && <div><button type="button" onClick={props.onUseVoice}>{props.copy.common.useVoice}</button><button type="button" onClick={props.onCancelVoice}><X size={13} /> {props.copy.common.cancel}</button></div>}</div>}
   </section>;
 }

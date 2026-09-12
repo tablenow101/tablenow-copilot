@@ -1,5 +1,11 @@
 # État réel — 12 septembre 2026
 
+## Reprise — comptes et composants
+
+Les formulations anciennes ci-dessous sur les identifiants à clarifier sont dépassées par les validations de la mémoire canonique : inscription, e-mail vérifié, mot de passe personnel et second facteur. Le code ajoute les routes compte, la récupération, les codes de secours, les documents privés du + et la sélection globale. Voir [architecture et modularisation](../02-architecture/owner-modularization-2026-09-12.md). La revue produit, la revue sécurité et la vérification du déploiement sont en cours ; aucune certification finale n’est annoncée ici.
+
+## Historique antérieur à cette reprise
+
 Correction du propriétaire : l'image d'entrée basse définition est rejetée et doit être remplacée par une création haut de gamme à valider. Le parcours OTP systématique ne correspond pas à la connexion récurrente souhaitée. Les identifiants permanents demandés restent à préciser avant implémentation ; voir D-021 et les validations exactes.
 
 ## Livraison propriétaire en cours

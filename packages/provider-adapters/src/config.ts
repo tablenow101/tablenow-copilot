@@ -1,5 +1,4 @@
 import { z } from "zod";
-import { createHash } from "node:crypto";
 
 const optionalString = z.preprocess((value) => value === "" ? undefined : value, z.string().optional());
 const booleanString = z.preprocess(
@@ -57,11 +56,7 @@ export function loadRuntimeConfig(environment: NodeJS.ProcessEnv = process.env):
   const publicOrigin = environment.PUBLIC_ORIGIN
     || (environment.VERCEL_URL ? `https://${environment.VERCEL_URL}` : undefined);
   const databaseUrl = environment.DATABASE_URL || environment.POSTGRES_URL;
-  const previewDefaults = appEnvironment === "preview" && environment.VERCEL === "1" && databaseUrl
-    ? vercelPreviewDefaults(databaseUrl, environment.VERCEL_URL || "vercel-preview")
-    : {};
   const config = runtimeConfigSchema.parse({
-    ...previewDefaults,
     ...environment,
     APP_ENV: appEnvironment,
     ...(publicOrigin ? { PUBLIC_ORIGIN: publicOrigin } : {}),
@@ -77,8 +72,8 @@ export function loadRuntimeConfig(environment: NodeJS.ProcessEnv = process.env):
   if (config.APP_ENV === "production" && ["app.tablenow.io", "tablenow.io", "www.tablenow.io"].includes(publicHost)) {
     throw new Error("V2 cannot use a V1 or website production origin");
   }
-  if (config.APP_ENV === "production" && config.AUTH_FIXED_OTP) {
-    throw new Error("AUTH_FIXED_OTP is forbidden in production");
+  if ((config.APP_ENV === "production" || config.APP_ENV === "preview" || environment.VERCEL === "1") && config.AUTH_FIXED_OTP) {
+    throw new Error("AUTH_FIXED_OTP is forbidden in deployed environments");
   }
   if (config.APP_ENV === "production" && config.EMAIL_TRANSPORT !== "smtp") {
     throw new Error("Production requires a real SMTP transport");
@@ -90,17 +85,4 @@ export function loadRuntimeConfig(environment: NodeJS.ProcessEnv = process.env):
     throw new Error("SMTP_HOST is required when EMAIL_TRANSPORT=smtp");
   }
   return config;
-}
-
-function vercelPreviewDefaults(databaseUrl: string, deploymentUrl: string): Partial<RuntimeConfig> {
-  const derive = (purpose: string) => createHash("sha256")
-    .update(`tablenow-preview:${purpose}:${deploymentUrl}:${databaseUrl}`)
-    .digest("hex");
-  return {
-    SESSION_SECRET: derive("session"),
-    OTP_PEPPER: derive("otp"),
-    AUTH_FIXED_OTP: "424242",
-    PLATFORM_ADMIN_EMAIL: "preview@tablenow.local",
-    EMAIL_TRANSPORT: "log",
-  };
 }

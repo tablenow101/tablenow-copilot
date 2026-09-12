@@ -23,6 +23,8 @@ export class AuthService {
 
   public async requestCode(email: string, tenantSlug?: string): Promise<void> {
     const config = getConfig();
+    const [protectedAccount] = await this.database`select c.user_id from account_credentials c join users u on u.id=c.user_id where u.email=${email}`;
+    if (protectedAccount) return;
     const target = await this.findAccessTarget(email, tenantSlug);
     if (!target) return;
 
@@ -60,6 +62,9 @@ export class AuthService {
     const ipHash = hashSecret(context.ip, config.SESSION_SECRET);
 
     const verified = await this.database.begin(async (transaction) => {
+      await transaction`select pg_advisory_xact_lock(hashtext(${email}))`;
+      const [protectedAccount] = await transaction`select c.user_id from account_credentials c join users u on u.id=c.user_id where u.email=${email}`;
+      if (protectedAccount) return null;
       const [challenge] = await transaction<{
         id: string;
         tenant_id: string | null;

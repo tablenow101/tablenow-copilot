@@ -1,5 +1,7 @@
 # Référence et validations — 12 septembre 2026
 
+Correction courante (mémoire canonique, version 2 de `01-Decisions/composants-et-architecture-2026-09-12`) : « Tout sélectionner / Tout désélectionner », avec + pour développer les enjeux ; inscription explicite « Créer votre compte » depuis « Connexion ». La barre comporte + à gauche, micro et flèche à droite. Ces corrections priment sur les formulations antérieures contradictoires.
+
 Les consignes ci-dessous remplacent l'interprétation de D-015 : alléger visuellement ne donne pas l'autorisation de réduire les fonctions, masquer les informations ou inventer des formulations. Préserver le travail fonctionnel existant. Utiliser le dernier export Stitch exclusivement, avec l'inspiration IMG_4558 pour la présentation de l'entrée et de l'authentification.
 
 ## Textes explicitement validés

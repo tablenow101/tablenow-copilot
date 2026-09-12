@@ -47,6 +47,25 @@ afterAll(async () => {
   await database?.end();
 });
 describe("owner workflows on embedded PostgreSQL", () => {
+  it("stores private onboarding documents and enforces permissions and file boundaries", async () => {
+    const payload = { name: "informations.txt", mimeType: "text/plain", base64: Buffer.from("Informations du restaurant").toString("base64") };
+    expect((await app.inject({ method: "POST", url: "/v1/onboarding-attachments", payload })).statusCode).toBe(401);
+    const uploaded = await app.inject({ method: "POST", url: "/v1/onboarding-attachments", headers, payload });
+    expect(uploaded.statusCode, uploaded.body).toBe(201);
+    const id = uploaded.json().id;
+    const [stored] = await database<{ encrypted_content: string }[]>`select encrypted_content from onboarding_attachments where id=${id}`;
+    expect(stored!.encrypted_content).not.toContain(payload.base64);
+    const downloaded = await app.inject({ method: "GET", url: `/v1/onboarding-attachments/${id}`, headers });
+    expect(downloaded.body).toBe("Informations du restaurant");
+    expect(downloaded.headers["content-disposition"]).toContain("attachment");
+    expect((await app.inject({ method: "POST", url: "/v1/onboarding-attachments", headers, payload: { ...payload, mimeType: "image/png" } })).statusCode).toBe(400);
+    expect((await app.inject({ method: "POST", url: "/v1/onboarding-attachments", headers, payload: { ...payload, name: "../private.txt" } })).statusCode).toBe(422);
+    await database`update memberships set role='viewer' where user_id=${fixture.userId} and tenant_id=${fixture.tenantId}`;
+    try { expect((await app.inject({ method: "GET", url: `/v1/onboarding-attachments/${id}`, headers })).statusCode).toBe(403); }
+    finally { await database`update memberships set role='owner' where user_id=${fixture.userId} and tenant_id=${fixture.tenantId}`; }
+    expect((await app.inject({ method: "DELETE", url: `/v1/onboarding-attachments/${id}`, headers })).statusCode).toBe(204);
+    expect((await app.inject({ method: "GET", url: `/v1/onboarding-attachments/${id}`, headers })).statusCode).toBe(404);
+  });
   it("protects every new mutation and read with an authenticated session", async () => {
     for (const url of ["/v1/operating", "/v1/workspace"])
       expect((await app.inject({ method: "GET", url })).statusCode).toBe(401);

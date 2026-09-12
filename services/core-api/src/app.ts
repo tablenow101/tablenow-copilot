@@ -57,6 +57,8 @@ import { ComputerUseRepository } from "./computer-use-repository.js";
 import { publicCopilotReply } from "./copilot-scope.js";
 import { OnboardingIncompleteError } from "./onboarding.js";
 import { registerOwnerOperations } from "./owner-operations.js";
+import { registerAccountRoutes } from "./account-routes.js";
+import { registerOnboardingAttachments } from "./onboarding-attachments.js";
 import "./types.js";
 
 export interface AppDependencies {
@@ -106,6 +108,9 @@ export async function buildApp(dependencies: AppDependencies = {}): Promise<Fast
       return reply.code(403).send({ error: { code: "ORIGIN_FORBIDDEN", message: "Origine non autorisée." } });
     }
   });
+
+  await registerAccountRoutes(app, database, email);
+  await registerOnboardingAttachments(app, database);
 
   app.get("/health", async () => {
     const [health] = await database<{ ok: number }[]>`select 1 as ok`;

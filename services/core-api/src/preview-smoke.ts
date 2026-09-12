@@ -27,10 +27,13 @@ function sessionCookies(header: string | string[] | undefined): { cookie: string
 export async function runPreviewSmoke(environment: NodeJS.ProcessEnv = process.env): Promise<boolean> {
   if (!shouldRunPreviewSmoke(environment)) return false;
   const config = getConfig();
-  if (!config.AUTH_FIXED_OTP) throw new Error("Preview smoke requires an ephemeral AUTH_FIXED_OTP");
-
   const database = createDatabase(config.DATABASE_URL, 1);
-  const silentEmail: EmailSender = { send: async () => undefined };
+  // This in-process infrastructure check captures its injected sender only.
+  // It does not certify delivery through the real mail provider.
+  let issuedCode: string | undefined;
+  const silentEmail: EmailSender = { send: async message => {
+    issuedCode = message.text.match(/\b\d{6}\b/)?.[0];
+  } };
   const app = await buildApp({ database, email: silentEmail });
   try {
     const health = await app.inject({ method: "GET", url: "/health" });
@@ -42,11 +45,12 @@ export async function runPreviewSmoke(environment: NodeJS.ProcessEnv = process.e
       payload: { email: config.PLATFORM_ADMIN_EMAIL },
     });
     requireStatus("request code", requestCode.statusCode, 202);
+    if (!issuedCode) throw new Error("Preview smoke did not receive its generated access code");
 
     const verifyCode = await app.inject({
       method: "POST",
       url: "/v1/auth/verify-code",
-      payload: { email: config.PLATFORM_ADMIN_EMAIL, code: config.AUTH_FIXED_OTP },
+      payload: { email: config.PLATFORM_ADMIN_EMAIL, code: issuedCode },
     });
     requireStatus("verify code", verifyCode.statusCode, 200);
     const cookies = sessionCookies(verifyCode.headers["set-cookie"]);

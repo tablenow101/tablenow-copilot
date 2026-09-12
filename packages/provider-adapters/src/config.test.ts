@@ -40,27 +40,16 @@ describe("runtime safety configuration", () => {
       EMAIL_TRANSPORT: "log",
       SMTP_HOST: undefined,
       STORAGE_ENCRYPTION_KEY: undefined,
-      AUTH_FIXED_OTP: "424242",
     });
     expect(config.APP_ENV).toBe("preview");
     expect(config.PUBLIC_ORIGIN).toBe("https://tablenow-copilot-preview.vercel.app");
   });
 
-  it("creates isolated defaults only for a protected Vercel preview", () => {
-    const config = loadRuntimeConfig({
-      NODE_ENV: "production",
-      VERCEL: "1",
-      VERCEL_ENV: "preview",
-      VERCEL_URL: "tablenow-copilot-preview.vercel.app",
-      TABLENOW_STACK_ID: "tablenow-v2",
-      DATABASE_SCOPE: "tablenow-v2",
-      DATABASE_URL: valid.DATABASE_URL,
-    });
-    expect(config.SESSION_SECRET).toHaveLength(64);
-    expect(config.OTP_PEPPER).toHaveLength(64);
-    expect(config.AUTH_FIXED_OTP).toBe("424242");
-    expect(config.PLATFORM_ADMIN_EMAIL).toBe("preview@tablenow.local");
-    expect(config.EMAIL_TRANSPORT).toBe("log");
+  it("requires explicit secrets in previews and forbids fixed access codes", () => {
+    const preview = { ...valid, VERCEL: "1", VERCEL_ENV: "preview" };
+    expect(() => loadRuntimeConfig({ ...preview, SESSION_SECRET: undefined })).toThrow();
+    expect(() => loadRuntimeConfig({ ...preview, OTP_PEPPER: undefined })).toThrow();
+    expect(() => loadRuntimeConfig({ ...preview, AUTH_FIXED_OTP: "424242" })).toThrow("AUTH_FIXED_OTP is forbidden");
   });
 
   it("does not create preview defaults for production", () => {
