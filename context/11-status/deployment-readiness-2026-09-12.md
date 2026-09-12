@@ -46,3 +46,13 @@ Décision d'implémentation : conserver un seul responsable de la vérification 
 - Les secrets de Preview sont désormais explicitement requis. Les codes OTP fixes sont interdits sur tout déploiement. Le smoke test capture un code aléatoire dans un expéditeur de test et ne prouve pas la réception d'un e-mail.
 - Conserver SESSION_SECRET stable : il chiffre aussi les secrets TOTP et pièces jointes ; toute rotation nécessite une migration de chiffrement.
 - Limites produit vérifiées : conversation de conseil sans exécution d'outils, documents persistés sans analyse automatique, service du jour sans calendrier futur, canaux externes de la prochaine phase non raccordés.
+
+## Résultat de publication
+
+Commit `38f73117ec94e76d865f0821688a0987f4b0e66b` publié et relu via Git dans PR 17. Déploiement `dpl_BNFrayzdJHDtMGedBmJsWMFjC4re` : échec au seed après migration. Journaux Vercel : `SESSION_SECRET`, `OTP_PEPPER`, `PLATFORM_ADMIN_EMAIL` absents. Les migrations 008 et 009 sont appliquées, lecture SQL de la Preview confirmée. Aucun secret de remplacement public ou dérivé n'a été ajouté.
+
+Le contrôle automatique a rejeté un appel générique de déploiement sans cible car il pouvait toucher une autre ressource ou la production. L'appel suivant a été limité explicitement au projet Copilot, équipe connue, environnement Preview et commit publié ; le fournisseur l'a rejeté pour schéma incomplet (`name`, `files`). Aucun déploiement supplémentaire n'a été créé par ces appels. Le déploiement observé provient uniquement de GitHub.
+
+Le job GitHub « Qualité · TypeScript, tests et build » est réussi, audit des dépendances inclus. Les jobs PostgreSQL et Docker doivent être consultés dans le run 34689657887 avant de les annoncer réussis. L'accès aux paramètres Vercel et aux méthodes Resend est nécessaire pour poursuivre les vérifications réelles ; aucun code utilisateur ou OTP n'a été contourné.
+
+Le job « Données · Isolation PostgreSQL » est maintenant réussi : migrations et tests d'isolation exécutés sur PostgreSQL par GitHub Actions. Le registre canonique contient le résultat de livraison (enregistrement 69), relu après écriture.

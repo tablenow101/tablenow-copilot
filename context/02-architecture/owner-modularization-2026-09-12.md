@@ -12,9 +12,9 @@ Le système reste un monolithe modulaire : console et API déployées ensemble, 
 |---|---|---|
 | `apps/console/components/account/` | Inscription, connexion, vérifications et récupération | Parcours branché sur API ; recette à prouver |
 | `apps/console/app/components.css` | Contrôles partagés : dimensions, finesse, couleur du logo | Styles centralisés ; conformité visuelle à vérifier |
-| `apps/console/components/ConversationInput.tsx` | Texte, micro, documents et envoi | Utilisé dans l’onboarding ; généralisation au cockpit ultérieure |
+| `apps/console/components/ConversationInput.tsx` | Texte, micro, documents et envoi | Partagé entre onboarding et cockpit ; pièces jointes persistées |
 | `apps/console/lib/priority-selection.ts` | Sélection globale indépendante des choix masqués | Implémenté avec tests |
-| `services/core-api/src/account-routes.ts` | Preuves d’identité, création du propriétaire, sessions | Implémenté ; revue sécurité en cours |
+| `services/core-api/src/account-routes.ts` | Preuves d’identité, création du propriétaire, sessions | Implémenté ; revue et tests sécurité effectués, recette distante restante |
 | `services/core-api/src/onboarding-attachments.ts` | Documents privés, récupération et suppression autorisées | Implémenté, stockage persistant chiffré |
 | `packages/contracts` | Schémas API et événements métier | Existant |
 | `packages/domain` | Permissions, invariants et autorisations d’action | Existant |

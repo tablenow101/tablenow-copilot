@@ -1,3 +1,13 @@
+# Point de livraison — 12 septembre 2026, après publication
+
+Code publié dans PR 17, commit `38f73117ec94e76d865f0821688a0987f4b0e66b`. Revues produit, composants et sécurité terminées ; typage, tests locaux et build Next.js réussis.
+
+Le déploiement `dpl_BNFrayzdJHDtMGedBmJsWMFjC4re` a appliqué les migrations 008 et 009 à la Preview Neon dédiée (lecture SQL confirmée), puis a échoué : `SESSION_SECRET`, `OTP_PEPPER` et `PLATFORM_ADMIN_EMAIL` absents dans Vercel. Ne pas rétablir les anciennes valeurs dérivées automatiquement. Aucun nouveau lien fonctionnel ni certification de production à annoncer.
+
+Resend connecté à ChatGPT, mais aucune méthode Resend exposée dans cette session ; transport serveur, domaine et remise réelle non vérifiés. L'accès navigateur à la Preview reste protégé par la connexion Vercel. Détails et preuves dans `deployment-readiness-2026-09-12.md`.
+
+---
+
 # État réel — 12 septembre 2026
 
 ## Reprise — comptes et composants
