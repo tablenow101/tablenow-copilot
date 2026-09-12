@@ -10,6 +10,11 @@ type Suggestion = {
   address: string;
   cityCountry: string;
   sourceUrl: string;
+  sourceLabel?: string;
+  phone?: string;
+  website?: string;
+  category?: string;
+  openingHours?: string[];
 };
 export function BusinessSearch({
   value,
@@ -22,12 +27,14 @@ export function BusinessSearch({
   choose: (result: Suggestion) => void;
   english?: boolean;
 }) {
+  const session = useRef<string>("");
+  const [details, setDetails] = useState<Suggestion | null>(null);
   const [results, setResults] = useState<Suggestion[]>([]);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState("");
   const controller = useRef<AbortController | null>(null);
   useEffect(() => () => controller.current?.abort(), []);
-  async function search() {
+  async function search(publicDirectory = false) {
     if (value.trim().length < 3) {
       setNotice(
         english
@@ -36,6 +43,8 @@ export function BusinessSearch({
       );
       return;
     }
+    session.current ||= crypto.randomUUID();
+    setDetails(null);
     controller.current?.abort();
     const active = new AbortController();
     controller.current = active;
@@ -44,11 +53,11 @@ export function BusinessSearch({
     setResults([]);
     try {
       const response = await api<{ results: Suggestion[] }>(
-        `/v1/onboarding/search?q=${encodeURIComponent(value.trim())}`,
+        publicDirectory ? `/v1/onboarding/search?q=${encodeURIComponent(value.trim())}` : `/v1/onboarding/places/search?${new URLSearchParams({ value: value.trim(), session: session.current, locale: english ? "en" : "fr" })}`,
         { signal: active.signal },
       );
       if (active.signal.aborted) return;
-      setResults(response.results);
+      setResults(response.results.map(result => ({ ...result, sourceLabel: publicDirectory ? "Annuaire des entreprises" : "Google Maps" })));
       if (!response.results.length)
         setNotice(
           english
@@ -82,6 +91,7 @@ export function BusinessSearch({
               setBusy(false);
               setResults([]);
               setNotice("");
+              setDetails(null);
               onChange(event.target.value);
             }}
             placeholder={
@@ -101,8 +111,8 @@ export function BusinessSearch({
             disabled={busy}
             aria-label={
               english
-                ? "Search public directory"
-                : "Rechercher dans l’annuaire public"
+                ? "Search Google Places"
+                : "Rechercher avec Google Places"
             }
             onClick={() => void search()}
           >
@@ -116,9 +126,15 @@ export function BusinessSearch({
       </label>
       <p className="subtle-note">
         {english
-          ? "French public directory · Search is sent only when you confirm. Outside France, use manual entry."
-          : "Annuaire public français · Recherche transmise uniquement à votre demande. Hors de France, utilisez la saisie manuelle."}
+          ? "Google Maps · Search is sent only when you confirm."
+          : "Google Maps · Recherche transmise uniquement à votre demande."}
       </p>
+      <button type="button" className="text-action" disabled={busy} onClick={() => void search(true)}>{english ? "Search the French public directory" : "Rechercher dans l’annuaire public français"}</button>
+      {details && <div className="subtle-note">
+        {details.website && <p>{details.website}</p>}
+        {details.category && <p>{details.category}</p>}
+        {details.openingHours?.map(line => <p key={line}>{line}</p>)}
+      </div>}
       {notice && (
         <p role="status" className="inline-error">
           {notice}
@@ -141,14 +157,24 @@ export function BusinessSearch({
                   target="_blank"
                   rel="noopener noreferrer"
                 >
-                  {english ? "Public source" : "Voir la source publique"}
+                  {result.sourceLabel || "Google Maps"}
                 </a>
               </div>
               <button
                 type="button"
-                onClick={() => {
-                  choose(result);
-                  setResults([]);
+                disabled={busy}
+                onClick={async () => {
+                  if (result.sourceLabel === "Annuaire des entreprises") { setDetails(null); choose(result); setResults([]); return; }
+                  controller.current?.abort();
+                  const active = new AbortController(); controller.current = active;
+                  setBusy(true); setNotice("");
+                  try {
+                    const selected = await api<Suggestion>(`/v1/onboarding/places/details?${new URLSearchParams({ value: result.id, session: session.current, locale: english ? "en" : "fr" })}`, { signal: active.signal });
+                    if (active.signal.aborted) return;
+                    session.current = "";
+                    setDetails(selected); choose(selected); setResults([]);
+                  } catch { if (!active.signal.aborted) setNotice(english ? "Details unavailable. Please try again or enter manually." : "Détails indisponibles. Réessayez ou utilisez la saisie manuelle."); }
+                  finally { if (!active.signal.aborted) setBusy(false); }
                 }}
               >
                 {english ? "Select" : "Choisir"}

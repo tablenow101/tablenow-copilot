@@ -49,7 +49,7 @@ const policies: Record<string, ToolPolicy> = {
 };
 
 export function policyForTool(tool: string): ToolPolicy {
-  const policy = policies[tool];
+  const policy = Object.hasOwn(policies, tool) ? policies[tool] : undefined;
   if (!policy) {
     return {
       tool,
@@ -64,9 +64,10 @@ export function policyForTool(tool: string): ToolPolicy {
 
 export function inferTool(message: string): string {
   const normalized = message.toLocaleLowerCase("fr");
+  // A lower-risk keyword must never downgrade a bulk messaging request.
+  if (/tous les clients|message groupé|campagne/.test(normalized)) return "guest.bulk_message";
   if (/stock|saumon|rupture|inventaire/.test(normalized)) return "inventory.create_alert";
   if (/ouvre|créneau|creneau|capacité|capacite/.test(normalized)) return "service.open_slot";
   if (/rappelle|relance|no.?show|confirme/.test(normalized)) return "reservation.follow_up";
-  if (/tous les clients|message groupé|campagne/.test(normalized)) return "guest.bulk_message";
   return "workspace.explain";
 }

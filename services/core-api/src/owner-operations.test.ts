@@ -79,6 +79,28 @@ describe("owner workflows on embedded PostgreSQL", () => {
       ).statusCode,
     ).toBe(401);
   });
+  it("never lists, downloads or deletes another tenant's onboarding document", async () => {
+    const [tenant] = await database<{ id: string }[]>`insert into tenants(name,slug) values ('Autre restaurant','document-isolation') returning id`;
+    const [file] = await database<{ id: string }[]>`insert into onboarding_attachments(tenant_id,user_id,name,mime_type,byte_size,encrypted_content) values (${tenant!.id},${fixture.userId},'confidentiel.txt','text/plain',1,'opaque-test-value') returning id`;
+    try {
+      const list = await app.inject({ method: "GET", url: "/v1/onboarding-attachments", headers });
+      expect(list.statusCode).toBe(200);
+      expect(list.json().files.some((item: { id: string }) => item.id === file!.id)).toBe(false);
+      expect((await app.inject({ method: "GET", url: `/v1/onboarding-attachments/${file!.id}`, headers })).statusCode).toBe(404);
+      expect((await app.inject({ method: "DELETE", url: `/v1/onboarding-attachments/${file!.id}`, headers })).statusCode).toBe(204);
+      expect(await database`select id from onboarding_attachments where id=${file!.id}`).toHaveLength(1);
+    } finally {
+      await database`delete from tenants where id=${tenant!.id}`;
+    }
+  });
+  it("rejects document uploads without CSRF and malformed or oversized content", async () => {
+    const payload = { name: "note.txt", mimeType: "text/plain", base64: Buffer.from("Note").toString("base64") };
+    expect((await app.inject({ method: "POST", url: "/v1/onboarding-attachments", headers: { cookie: headers.cookie! }, payload })).statusCode).toBe(403);
+    for (const base64 of ["AA==", "Zh==", Buffer.alloc(2000001, 65).toString("base64")]) {
+      expect((await app.inject({ method: "POST", url: "/v1/onboarding-attachments", headers, payload: { ...payload, base64 } })).statusCode).toBe(400);
+    }
+    expect((await app.inject({ method: "GET", url: "/v1/onboarding-attachments/not-a-uuid", headers })).statusCode).toBe(422);
+  });
   it("loads actual workspace and operating tables", async () => {
     const response = await app.inject({
       method: "GET",

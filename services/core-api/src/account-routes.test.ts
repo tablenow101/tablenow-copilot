@@ -101,4 +101,34 @@ describe("registration and recurring authentication", () => {
     expect((await post("account/reset", { email: "budget@tablenow.test", password })).statusCode).toBe(429);
     expect(inbox.length - before).toBe(5);
   });
+  it("keeps verified email challenges in the recipient budget", async () => {
+    const recipient = "verified-budget@tablenow.test";
+    const before = inbox.length;
+    for (let index = 0; index < 5; index++) {
+      const signup = await post("account/signup", { email: recipient, name: "Owner", password });
+      expect(signup.statusCode).toBe(202);
+      const code = emailCode();
+      expect((await post("account/verify-email", { code }, authCookie(signup))).json()).toMatchObject({ stage: "enroll" });
+      expect((await post("account/verify-email", { code }, authCookie(signup))).statusCode).toBe(400);
+    }
+    expect((await post("account/signup", { email: recipient, name: "Owner", password })).statusCode).toBe(429);
+    expect(inbox.length - before).toBe(5);
+  });
+  it("keeps verified recovery challenges in the budget without counting password logins", async () => {
+    await database`update account_challenges set created_at=now()-interval '16 minutes' where email=${email}`;
+    const before = inbox.length;
+    const currentPassword = "Une nouvelle phrase privée 456";
+    for (let index = 0; index < 5; index++) {
+      expect((await post("account/login", { email, password: currentPassword })).statusCode).toBe(200);
+    }
+    for (let index = 0; index < 5; index++) {
+      const reset = await post("account/reset", { email, password: currentPassword });
+      expect(reset.statusCode).toBe(202);
+      expect((await post("account/verify-email", { code: emailCode() }, authCookie(reset))).json()).toEqual({ stage: "mfa" });
+    }
+    expect((await post("account/reset", { email, password: currentPassword })).statusCode).toBe(429);
+    expect(inbox.length - before).toBe(5);
+    await database`update account_challenges set created_at=now()-interval '16 minutes' where email=${email}`;
+    expect((await post("account/reset", { email, password: currentPassword })).statusCode).toBe(202);
+  });
 });

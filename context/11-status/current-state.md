@@ -1,3 +1,9 @@
+# Reprise locale — boucle de corrections du 12 septembre 2026
+
+Voir [le reporting de corrections](correction-loop-2026-09-12.md). Des régressions ont été reproduites puis corrigées sur l'authentification, les contrôles métier et l'onboarding. Une passe indépendante sans cache a exécuté 162 tests réussis et quatre ignorés ; elle ne constitue ni 100 parcours réels ni une attestation de livraison. Le navigateur local est bloqué par deux timeouts du téléchargement officiel de Chromium. Aucun déploiement, push ou envoi réel n'a été réalisé pendant cette reprise. Le rapport détaille le périmètre exact de la dernière relance.
+
+Le BCC existe dans les dépôts historiques frontend/backend, avec génération d'adresse et route CloudMailin ; il n'est plus considéré absent globalement. Il n'a pas été modifié ni testé en production.
+
 # Point de livraison — 12 septembre 2026, après publication
 
 Code publié dans PR 17, commit `38f73117ec94e76d865f0821688a0987f4b0e66b`. Revues produit, composants et sécurité terminées ; typage, tests locaux et build Next.js réussis.
@@ -67,3 +73,6 @@ Le dépôt est actuellement public ; la mention « privé » ci-dessous décrit 
 - migrations Neon encore à prouver sur cette Preview ;
 - SMTP réel, stockage privé, tâches durables et Computer Use cloud encore à raccorder ;
 - parcours complet ordinateur et mobile encore à certifier sur la version cloud.
+
+## Google Places — import ciblé
+Adaptation locale autorisée effectuée ; recherche Google et détails côté serveur Copilot, annuaire de secours conservé. TypeScript et 58 tests concernés passent. Clé Google absente du processus local ; navigateur Chromium manquant. Pas de test réel ni déploiement attesté. Détails : [google-places-import.md](google-places-import.md).

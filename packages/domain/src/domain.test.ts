@@ -23,6 +23,19 @@ describe("agent policy", () => {
   it("fails closed for an unknown tool", () => {
     expect(policyForTool("unknown.write")).toMatchObject({ risk: "critical", localExecutionAllowed: false });
   });
+
+  it.each(["constructor", "toString", "__proto__", "hasOwnProperty"])("fails closed for inherited property %s", (tool) => {
+    expect(policyForTool(tool)).toMatchObject({ tool, risk: "critical", approvalRequired: true, localExecutionAllowed: false });
+  });
+
+  it.each([
+    "Relance tous les clients pour demain",
+    "Confirme le message groupé",
+    "Prépare une campagne pour écouler le stock",
+    "Ouvre un créneau pour tous les clients",
+  ])("keeps bulk messaging critical despite other matching words: %s", (message) => {
+    expect(policyForTool(inferTool(message))).toMatchObject({ tool: "guest.bulk_message", risk: "critical", approvalRequired: true, localExecutionAllowed: false });
+  });
 });
 
 describe("tenancy", () => {

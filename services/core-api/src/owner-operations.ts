@@ -10,6 +10,7 @@ import {
 import { authGuard } from "./auth.js";
 import { getConfig } from "./environment.js";
 import type { AuthActor } from "./types.js";
+import { googlePlaces } from "./google-places.js";
 import { searchBusinesses } from "./business-search.js";
 
 const idParams = z.object({ id: z.uuid() });
@@ -90,6 +91,17 @@ export async function registerOwnerOperations(
   model?: ModelProvider,
 ) {
   const config = getConfig();
+  for (const kind of ["search", "details"] as const) {
+    app.get(`/v1/onboarding/places/${kind}`, {
+      preHandler: authGuard(database, "tenant.manage"),
+      config: { rateLimit: { max: 30, timeWindow: "1 minute" } },
+    }, async (request, reply) => {
+      const input = z.object({ value: z.string().trim().min(2).max(240), session: z.uuid(), locale: z.enum(["fr", "en"]).default("fr") }).strict().parse(request.query);
+      reply.header("Cache-Control", "no-store");
+      try { return await googlePlaces(kind, input.value, input.session, input.locale); }
+      catch { return reply.code(503).send({ error: { code: "GOOGLE_PLACES_UNAVAILABLE", message: input.locale === "en" ? "Google search is unavailable. You can enter your restaurant manually." : "La recherche Google est indisponible. Vous pouvez renseigner votre établissement manuellement." } }); }
+    });
+  }
   app.get(
     "/v1/onboarding/search",
     {

@@ -128,7 +128,6 @@ export function OnboardingFlow({ initialRestaurantId, initialSection }: { initia
   const [composer, setComposer] = useState("");
   const [voiceState, setVoiceState] = useState<VoiceState>("idle");
   const [voiceReview, setVoiceReview] = useState("");
-  const [reading, setReading] = useState(false);
   const [searchUnavailable, setSearchUnavailable] = useState(false);
   const [manualOpen, setManualOpen] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -274,12 +273,11 @@ export function OnboardingFlow({ initialRestaurantId, initialSection }: { initia
 
   useEffect(() => {
     headingRef.current?.focus({ preventScroll: true });
-    cancelAudio(recognitionRef, setReading, setVoiceState, true);
+    cancelAudio(recognitionRef, setVoiceState, true);
   }, [section]);
 
   useEffect(() => () => {
     abortRecognition(recognitionRef);
-    if ("speechSynthesis" in window) window.speechSynthesis.cancel();
   }, []);
 
   const updateAnswers = useCallback((mutate: (current: OnboardingAnswers) => OnboardingAnswers, meta: UpdateMeta = {}) => {
@@ -397,7 +395,7 @@ export function OnboardingFlow({ initialRestaurantId, initialSection }: { initia
     if (restaurantId === draftRef.current?.restaurantId) return;
     const saved = await saveNow(sectionRef.current);
     if (!saved) return;
-    cancelAudio(recognitionRef, setReading, setVoiceState, true);
+    cancelAudio(recognitionRef, setVoiceState, true);
     await loadDraft(restaurantId);
   };
 
@@ -445,7 +443,7 @@ export function OnboardingFlow({ initialRestaurantId, initialSection }: { initia
   };
 
   const startVoice = () => {
-    stopReading(setReading);
+    if (recognitionRef.current) return;
     const speechWindow = window as Window & { SpeechRecognition?: SpeechRecognitionConstructor; webkitSpeechRecognition?: SpeechRecognitionConstructor };
     const Recognition = speechWindow.SpeechRecognition || speechWindow.webkitSpeechRecognition;
     if (!Recognition) {
@@ -459,28 +457,33 @@ export function OnboardingFlow({ initialRestaurantId, initialSection }: { initia
     recognition.lang = locale === "en" ? "en-US" : "fr-FR";
     recognition.continuous = false;
     recognition.interimResults = false;
-    recognition.onstart = () => setVoiceState("recording");
+    recognition.onstart = () => {
+      if (recognitionRef.current !== recognition) return;
+      setVoiceState("recording");
+    };
     recognition.onresult = (event) => {
+      if (recognitionRef.current !== recognition) return;
       settled = true;
-      recognitionRef.current = null;
       const transcript = Array.from(event.results).map((result) => result[0].transcript).join(" ").trim();
       setVoiceReview(transcript);
       setVoiceState(transcript ? "reviewing" : "failed");
     };
     recognition.onerror = (event) => {
+      if (recognitionRef.current !== recognition) return;
       settled = true;
-      recognitionRef.current = null;
+      abortRecognition(recognitionRef);
       setVoiceState(event.error === "not-allowed" || event.error === "service-not-allowed" ? "permission_denied" : "failed");
     };
     recognition.onend = () => {
-      if (recognitionRef.current === recognition) recognitionRef.current = null;
+      if (recognitionRef.current !== recognition) return;
+      recognitionRef.current = null;
       if (!settled) setVoiceState("failed");
     };
     recognitionRef.current = recognition;
     try {
       recognition.start();
     } catch {
-      recognitionRef.current = null;
+      abortRecognition(recognitionRef);
       setVoiceState("failed");
     }
   };
@@ -488,47 +491,36 @@ export function OnboardingFlow({ initialRestaurantId, initialSection }: { initia
   const stopVoice = () => {
     if (!recognitionRef.current) return;
     setVoiceState("transcribing");
-    recognitionRef.current.stop();
+    try {
+      recognitionRef.current.stop();
+    } catch {
+      abortRecognition(recognitionRef);
+      setVoiceState("failed");
+    }
   };
 
   const useVoice = () => {
     if (!voiceReview.trim()) return;
+    const text = sectionRef.current === "review" ? [answersRef.current.finalNote.text, voiceReview].filter(Boolean).join("\n\n") : voiceReview;
+    if (text.length > 2000) {
+      setError(locale === "fr" ? "La note complète dépasse 2 000 caractères. Raccourcissez-la avant de l’ajouter." : "The complete note exceeds 2,000 characters. Shorten it before adding it.");
+      return;
+    }
     if (sectionRef.current === "establishment") setManualOpen(true);
-    updateAnswers((next) => applyFreeText(next, sectionRef.current, voiceReview, "user_voice"), {
+    updateAnswers((next) => applyFreeText(next, sectionRef.current === "review" ? "final_note" : sectionRef.current, text, "user_voice"), {
       sourceType: "user_voice",
       sourceReference: voiceReview,
       confirmationStatus: "suggested",
     });
     setVoiceReview("");
     setVoiceState("confirmed");
+    if (sectionRef.current === "review") moveTo("final_note");
   };
 
   const cancelVoice = () => {
     abortRecognition(recognitionRef);
     setVoiceReview("");
     setVoiceState("cancelled");
-  };
-
-  const toggleReading = () => {
-    if (reading) {
-      stopReading(setReading);
-      return;
-    }
-    if (!("speechSynthesis" in window)) {
-      setVoiceState("unavailable");
-      return;
-    }
-    if (recognitionRef.current) {
-      abortRecognition(recognitionRef);
-      setVoiceState("cancelled");
-    }
-    const utterance = new SpeechSynthesisUtterance(questionFor(sectionRef.current, answersRef.current, locale));
-    utterance.lang = locale === "en" ? "en-US" : "fr-FR";
-    utterance.onend = () => setReading(false);
-    utterance.onerror = () => setReading(false);
-    window.speechSynthesis.cancel();
-    window.speechSynthesis.speak(utterance);
-    setReading(true);
   };
 
   if (sessionLoading) return <LoadingScreen label={copy.common.loading} />;
@@ -573,23 +565,29 @@ export function OnboardingFlow({ initialRestaurantId, initialSection }: { initia
         {draft.restaurants.length > 1 && <p className="inline-note restaurant-draft-note"><Building2 size={14} />{copy.common.restaurantChangeWarning}</p>}
         {section === "establishment" && <Establishment answers={answers} copy={copy} locale={locale} update={updateAnswers} identityOpen={identityOpen} openManual={() => setManualOpen(true)} confirmInterpretation={confirmCurrentInterpretation} searchUnavailable={searchUnavailable} search={() => setSearchUnavailable(true)} />}
         {section === "priorities" && <Priorities answers={answers} copy={copy} locale={locale} update={updateAnswers} confirmInterpretation={confirmCurrentInterpretation} branchNotice={() => setNotice(copy.common.branchReset)} />}
-        {section === "interaction" && <Interaction answers={answers} copy={copy} locale={locale} update={updateAnswers} confirmInterpretation={confirmCurrentInterpretation} reading={reading} listen={toggleReading} />}
+        {section === "interaction" && <Interaction answers={answers} copy={copy} locale={locale} update={updateAnswers} confirmInterpretation={confirmCurrentInterpretation} />}
         {section === "reservations" && <Reservations answers={answers} copy={copy} locale={locale} update={updateAnswers} confirmInterpretation={confirmCurrentInterpretation} />}
         {section === "operations" && <Operations answers={answers} copy={copy} locale={locale} update={updateAnswers} pendingInterpretation={hasPendingProvenance(provenance, "operations")} confirmInterpretation={confirmCurrentInterpretation} />}
         {section === "authority" && <Authority answers={answers} copy={copy} locale={locale} role={session.membership.role} userId={session.user.id} update={updateAnswers} pendingInterpretation={hasPendingProvenance(provenance, "authority")} confirmInterpretation={confirmCurrentInterpretation} />}
         {section === "final_note" && <FinalNote answers={answers} copy={copy} locale={locale} update={updateAnswers} />}
         {section === "review" && <Review answers={answers} copy={copy} locale={locale} role={session.membership.role} userId={session.user.id} legalVersions={draft.legalVersions} acceptTerms={acceptTerms} acceptDpa={acceptDpa} setAcceptTerms={setAcceptTerms} setAcceptDpa={setAcceptDpa} edit={moveTo} />}
 
-        {section !== "review" && <Composer locale={locale} compact={isWelcome} value={composer} setValue={setComposer} voiceState={voiceState} voiceReview={voiceReview} reading={reading} copy={copy} onSend={() => {
+        <Composer locale={locale} compact={isWelcome} value={composer} setValue={setComposer} voiceState={voiceState} voiceReview={voiceReview} copy={copy} onSend={() => {
           if (!composer.trim()) return;
+          const text = sectionRef.current === "review" ? [answersRef.current.finalNote.text, composer].filter(Boolean).join("\n\n") : composer;
+          if (text.length > 2000) {
+            setError(locale === "fr" ? "La note complète dépasse 2 000 caractères. Raccourcissez-la avant de l’ajouter." : "The complete note exceeds 2,000 characters. Shorten it before adding it.");
+            return;
+          }
           if (sectionRef.current === "establishment") setManualOpen(true);
-          updateAnswers((next) => applyFreeText(next, sectionRef.current, composer, "user_text"), {
+          updateAnswers((next) => applyFreeText(next, sectionRef.current === "review" ? "final_note" : sectionRef.current, text, "user_text"), {
             sourceType: "user_text",
             sourceReference: composer,
             confirmationStatus: "suggested",
           });
           setComposer("");
-        }} onStart={startVoice} onStop={stopVoice} onUseVoice={useVoice} onCancelVoice={cancelVoice} onListen={toggleReading} />}
+          if (sectionRef.current === "review") moveTo("final_note");
+        }} onStart={startVoice} onStop={stopVoice} onUseVoice={useVoice} onCancelVoice={cancelVoice} />
 
         {conflictComparison && <ConflictView comparison={conflictComparison} copy={copy} useLocal={keepLocalConflictVersion} useRemote={useRemoteConflictVersion} />}
         {notice && <p className="form-notice" role="status">{notice}</p>}
@@ -629,7 +627,7 @@ function ConflictView({ comparison, copy, useLocal, useRemote }: { comparison: C
 function Establishment({ answers, copy, update, identityOpen, openManual, confirmInterpretation, searchUnavailable, search }: StepProps & { identityOpen: boolean; openManual: () => void; confirmInterpretation: () => void; searchUnavailable: boolean; search: () => void }) {
   const establishment = answers.establishment;
   return <div className="onboarding-step establishment-step"><header className="welcome-heading"><h2 id="onboarding-title">{copy.common.welcome}</h2><p>{copy.common.establishmentSubtitle}</p></header>
-    <BusinessSearch value={establishment.query || ""} english={answers.interaction.locale === "en"} onChange={(value) => update((next) => { next.establishment.query = value; next.establishment.identityConfirmed = false; return next; })} choose={(result) => { openManual(); update((next) => { next.establishment.identificationMode = "public_search"; next.establishment.restaurantName = result.name; next.establishment.cityCountry = result.cityCountry; next.establishment.address = result.address || "unknown"; next.establishment.identityConfirmed = false; next.establishment.sourceReferences = [{ label: "Annuaire des entreprises", value: result.sourceUrl, confirmationStatus: "suggested" }]; return next; }, { sourceType: "public_suggestion", sourceReference: result.sourceUrl, confirmationStatus: "suggested" }); }} />
+    <BusinessSearch value={establishment.query || ""} english={answers.interaction.locale === "en"} onChange={(value) => update((next) => { next.establishment.query = value; next.establishment.identityConfirmed = false; return next; })} choose={(result) => { openManual(); update((next) => { next.establishment.identificationMode = "public_search"; next.establishment.restaurantName = result.name; next.establishment.cityCountry = result.cityCountry; next.establishment.address = result.address || "unknown"; next.establishment.phone = result.phone || "unknown"; next.establishment.identityConfirmed = false; next.establishment.sourceReferences = [{ label: result.sourceLabel || "Google Maps", value: result.sourceUrl, confirmationStatus: "suggested" }]; return next; }, { sourceType: "public_suggestion", sourceReference: result.sourceUrl, confirmationStatus: "suggested" }); }} />
     <button type="button" className="text-action welcome-manual" aria-expanded={identityOpen} onClick={() => { openManual(); update((next) => { next.establishment.identificationMode = "manual"; next.establishment.restaurantName ||= next.establishment.query || ""; next.establishment.identityConfirmed = false; return next; }); }}>{copy.common.addManually}</button>
     {!identityOpen && <div className="welcome-promises"><span><Check size={17} />{answers.interaction.locale === "fr" ? "Une seule information" : "One piece of information"}</span><i /><span><Sparkles size={17} />{answers.interaction.locale === "fr" ? "Source publique vérifiable" : "Verifiable public source"}</span><i /><span><Check size={17} />{answers.interaction.locale === "fr" ? "Vous confirmez" : "You confirm"}</span></div>}
     {identityOpen && <div className="welcome-identity">
@@ -668,7 +666,7 @@ function Priorities({ answers, copy, locale, update, confirmInterpretation, bran
   </div>;
 }
 
-function Interaction({ answers, copy, locale, update, confirmInterpretation, reading, listen }: StepProps & { confirmInterpretation: () => void; reading: boolean; listen: () => void }) {
+function Interaction({ answers, copy, locale, update, confirmInterpretation }: StepProps & { confirmInterpretation: () => void }) {
   return <div className="onboarding-step"><StepHead copy={copy} eyebrow="interactionEyebrow" title="interactionTitle" subtitle="interactionHelp" />
     <div className="choice-grid three">{(["text", "voice", "mixed"] as const).map((mode) => <ToggleCard key={mode} selected={answers.interaction.preferredMode === mode} onClick={() => update((next) => { next.interaction.preferredMode = mode; next.interaction.preferredModeConfirmed = true; return next; })} title={labelFor(locale, mode)} icon={mode === "voice" ? <Mic /> : mode === "mixed" ? <Headphones /> : <PencilLine />} />)}</div>
     {!answers.interaction.preferredModeConfirmed && <div className="confirm-box"><Sparkles size={17} /><span><strong>{copy.common.interactionInterpretation}</strong><small>{labelFor(locale, answers.interaction.preferredMode)}</small></span><button type="button" onClick={() => { update((next) => { next.interaction.preferredModeConfirmed = true; return next; }); confirmInterpretation(); }}>{copy.common.confirm}</button></div>}
@@ -836,7 +834,7 @@ function Question({ title, options, values, update, locale, single = false, opti
   return <fieldset className="question-block"><legend>{title}</legend><div className="choice-grid compact">{options.map((option) => <ToggleCard key={option} title={labelFor(locale, option)} selected={values.includes(option)} onClick={() => update(single ? [option] : toggle(values, option))} />)}</div>{optional && <button type="button" className="unknown-button" onClick={() => update([])}>{labelFor(locale, "unknown")}</button>}</fieldset>;
 }
 
-function Composer(props: { locale: LocaleMode; compact?: boolean; value: string; setValue: (value: string) => void; voiceState: VoiceState; voiceReview: string; reading: boolean; copy: OnboardingCopy; onSend: () => void; onStart: () => void; onStop: () => void; onUseVoice: () => void; onCancelVoice: () => void; onListen: () => void }) {
+function Composer(props: { locale: LocaleMode; compact?: boolean; value: string; setValue: (value: string) => void; voiceState: VoiceState; voiceReview: string; copy: OnboardingCopy; onSend: () => void; onStart: () => void; onStop: () => void; onUseVoice: () => void; onCancelVoice: () => void }) {
   return <section className={`onboarding-composer${props.compact ? " welcome-composer" : ""}`} aria-label={props.copy.common.composerPlaceholder}>
     <ConversationInput value={props.value} onChange={props.setValue} onSend={props.onSend} onVoice={props.voiceState === "recording" ? props.onStop : props.onStart} recording={props.voiceState === "recording"} voiceBusy={["requesting_permission", "transcribing"].includes(props.voiceState)} placeholder={props.copy.common.composerPlaceholder} sendLabel={props.copy.common.send} voiceLabel={props.voiceState === "recording" ? props.copy.common.stop : props.copy.common.dictate} french={props.locale === "fr"} />
     {props.voiceState !== "idle" && <div className="voice-review" role="status"><span>{voiceLabel(props.voiceState, props.copy)}</span>{props.voiceReview && <p>{props.voiceReview}</p>}{props.voiceState === "reviewing" && <div><button type="button" onClick={props.onUseVoice}>{props.copy.common.useVoice}</button><button type="button" onClick={props.onCancelVoice}><X size={13} /> {props.copy.common.cancel}</button></div>}</div>}
@@ -983,14 +981,8 @@ function localizedFirstResultTitle(answers: OnboardingAnswers, locale: LocaleMod
   return english[focus || "global"]!;
 }
 
-function stopReading(setReading: (value: boolean) => void): void {
-  if (typeof window !== "undefined" && "speechSynthesis" in window) window.speechSynthesis.cancel();
-  setReading(false);
-}
-
-function cancelAudio(recognitionRef: MutableRefObject<SpeechRecognitionLike | null>, setReading: (value: boolean) => void, setVoiceState: (value: VoiceState) => void, resetState: boolean): void {
+function cancelAudio(recognitionRef: MutableRefObject<SpeechRecognitionLike | null>, setVoiceState: (value: VoiceState) => void, resetState: boolean): void {
   abortRecognition(recognitionRef);
-  stopReading(setReading);
   if (resetState) setVoiceState("idle");
 }
 
@@ -1002,7 +994,12 @@ function abortRecognition(recognitionRef: MutableRefObject<SpeechRecognitionLike
   recognition.onresult = null;
   recognition.onerror = null;
   recognition.onend = null;
-  recognition.abort();
+  try {
+    recognition.abort();
+  } catch {
+    // Some browser engines throw when capture already ended. All callbacks
+    // and the active reference are detached above, so cleanup remains safe.
+  }
 }
 
 function canComplete(role?: string): boolean {

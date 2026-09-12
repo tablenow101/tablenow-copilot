@@ -7,6 +7,30 @@ const cssPath = new URL("./app/globals.css", import.meta.url);
 const nextConfigPath = new URL("./next.config.ts", import.meta.url);
 
 describe("onboarding frontend boundaries", () => {
+  it("keeps written responses only and permits a reviewed final note from the summary", async () => {
+    const component = await readFile(componentPath, "utf8");
+    expect(component).not.toMatch(/speechSynthesis|SpeechSynthesisUtterance|toggleReading/);
+    expect(component).not.toContain('section !== "review" && <Composer');
+    expect(component.match(/sectionRef.current === "review" \? "final_note" : sectionRef.current/g)).toHaveLength(2);
+    expect(component.match(/if \(sectionRef.current === "review"\) moveTo\("final_note"\)/g)).toHaveLength(2);
+  });
+
+  it("guards microphone start synchronously and rejects unsupported attachment types before upload", async () => {
+    const component = await readFile(componentPath, "utf8");
+    const composer = await readFile(new URL("./components/ConversationInput.tsx", import.meta.url), "utf8");
+    expect(component).toContain("if (recognitionRef.current) return;");
+    expect(composer).toContain("busy || mutationRef.current");
+    expect(composer).toContain("].includes(file.type)");
+    expect(composer).not.toContain('file.type || "text/plain"');
+  });
+
+  it("ignores stale recognition events and contains errors from browser abort cleanup", async () => {
+    const component = await readFile(componentPath, "utf8");
+    expect(component.match(/if \(recognitionRef.current !== recognition\) return;/g)).toHaveLength(4);
+    expect(component).toMatch(/try \{\s+recognition.abort\(\);\s+\} catch/);
+    expect(component.indexOf("recognition.onend = null;")).toBeLessThan(component.indexOf("recognition.abort();"));
+  });
+
   it("OB-08, OB-09 and OB-10 keep the real browser voice lifecycle explicit", async () => {
     const [component, nextConfig] = await Promise.all([readFile(componentPath, "utf8"), readFile(nextConfigPath, "utf8")]);
     for (const state of ["requesting_permission", "recording", "transcribing", "reviewing", "confirmed", "cancelled", "permission_denied", "unavailable", "failed"]) {

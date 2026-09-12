@@ -8,6 +8,7 @@ export function ConversationInput({ value, onChange, onSend, onVoice, recording,
   value: string; onChange: (value: string) => void; onSend: () => void; onVoice: () => void; recording: boolean; voiceBusy: boolean; placeholder: string; sendLabel: string; voiceLabel: string; french?: boolean;
 }) {
   const picker = useRef<HTMLInputElement>(null);
+  const mutationRef = useRef(false);
   const [files, setFiles] = useState<Attachment[]>([]);
   const [busy, setBusy] = useState(true);
   const [error, setError] = useState("");
@@ -18,8 +19,10 @@ export function ConversationInput({ value, onChange, onSend, onVoice, recording,
     return () => { live = false; };
   }, [french]);
   async function upload(file?: File) {
-    if (!file || busy) return;
+    if (!file || busy || mutationRef.current) return;
     if (file.size === 0 || file.size > 2000000) { setError(french ? "Choisissez un fichier non vide de 2 Mo maximum." : "Choose a non-empty file up to 2 MB."); if (picker.current) picker.current.value = ""; return; }
+    if (!["application/pdf", "image/png", "image/jpeg", "text/plain"].includes(file.type)) { setError(french ? "Choisissez un PDF, une image PNG/JPEG ou un fichier texte." : "Choose a PDF, PNG/JPEG image or text file."); if (picker.current) picker.current.value = ""; return; }
+    mutationRef.current = true;
     setBusy(true); setError("");
     try {
       const base64 = await new Promise<string>((resolve, reject) => {
@@ -28,17 +31,18 @@ export function ConversationInput({ value, onChange, onSend, onVoice, recording,
         reader.onerror = () => reject(new Error(french ? "Ce fichier ne peut pas être lu." : "Cannot read this file."));
         reader.readAsDataURL(file);
       });
-      const stored = await api<Attachment>("/v1/onboarding-attachments", { method: "POST", body: JSON.stringify({ name: file.name, mimeType: file.type || "text/plain", base64 }) });
+      const stored = await api<Attachment>("/v1/onboarding-attachments", { method: "POST", body: JSON.stringify({ name: file.name, mimeType: file.type, base64 }) });
       setFiles(previous => [...previous, stored]);
     } catch (caught) { setError(caught instanceof Error ? caught.message : "Document indisponible."); }
-    finally { setBusy(false); if (picker.current) picker.current.value = ""; }
+    finally { mutationRef.current = false; setBusy(false); if (picker.current) picker.current.value = ""; }
   }
   async function remove(id: string) {
-    if (busy) return;
+    if (busy || mutationRef.current) return;
+    mutationRef.current = true;
     setBusy(true); setError("");
     try { await api(`/v1/onboarding-attachments/${id}`, { method: "DELETE" }); setFiles(previous => previous.filter(file => file.id !== id)); }
     catch (caught) { setError(caught instanceof Error ? caught.message : "Suppression indisponible."); }
-    finally { setBusy(false); }
+    finally { mutationRef.current = false; setBusy(false); }
   }
   return <div className="tn-conversation-input">
     <div className="tn-conversation-bar">

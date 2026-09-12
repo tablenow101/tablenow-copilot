@@ -44,7 +44,9 @@ export async function registerAccountRoutes(app: FastifyInstance, database: Data
     // bypass the mail limit. Consume the budget before contacting the provider.
     const token = await database.begin(async tx => {
       await tx`select pg_advisory_xact_lock(hashtext(${`account-mail:${email}`}))`;
-      const [budget] = await tx<{ count: number }[]>`select count(*)::int as count from account_challenges where email=${email} and created_at>now()-interval '15 minutes' and stage='email'`;
+      // proof_hash marks an email attempt independently of its current stage.
+      // Password-only login challenges do not consume the recipient mail budget.
+      const [budget] = await tx<{ count: number }[]>`select count(*)::int as count from account_challenges where email=${email} and created_at>now()-interval '15 minutes' and proof_hash is not null`;
       if (budget!.count >= 5) return null;
       return challenge(reply, email, "email", payload, code, tx);
     });
@@ -110,7 +112,8 @@ export async function registerAccountRoutes(app: FastifyInstance, database: Data
       if (user) payload.userId = user.id;
       const stage = credentials ? "mfa" : "enroll";
       if (stage === "enroll") payload.secret = newTotpSecret();
-      await tx`update account_challenges set stage=${stage},payload=${seal(payload,secret)},proof_hash=null,attempts=0,expires_at=now()+interval '10 minutes' where token_hash=${row.token_hash}`;
+      // Retain the digest for the mail budget; only stage='email' accepts it.
+      await tx`update account_challenges set stage=${stage},payload=${seal(payload,secret)},attempts=0,expires_at=now()+interval '10 minutes' where token_hash=${row.token_hash}`;
       return { stage, ...(payload.secret ? { secret: payload.secret } : {}) };
     });
     if (result && "existing" in result) return reply.code(409).send({ error: { code: "ACCOUNT_EXISTS", message: "Cette adresse possède déjà un compte. Connectez-vous, ou utilisez « Mot de passe oublié » pour définir votre mot de passe." } });
