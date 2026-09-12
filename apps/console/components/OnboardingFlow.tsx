@@ -32,6 +32,7 @@ import {
   X,
 } from "lucide-react";
 import { api, ApiError } from "@/lib/api";
+import { BusinessSearch } from "./BusinessSearch";
 import { onboardingCopy, labelFor, type OnboardingCopy } from "@/lib/onboarding-copy";
 import {
   applyFreeText,
@@ -63,6 +64,7 @@ import {
 } from "@/lib/onboarding";
 import { useSession } from "@/hooks/useSession";
 import { LoadingScreen } from "./LoadingScreen";
+import { Brand } from "./Brand";
 
 type SaveState = "idle" | "dirty" | "saving" | "saved" | "failed" | "conflict";
 type LoadState = "idle" | "loading" | "ready" | "failed";
@@ -100,8 +102,8 @@ const progressGroups: Array<{ key: string; sections: SectionKey[]; target: Secti
   { key: "review", sections: ["review"], target: "review" },
 ];
 
-const timeConsumers = ["team", "reservations", "supplier_orders", "customer_communication", "operations", "other"] as const;
-const outcomes = ["profitability", "occupancy", "customer_requests", "team_coordination", "service_disruptions", "stock_control", "customer_loyalty"] as const;
+const timeConsumers = ["team", "reservations", "customer_communication", "operations", "other"] as const;
+const outcomes = ["profitability", "occupancy", "customer_requests", "team_coordination", "service_disruptions", "customer_loyalty"] as const;
 
 type StepProps = {
   answers: OnboardingAnswers;
@@ -546,7 +548,7 @@ export function OnboardingFlow({ initialRestaurantId, initialSection }: { initia
   return <main className={`onboarding-layout final-onboarding theme-${answers.interaction.theme}${isWelcome ? " welcome-onboarding" : ""}`} dir={copy.direction} lang={locale}>
     <div className={isWelcome ? "welcome-frame" : undefined}>
     <header className="onboarding-header final-onboarding-header">
-      <div className="logo-lockup"><span className="brand-mark brand-mark-small">T<span>N</span></span><span>TableNow<small>{copy.common.brand}</small></span></div>
+      <Link href="/today" aria-label="TableNow"><Brand /></Link>
       {isWelcome && <span className="welcome-stage"><i />{copy.sections.establishment}</span>}
       {draft.restaurants.length > 1 && <label className="restaurant-switcher"><Building2 size={14} /><span className="sr-only">{copy.common.selectRestaurant}</span><select value={draft.restaurantId} onChange={(event) => void changeRestaurant(event.target.value)}>{draft.restaurants.map((restaurant) => <option key={restaurant.id} value={restaurant.id}>{restaurant.name}</option>)}</select></label>}
       <div className="onboarding-top-controls">
@@ -625,10 +627,9 @@ function ConflictView({ comparison, copy, useLocal, useRemote }: { comparison: C
 function Establishment({ answers, copy, update, identityOpen, openManual, confirmInterpretation, searchUnavailable, search }: StepProps & { identityOpen: boolean; openManual: () => void; confirmInterpretation: () => void; searchUnavailable: boolean; search: () => void }) {
   const establishment = answers.establishment;
   return <div className="onboarding-step establishment-step"><header className="welcome-heading"><h2 id="onboarding-title">{copy.common.welcome}</h2><p>{copy.common.establishmentSubtitle}</p></header>
-    <label className="welcome-search"><span className="sr-only">{copy.common.restaurantQuery}</span><div className="input-with-action"><Search size={25} strokeWidth={1.5} /><input value={establishment.query || ""} onChange={(event) => update((next) => { next.establishment.query = event.target.value; next.establishment.identityConfirmed = false; return next; })} placeholder={copy.common.restaurantQuery} onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); search(); } }} /><button type="button" aria-label={copy.common.searchRestaurant} title={copy.common.searchRestaurant} onClick={search}><ArrowRight size={26} strokeWidth={1.5} /></button></div></label>
+    <BusinessSearch value={establishment.query || ""} english={answers.interaction.locale === "en"} onChange={(value) => update((next) => { next.establishment.query = value; next.establishment.identityConfirmed = false; return next; })} choose={(result) => { openManual(); update((next) => { next.establishment.identificationMode = "public_search"; next.establishment.restaurantName = result.name; next.establishment.cityCountry = result.cityCountry; next.establishment.address = result.address || "unknown"; next.establishment.identityConfirmed = false; next.establishment.sourceReferences = [{ label: "Annuaire des entreprises", value: result.sourceUrl, confirmationStatus: "suggested" }]; return next; }, { sourceType: "public_suggestion", sourceReference: result.sourceUrl, confirmationStatus: "suggested" }); }} />
     <button type="button" className="text-action welcome-manual" aria-expanded={identityOpen} onClick={() => { openManual(); update((next) => { next.establishment.identificationMode = "manual"; next.establishment.restaurantName ||= next.establishment.query || ""; next.establishment.identityConfirmed = false; return next; }); }}>{copy.common.addManually}</button>
-    {searchUnavailable && <p className="inline-error" role="status"><AlertTriangle size={14} />{copy.common.searchUnavailable}<button type="button" onClick={search}>{copy.common.retry}</button></p>}
-    {!identityOpen && <div className="welcome-promises"><span><Check size={17} />{answers.interaction.locale === "fr" ? "Une seule information" : "One piece of information"}</span><i /><span><Sparkles size={17} />{answers.interaction.locale === "fr" ? "Préremplissage indisponible" : "Prefill unavailable"}</span><i /><span><Check size={17} />{answers.interaction.locale === "fr" ? "Vous confirmez" : "You confirm"}</span></div>}
+    {!identityOpen && <div className="welcome-promises"><span><Check size={17} />{answers.interaction.locale === "fr" ? "Une seule information" : "One piece of information"}</span><i /><span><Sparkles size={17} />{answers.interaction.locale === "fr" ? "Source publique vérifiable" : "Verifiable public source"}</span><i /><span><Check size={17} />{answers.interaction.locale === "fr" ? "Vous confirmez" : "You confirm"}</span></div>}
     {identityOpen && <div className="welcome-identity">
     <div className="form-grid two"><label><span>{copy.common.restaurantName}</span><input required value={establishment.restaurantName || ""} onChange={(event) => update((next) => { next.establishment.identificationMode = "manual"; next.establishment.restaurantName = event.target.value; next.establishment.identityConfirmed = false; return next; })} /></label><label><span>{copy.common.cityCountry}</span><input required value={establishment.cityCountry || ""} onChange={(event) => update((next) => { next.establishment.cityCountry = event.target.value; next.establishment.identityConfirmed = false; return next; })} placeholder={copy.common.cityPlaceholder} /></label></div>
     <div className="form-grid two"><label><span>{copy.common.address}</span><input value={knownInput(establishment.address)} onChange={(event) => update((next) => { next.establishment.address = event.target.value || "unknown"; next.establishment.identityConfirmed = false; return next; })} placeholder={copy.common.addressPlaceholder} /></label><label><span>{copy.common.phone}</span><input type="tel" value={knownInput(establishment.phone)} onChange={(event) => update((next) => { next.establishment.phone = event.target.value || "unknown"; next.establishment.identityConfirmed = false; return next; })} placeholder={copy.common.optional} /></label></div>
@@ -665,8 +666,7 @@ function Interaction({ answers, copy, locale, update, confirmInterpretation, rea
   return <div className="onboarding-step"><StepHead copy={copy} eyebrow="interactionEyebrow" title="interactionTitle" subtitle="interactionHelp" />
     <div className="choice-grid three">{(["text", "voice", "mixed"] as const).map((mode) => <ToggleCard key={mode} selected={answers.interaction.preferredMode === mode} onClick={() => update((next) => { next.interaction.preferredMode = mode; next.interaction.preferredModeConfirmed = true; return next; })} title={labelFor(locale, mode)} icon={mode === "voice" ? <Mic /> : mode === "mixed" ? <Headphones /> : <PencilLine />} />)}</div>
     {!answers.interaction.preferredModeConfirmed && <div className="confirm-box"><Sparkles size={17} /><span><strong>{copy.common.interactionInterpretation}</strong><small>{labelFor(locale, answers.interaction.preferredMode)}</small></span><button type="button" onClick={() => { update((next) => { next.interaction.preferredModeConfirmed = true; return next; }); confirmInterpretation(); }}>{copy.common.confirm}</button></div>}
-    <label className="paper-choice"><input type="checkbox" checked={answers.interaction.spokenReplies} onChange={(event) => update((next) => { next.interaction.spokenReplies = event.target.checked; return next; })} /><span><Volume2 size={17} /><span><strong>{copy.common.spokenReplies}</strong><small>{copy.common.spokenRepliesHelp}</small></span></span></label>
-    <button type="button" className="secondary-button compact" onClick={listen}><Volume2 size={15} /> {reading ? copy.common.stopReading : copy.common.listen}</button>
+    <p className="subtle-note">{locale === "fr" ? "Dictez à votre rythme, relisez le texte, puis validez. TableNow ne parle pas à voix haute et n’envoie rien automatiquement." : "Dictate at your own pace, review the text, then confirm. TableNow does not speak aloud or send anything automatically."}</p>
   </div>;
 }
 
@@ -834,7 +834,7 @@ function Composer(props: { compact?: boolean; value: string; setValue: (value: s
   return <section className={`onboarding-composer${props.compact ? " welcome-composer" : ""}`} aria-label={props.copy.common.composerPlaceholder}>
     {props.compact ? <div className="welcome-composer-input"><Sparkles size={24} strokeWidth={1.5} /><textarea rows={1} maxLength={2000} aria-label={props.copy.common.composerPlaceholder} value={props.value} onChange={(event) => props.setValue(event.target.value)} placeholder={props.copy.common.composerPlaceholder} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); props.onSend(); } }} />{props.value.trim() && <button type="button" aria-label={props.copy.common.send} title={props.copy.common.send} onClick={props.onSend}><ArrowRight size={22} /></button>}<button type="button" aria-label={props.voiceState === "recording" ? props.copy.common.stop : props.copy.common.dictate} title={props.voiceState === "recording" ? props.copy.common.stop : props.copy.common.dictate} onClick={props.voiceState === "recording" ? props.onStop : props.onStart} disabled={["requesting_permission", "transcribing"].includes(props.voiceState)}>{props.voiceState === "recording" ? <Square size={22} /> : <Mic size={25} strokeWidth={1.5} />}</button></div> : <>
     <textarea rows={2} maxLength={2000} value={props.value} onChange={(event) => props.setValue(event.target.value)} placeholder={props.copy.common.composerPlaceholder} />
-    <div><button type="button" onClick={props.onSend} disabled={!props.value.trim()}>{props.copy.common.send}</button><button type="button" onClick={props.voiceState === "recording" ? props.onStop : props.onStart} disabled={["requesting_permission", "transcribing"].includes(props.voiceState)}><Mic size={15} />{props.voiceState === "recording" ? props.copy.common.stop : props.copy.common.dictate}</button><button type="button" onClick={props.onListen} disabled={["requesting_permission", "recording", "transcribing"].includes(props.voiceState)}><Volume2 size={15} />{props.reading ? props.copy.common.stopReading : props.copy.common.listen}</button></div>
+    <div><button type="button" onClick={props.onSend} disabled={!props.value.trim()}>{props.copy.common.send}</button><button type="button" onClick={props.voiceState === "recording" ? props.onStop : props.onStart} disabled={["requesting_permission", "transcribing"].includes(props.voiceState)}><Mic size={15} />{props.voiceState === "recording" ? props.copy.common.stop : props.copy.common.dictate}</button></div>
     </>}
     {props.voiceState !== "idle" && <div className="voice-review" role="status"><span>{voiceLabel(props.voiceState, props.copy)}</span>{props.voiceReview && <p>{props.voiceReview}</p>}{props.voiceState === "reviewing" && <div><button type="button" onClick={props.onUseVoice}>{props.copy.common.useVoice}</button><button type="button" onClick={props.onCancelVoice}><X size={13} /> {props.copy.common.cancel}</button></div>}</div>}
   </section>;

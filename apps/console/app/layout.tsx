@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
+import "./stitch.css";
 
 export const metadata: Metadata = {
   title: "TableNow Copilot",
@@ -10,7 +11,7 @@ export const metadata: Metadata = {
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
-  themeColor: "#0b0c0c",
+  themeColor: "#0b0f15",
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {

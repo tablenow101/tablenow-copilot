@@ -1,10 +1,10 @@
 import { notFound } from "next/navigation";
-import { ProductShell } from "@/components/ProductShell";
+import { OwnerShell } from "@/components/OwnerShell";
 
-const sections = ["today", "communications", "reservations", "operations", "team", "inventory", "performance", "locations", "systems", "copilot"] as const;
+const sections = ["today", "decisions", "communications", "service", "reservations", "operations", "team", "performance", "locations", "systems", "profile", "copilot"] as const;
 
 export default async function SectionPage({ params }: { params: Promise<{ section: string }> }) {
   const { section } = await params;
   if (!sections.includes(section as (typeof sections)[number])) notFound();
-  return <ProductShell section={section as (typeof sections)[number]} />;
+  return <OwnerShell section={section} />;
 }

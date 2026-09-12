@@ -17,3 +17,4 @@ deploy/cloud/cloud.env
 .vercel/
 playwright-report/
 test-results/
+graphify-out/

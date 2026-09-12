@@ -1,4 +1,13 @@
-# Prochaines actions — onboarding prioritaire
+# Prochaines actions — recette propriétaire
+
+1. Reprendre [le bilan du 12 septembre](owner-build-2026-09-12.md) et [la recette détaillée](../../docs/product/OWNER_DELIVERY.fr.md).
+2. Vérifier la Preview de `product/stitch-functional-owner`, sa branche Neon distincte, sa migration 007 et les contrôles GitHub. Ne pas promouvoir ni contourner les protections si une étape bloque.
+3. Jouer le vrai parcours propriétaire depuis la connexion, sur ordinateur et mobile. Aucun verdict PASS ne peut venir du seul build ou des tests API.
+4. Vérifier les services SMTP et IA réellement configurés dans Copilot ; la présence d'une variable n'est pas une preuve de fonctionnement. Tester les envois uniquement vers un destinataire autorisé.
+5. Retrouver la connexion Google Places déclarée par le propriétaire, sans extraire de secrets d'un autre produit. L'annuaire français actuel ne couvre que l'identité et l'adresse ; téléphone, horaires, site et photos ne sont pas garantis.
+6. Faire relire la migration additive et la PR par les responsables prévus avant toute fusion/promotion.
+
+## Séquence antérieure — conservée pour continuité
 
 1. Lire [la reprise factuelle](onboarding-handoff-2026-09-06.md) et [le contrat produit](../../docs/product/ONBOARDING_FINAL.fr.md).
 2. Implémenter le parcours complet, son état serveur et son premier livrable sauvegardé sur la branche produit dédiée. Ne pas modifier la PR #12 ni ouvrir un chantier d'infrastructure.

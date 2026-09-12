@@ -43,7 +43,7 @@ describe("PostgreSQL schema migrations", () => {
       order by tablename
     `);
 
-    expect(expectedTables).toHaveLength(69);
+    expect(expectedTables).toHaveLength(70);
     expect(new Set(expectedTables).size).toBe(expectedTables.length);
     expect(result.rows.map((row) => row.tablename).sort()).toEqual(expectedTables.sort());
   });

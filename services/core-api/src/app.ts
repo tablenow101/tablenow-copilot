@@ -56,6 +56,7 @@ import { PlatformRepository } from "./repository.js";
 import { ComputerUseRepository } from "./computer-use-repository.js";
 import { publicCopilotReply } from "./copilot-scope.js";
 import { OnboardingIncompleteError } from "./onboarding.js";
+import { registerOwnerOperations } from "./owner-operations.js";
 import "./types.js";
 
 export interface AppDependencies {
@@ -386,8 +387,12 @@ export async function buildApp(dependencies: AppDependencies = {}): Promise<Fast
       .send(file);
   });
 
+  await registerOwnerOperations(app, database, email, modelProvider);
+
   app.setErrorHandler((error, request, reply) => {
-    request.log.warn({ err: error, requestId: request.id }, "request failed");
+    // SQL/provider errors may contain bound personal data or credentials.
+    const safeErrorCode = error instanceof Error && errorMap[error.message] ? error.message : "REQUEST_FAILED";
+    request.log.warn({ code: safeErrorCode, requestId: request.id }, "request failed");
     if (error instanceof OnboardingIncompleteError) {
       return reply.code(422).send({ error: { code: error.message, message: "Complétez les informations essentielles avant de terminer.", details: error.fieldErrors } });
     }
@@ -410,6 +415,9 @@ const eventParams = z.object({ eventId: z.string().regex(/^\d+$/) });
 const onboardingQuery = z.object({ restaurantId: z.uuid().optional() }).strict();
 
 const errorMap: Record<string, { status: number; message: string }> = {
+  OWNER_CONFLICT: { status: 409, message: "Ces données ont changé. Actualisez avant de réessayer." },
+  EMAIL_NOT_CONFIGURED: { status: 503, message: "L’envoi d’e-mails n’est pas configuré. Votre brouillon est conservé." },
+  EMAIL_SEND_UNCERTAIN: { status: 409, message: "L’état de l’envoi doit être vérifié auprès du service mail. Aucun nouvel envoi automatique ne sera tenté." },
   INVALID_CODE: { status: 400, message: "Code invalide ou expiré." },
   INVITATION_EXPIRED: { status: 403, message: "Cette invitation n'est plus valide." },
   ACCESS_REVOKED: { status: 403, message: "Cet accès a été révoqué." },

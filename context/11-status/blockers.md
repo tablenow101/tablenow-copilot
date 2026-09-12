@@ -1,4 +1,12 @@
-# Blocages connus — 31 août 2026
+# Blocages connus — 12 septembre 2026
+
+- **Recette visuelle bloquée** : le navigateur géré refuse `http://localhost:3000/login` avec `ERR_BLOCKED_BY_CLIENT`. Aucun contournement par tunnel, navigateur alternatif ou session préauthentifiée. Reprendre sur une Preview accessible par le parcours normal.
+- **Création manuelle de branche Neon refusée** : l'API répond `modifying the suspend interval is not permitted on this account`. Aucun changement de plan ou contournement effectué. Tests SQL exécutés dans PostgreSQL embarqué isolé ; l'intégration GitHub/Vercel/Neon existante reste le chemin normal de Preview.
+- **Services externes non certifiés** : aucun SMTP, modèle IA, SMS, WhatsApp ou téléphonie testé de bout en bout dans cette livraison. Les brouillons sont distincts des envois. Pas de copie de secrets du legacy.
+- **Google Places non retrouvé dans le code/configuration locale de Copilot** : cela ne prouve pas son absence dans le compte cloud ou un autre projet. Annuaire français limité à la fiche d'identification ; enrichissement Google à rétablir via sa configuration autorisée.
+- **Production non autorisée par la recette** : le code n'est pas certifié fini tant que le parcours réel et les services requis ne sont pas PASS.
+
+## Historique — 31 août 2026
 
 ## Immédiat
 
