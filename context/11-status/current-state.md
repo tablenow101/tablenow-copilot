@@ -6,7 +6,7 @@ La branche `product/stitch-functional-owner`, issue de `product/onboarding-final
 
 Stitch est la base visuelle, mais la consigne la plus récente donne priorité à la simplicité : une priorité, une prochaine action, les détails à la demande. Les stocks et le module métier légal sont exclus ; les protections et consentements existants sont conservés.
 
-Le code est testé localement. La recette humaine desktop/mobile reste **BLOCKED** : le navigateur de cette session refuse l'aperçu local (`ERR_BLOCKED_BY_CLIENT`). Aucun test visuel de la nouvelle interface ni livraison réelle d'e-mail n'est certifié. La production n'est pas modifiée.
+Le code `f6e72bab` est sauvegardé dans la PR #17, avec Preview Vercel **READY**, Quality Gate GitHub **success** et migrations 001 à 007 confirmées sur une nouvelle branche Neon isolée (1 restaurant de démonstration). La recette humaine desktop/mobile reste **BLOCKED_AUTH** : la Preview demande une connexion Vercel ; l'aperçu local avait également été refusé (`ERR_BLOCKED_BY_CLIENT`). Aucun test visuel de la nouvelle interface ni livraison réelle d'e-mail n'est certifié. La production n'est pas modifiée.
 
 Le dépôt est actuellement public ; la mention « privé » ci-dessous décrit l'état historique, pas une garantie de confidentialité actuelle.
 

@@ -1,5 +1,11 @@
 # Recette — TableNow propriétaire
 
+## Artefact livré
+
+[PR #17](https://github.com/tablenow101/tablenow-copilot/pull/17), code `f6e72bab`, [Preview privée READY](https://tablenow-copilot-v2-5lwxbxc76-tablenow101.vercel.app/login), Next.js 16.3.5, build annoncé 50 s. [Quality Gate GitHub](https://github.com/tablenow101/tablenow-copilot/actions/runs/34680012244) terminé avec succès. Nouvelle branche Neon `br-ancient-sun-za1ku4d2`, migrations 001 à 007 confirmées, un restaurant synthétique et aucun non-démo.
+
+Test d'ouverture effectué : redirection vers la connexion Vercel. La recette réelle s'arrête à cette frontière avec le verdict **BLOCKED_AUTH** ; aucune protection n'est désactivée. Le refus de l'aperçu local reste une preuve séparée. Aucun résultat de build/API ne remplace la recette UI.
+
 ## Contrat d'expérience
 
 Le restaurateur parle ou écrit simplement ; TableNow expose une priorité et une suite compréhensible. Le dernier Stitch est la référence visuelle, mais les dernières consignes autorisent à simplifier les écrans pour garder la logique de l'onboarding. Les détails, chiffres secondaires et longues listes ne sont pas ouverts par défaut. Toute action externe reste confirmée et traçable.

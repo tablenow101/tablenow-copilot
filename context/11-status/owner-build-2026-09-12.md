@@ -1,5 +1,14 @@
 # TableNow — livraison propriétaire du 12 septembre 2026
 
+## Résultat cloud vérifié
+
+- Code : `f6e72babbf1616eb12cf90e1157cd5067e533e68` ; [PR #17](https://github.com/tablenow101/tablenow-copilot/pull/17), brouillon, sans fusion.
+- [Preview privée](https://tablenow-copilot-v2-5lwxbxc76-tablenow101.vercel.app/login) : **READY**, Next.js 16.3.5, build Vercel annoncé en 50 secondes.
+- GitHub Quality Gate [run 39](https://github.com/tablenow101/tablenow-copilot/actions/runs/34680012244) : **success** sur ce commit.
+- L'intégration Vercel existante a créé `preview/product/stitch-functional-owner`, branche Neon `br-ancient-sun-za1ku4d2`, distincte de main et des previews préexistantes. Lecture de contrôle : 1 restaurant, 0 restaurant non-démo, migrations 001 à 007 présentes.
+- Le navigateur ouvre la Preview puis rencontre **Log in to Vercel**. Recette UI **BLOCKED_AUTH** : aucun contournement de protection et aucune capture prétendant montrer la nouvelle application.
+- `copilot.tablenow.io` reste sur la version antérieure ; `app.tablenow.io` est inchangé. Cette Preview n'est pas promue en production.
+
 ## Ce qui est construit
 
 - Connexion réelle par code e-mail avec saisie six chiffres, gestion des erreurs et délai de renvoi. Accès invités conservés ; pas de fausse connexion Google.
