@@ -4,7 +4,9 @@
 
 La branche `product/stitch-functional-owner`, issue de `product/onboarding-final-experience`, contient le parcours propriétaire fonctionnel : connexion par code, onboarding sauvegardé, recherche publique d'établissement, cockpit, décisions, communications, service/salle, équipe et conversation persistante. Voir [le bilan de livraison](owner-build-2026-09-12.md).
 
-Stitch est la base visuelle, mais la consigne la plus récente donne priorité à la simplicité : une priorité, une prochaine action, les détails à la demande. Les stocks et le module métier légal sont exclus ; les protections et consentements existants sont conservés.
+Le dernier Stitch est la référence fonctionnelle et visuelle. La simplicité demandée concerne la lisibilité, sans autorisation de masquer les fonctions ni d'inventer des textes. Voir [les validations exactes](../00-source-material/copy-approvals.md). Les stocks et le module métier légal sont exclus ; les protections et consentements existants sont conservés.
+
+La reprise de l'entrée ajoute l'image issue du dernier Stitch et le seul CTA « Commencer », puis l'authentification avec ses deux textes validés et l'asset Google officiel. Les variantes de couleur de l'authentification suivent le système. L'image haute définition, l'harmonisation des autres écrans et la validation des autres textes restent à terminer. La recette navigateur demeure à effectuer ; ces modifications ne valent pas certification produit.
 
 Le code `f6e72bab` est sauvegardé dans la PR #17, avec Preview Vercel **READY**, Quality Gate GitHub **success** et migrations 001 à 007 confirmées sur une nouvelle branche Neon isolée (1 restaurant de démonstration). La recette humaine desktop/mobile reste **BLOCKED_AUTH** : la Preview demande une connexion Vercel ; l'aperçu local avait également été refusé (`ERR_BLOCKED_BY_CLIENT`). Aucun test visuel de la nouvelle interface ni livraison réelle d'e-mail n'est certifié. La production n'est pas modifiée.
 

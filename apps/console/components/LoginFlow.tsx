@@ -6,6 +6,7 @@ import Link from "next/link";
 import { ArrowLeft, ArrowRight, Mail, LoaderCircle } from "lucide-react";
 import { api } from "@/lib/api";
 import { Brand } from "./Brand";
+import Image from "next/image";
 
 export function LoginFlow({
   initialPublicPilot: _unused,
@@ -102,7 +103,6 @@ export function LoginFlow({
     <main className="tn-auth">
       <header className="tn-auth-header">
         <Brand />
-        <span>VOTRE PARTENAIRE AU QUOTIDIEN</span>
       </header>
       <section className="tn-auth-card" aria-labelledby="auth-title">
         {step === "code" && (
@@ -118,15 +118,10 @@ export function LoginFlow({
             <ArrowLeft size={17} /> Modifier l’adresse
           </button>
         )}
-        <div className="tn-auth-symbol">
-          <Mail size={25} strokeWidth={1.5} />
-        </div>
         <h1 id="auth-title">
           {step === "email" ? (
             <>
-              Votre restaurant.
-              <br />
-              L’esprit libre.
+              Connexion à TableNow OS
             </>
           ) : (
             <>
@@ -138,7 +133,7 @@ export function LoginFlow({
         </h1>
         <p>
           {step === "email" ? (
-            "Connectez-vous à votre espace TableNow. Sans mot de passe, simplement avec votre e-mail."
+            "Entrez votre adresse e-mail professionnelle pour recevoir votre code ou lien d’accès."
           ) : (
             <>
               Si cette adresse dispose d’un accès, vous recevrez un code à{" "}
@@ -223,10 +218,11 @@ export function LoginFlow({
               <span>ou</span>
             </div>
             <button
-              className="tn-secondary tn-wide"
+              className="tn-secondary tn-wide tn-google-button"
               disabled
               aria-describedby="google-unavailable"
             >
+              <Image src="/brand/google-official.png" width={20} height={20} alt="" />
               Continuer avec Google
             </button>
             <small id="google-unavailable" className="tn-muted tn-center">
