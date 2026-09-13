@@ -1,6 +1,6 @@
 # Authentification — lot visuel du 13 septembre 2026
 
-Publier et contrôler la Preview de la branche cible avec les couleurs conservées et « Se souvenir de moi » raccordé à la session. Google/Apple : attendre les précisions du propriétaire sur les applications et accès dédiés ; ne pas prétendre les avoir activés. Aucun changement d’onboarding ni de production. [Recette](../../docs/qa/auth-layout-2026-09-13/report.md).
+Preview `qs35jybon` publiée et écrans publics contrôlés avec les couleurs conservées ; « Se souvenir de moi » raccordé et testé côté API. Terminer la connexion réelle avec le propriétaire pour vérifier la persistance après fermeture/réouverture. Google/Apple : attendre les précisions du propriétaire sur les applications et accès dédiés ; ne pas prétendre les avoir activés. Aucun changement d’onboarding ni de production. [Recette](../../docs/qa/auth-layout-2026-09-13/report.md).
 
 # Prochaine action — parcours authentifié
 

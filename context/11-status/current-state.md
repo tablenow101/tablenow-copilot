@@ -1,6 +1,6 @@
-# Authentification — correction visuelle en cours
+# Authentification — présentation déployée en Preview
 
-La capture du propriétaire sert de référence de structure ; les couleurs TableNow actuelles sont conservées sur instruction explicite. Brouillon local testé visuellement sur mobile/ordinateur avec API factice, sans preuve de connexion réelle. Publication Preview en préparation. « Se souvenir de moi » doit conserver la connexion : choix confirmé et implémenté avec durée de session inchangée. Accès Google/Apple encore demandés au propriétaire. Onboarding et contrôles d’identité inchangés. [État précis](../../docs/qa/auth-layout-2026-09-13/report.md).
+Commit `c01d192` publié sur la branche cible ; Preview `qs35jybon` READY. Couleurs TableNow conservées, logo en haut, champs et boutons alignés, six cases pour le code. « Se souvenir de moi » raccordé à la persistance des cookies à durée maximale inchangée, selon le choix explicite du propriétaire. CI GitHub verte ; présentation et navigation publiques vérifiées ordinateur/mobile. Google/Apple indisponibles en attente des accès ; connexion complète réelle et réouverture de session non testées dans ce lot. [Preuves et limites](../../docs/qa/auth-layout-2026-09-13/report.md).
 
 # Fondations déployées — 13 septembre 2026
 

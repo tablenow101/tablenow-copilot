@@ -4,7 +4,7 @@
 
 Reproduire la structure de la capture fournie (logo TableNow en haut, titres centrés, champs et boutons alignés, six cases de code). Dernière clarification du propriétaire : conserver impérativement les couleurs actuelles ; consulter le propriétaire pour toute autre différence. Onboarding et contrôles d’identité inchangés. Option de persistance des cookies ajoutée sur confirmation du propriétaire, à durée serveur constante.
 
-Le fond blanc et les boutons noirs introduits dans un premier brouillon ont été retirés avant toute publication. Palette et préférence clair/sombre antérieures restaurées. Aucun commit/push/déploiement de ce lot à cette étape.
+Le fond blanc et les boutons noirs introduits dans un premier brouillon ont été retirés avant toute publication. Palette et préférence clair/sombre antérieures restaurées. Le commit de code `c01d192f0eac239628cdcb3f312923a7801c0c25` est publié sur `product/stitch-functional-owner`. Preview vérifiée READY : `dpl_DJSJo2scmk7YRewh2Qa9RXqu7Ubz`, projet `tablenow-copilot-v2`, équipe `tablenow101`. [Connexion de cette Preview](https://tablenow-copilot-v2-qs35jybon-tablenow101.vercel.app/login).
 
 ## Code local
 
@@ -25,8 +25,20 @@ Le fond blanc et les boutons noirs introduits dans un premier brouillon ont ét�
 - [Code e-mail mobile — simulation](local-mobile-email-fixture.png).
 - [Code application ordinateur — simulation](local-desktop-mfa-fixture.png).
 
+## Preview et CI
+
+- Vercel : compilation complète en 24 s ; déploiement terminé le 13 septembre à 21:04:08 UTC. Projet, branche et SHA vérifiés ; cible Preview, sans promotion.
+- GitHub Quality Gate `34782629622` : qualité TypeScript/tests/build, isolation PostgreSQL et images Docker tous réussis.
+- Logs runtime de ce déploiement, filtre 5xx, fenêtre de 15 minutes pendant la recette : aucun résultat. Cela ne prouve pas les routes authentifiées non exercées.
+- Navigateur réel sur cette Preview : connexion → inscription → récupération → connexion. Écrans visités en mobile 390 × 844 et ordinateur 1280 px. Champs à x=24 et largeur 342 px en mobile ; x=440 et largeur 400 px sur ordinateur. Pas de débordement horizontal dans les mesures.
+- Couleurs mesurées en Preview : bouton `rgb(212,248,72)` et dégradés antérieurs bleu/violet. Logo TableNow affiché.
+- Captures : [connexion ordinateur](preview-desktop-login.png), [connexion mobile](preview-mobile-login.png), [inscription ordinateur](preview-desktop-register.png), [inscription mobile](preview-mobile-register.png), [récupération ordinateur](preview-desktop-reset.png), [récupération mobile](preview-mobile-reset.png).
+- L’outil de redimensionnement a expiré deux fois et sa réinitialisation finale a également expiré ; la réinitialisation par cet outil ne peut donc pas être attestée. Le dernier onglet livrable a été observé aux dimensions natives 412 × 808 après fermeture de l’onglet mobile de recette ; recette ordinateur terminée dans un nouvel onglet aux dimensions natives. L’ancien onglet localhost arrêté produit une page d’erreur interne que l’outil refuse d’opérer ; pas un échec de la Preview. Les onglets de recette temporaires ne sont pas conservés comme livrables. L’onglet final de connexion est marqué livrable.
+
 ## Verdict
 
-Présentation : contrôles locaux effectués, sans certification du parcours complet. Authentification réelle, nouvelle Preview, Google/Apple : **BLOCKED / NOT_RUN** selon le cas. Aucun envoi réel, changement de mot de passe, modification de TOTP, changement de production ou du produit historique.
+**PASS limité à la présentation et à la navigation entre les trois écrans publics**, dans les dimensions observées. Les six cases, la saisie, l’effacement, le collage et le passage au code de secours ont été vérifiés avec le vrai composant en **simulation locale** uniquement.
 
-Reste : accès Google/Apple du propriétaire ; compilation finale puis Preview et vérification réelle. Ne pas présenter le brouillon comme terminé ou comme un raccordement Google/Apple fonctionnel.
+**BLOCKED** pour Google/Apple : raccordement absent, accès du propriétaire attendus ; boutons explicitement indisponibles. **NOT_RUN** pour la connexion réelle complète, la réception d’un nouvel e-mail et la conservation réelle de session après fermeture/réouverture du navigateur. Le comportement des cookies est couvert par les tests d’intégration, pas par une connexion privée du propriétaire durant ce lot.
+
+Aucun nouvel e-mail réel envoyé ; aucun mot de passe/TOTP/secret réel changé ou consulté. Onboarding et production/produit historique non modifiés. Le parcours d’authentification complet n’est pas certifié.
