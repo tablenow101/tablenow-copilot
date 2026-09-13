@@ -1,3 +1,9 @@
+# Blocage de recette — session propriétaire
+
+La Preview du lot `747d040` est prête. La suite exige la connexion normale du propriétaire sur la nouvelle URL ; mot de passe et TOTP ne sont jamais demandés dans le chat. Onboarding/cockpit et conseil depuis les écrans non certifiés tant que cette étape reste ouverte. [Preuves et limites](../../docs/qa/governed-2026-09-13/report.md).
+
+## Historique de cette reprise
+
 # Recette en attente — 13 septembre 2026
 
 Le blocage de clé SMTP est levé : secret sensible limité à la branche Preview et redéploiement `jyp8smof5` READY, issu de `96v84r74c`. L'inscription est ouverte pour la saisie privée du mot de passe par le propriétaire. La confirmation de réception réelle puis le parcours TOTP/onboarding/cockpit restent nécessaires. La clé historique `TableNow` n'a pas été réutilisée. Voir [les preuves et la suite](resend-preview-2026-09-13.md).

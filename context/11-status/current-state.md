@@ -1,3 +1,9 @@
+# Fondations déployées — 13 septembre 2026
+
+Les commits `62648ee` et `747d040` sont poussés. Preview `nlhtnepu8` READY sur la branche cible ; migration 010 confirmée dans Neon Preview. Quality Gate GitHub vert (qualité, PostgreSQL, Docker). Entrée/connexion/inscription observées desktop et mobile émulé ; la connexion privée du propriétaire manque sur la nouvelle URL pour terminer onboarding, reprise et cockpit. Aucun verdict produit complet. [Rapport détaillé](../../docs/qa/governed-2026-09-13/report.md).
+
+## Historique de cette reprise
+
 # Fondations hybrides — reprise du 13 septembre 2026
 
 GitHub CLI authentifié ; sauvegarde locale précédente poussée (`62648ee`). Mémoire canonique active et historique lus. Fondations en cours : récupération de contexte à droits réduits, connaissances communes évaluées/versionnées, missions persistantes et dédupliquées, sources/incertitudes, décisions et résultats du patron. Parcours corrigé pour ne pas confondre le drapeau du seed avec un onboarding finalisé ; seed rejoué sans écraser les corrections du propriétaire. Aucun nouveau fournisseur activé. Tests et Preview de ce lot en cours ; aucune certification utilisateur à ce stade. Voir [contrats et périmètre](../../docs/architecture/hybrid-foundations-2026-09-13.md).

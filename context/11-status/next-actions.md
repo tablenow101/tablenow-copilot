@@ -1,3 +1,9 @@
+# Prochaine action — parcours authentifié
+
+Reprendre l'onglet `nlhtnepu8` après connexion du propriétaire. Vérifier onboarding automatique, sauvegarde/reprise et cockpit, puis scénario de service avec décision et résultat enregistrés sur desktop/mobile. Toute nouvelle réception e-mail doit être confirmée réellement. La production et le legacy restent exclus. [Rapport du lot](../../docs/qa/governed-2026-09-13/report.md).
+
+## Historique de cette reprise
+
 # Prochaine action — recette Resend, 13 septembre 2026
 
 1. Terminer l'inscription normale sur la [Preview SMTP issue de 96v84r74c](https://tablenow-copilot-v2-jyp8smof5-tablenow101.vercel.app/register), avec saisie privée du mot de passe par le propriétaire.
