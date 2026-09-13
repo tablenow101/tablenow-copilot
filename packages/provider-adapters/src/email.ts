@@ -29,14 +29,15 @@ export class SmtpEmailSender implements EmailSender {
   }
 
   public async send(message: EmailMessage): Promise<void> {
-    await this.#transporter.sendMail({ from: this.from, ...message });
+    const result = await this.#transporter.sendMail({ from: this.from, ...message });
+    if (result.rejected?.length || !result.accepted?.length) throw new Error("EMAIL_REJECTED");
   }
 }
 
 export class LogEmailSender implements EmailSender {
   public async send(message: EmailMessage): Promise<void> {
     // Deliberately excludes HTML and secrets from structured production logs.
-    process.stdout.write(`${JSON.stringify({ event: "email.preview", to: message.to, subject: message.subject, text: message.text })}\n`);
+    process.stdout.write(`${JSON.stringify({ event: "email.preview", transport: "log", delivered: false, characters: message.text.length })}\n`);
   }
 }
 
@@ -49,9 +50,10 @@ export function accessCodeEmail(code: string, expiresInMinutes: number): Omit<Em
 }
 
 export function invitationEmail(organizationName: string): Omit<EmailMessage, "to"> {
+  const safeName = organizationName.replace(/[&<>"']/g, (value) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[value]!);
   return {
     subject: "Votre accès privé à TableNow",
     text: `Vous êtes invité à découvrir l'espace TableNow de ${organizationName}. Ouvrez l'application avec cette adresse e-mail puis demandez votre code à six chiffres.`,
-    html: `<!doctype html><html lang="fr"><body style="margin:0;background:#0b0c0c;color:#f4f5f2;font-family:Arial,sans-serif"><main style="max-width:560px;margin:auto;padding:48px 24px"><p style="color:#b8ef46;font-weight:700;letter-spacing:.12em">TABLENOW · ACCÈS PRIVÉ</p><h1 style="font-size:30px">Le copilote de ${organizationName} est prêt.</h1><p style="color:#a8aaa5;line-height:1.6">Connectez-vous avec cette adresse e-mail. TableNow vous enverra un code à six chiffres, sans mot de passe à retenir.</p><p style="margin-top:32px;color:#777b74;font-size:13px">Invitation personnelle. Ne la transférez pas.</p></main></body></html>`,
+    html: `<!doctype html><html lang="fr"><body style="margin:0;background:#0b0c0c;color:#f4f5f2;font-family:Arial,sans-serif"><main style="max-width:560px;margin:auto;padding:48px 24px"><p style="color:#b8ef46;font-weight:700;letter-spacing:.12em">TABLENOW · ACCÈS PRIVÉ</p><h1 style="font-size:30px">Le copilote de ${safeName} est prêt.</h1><p style="color:#a8aaa5;line-height:1.6">Connectez-vous avec cette adresse e-mail. TableNow vous enverra un code à six chiffres, sans mot de passe à retenir.</p><p style="margin-top:32px;color:#777b74;font-size:13px">Invitation personnelle. Ne la transférez pas.</p></main></body></html>`,
   };
 }

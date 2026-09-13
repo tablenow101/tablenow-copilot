@@ -1,0 +1,112 @@
+/* Shared founder-approved controls. The accent follows the lime wordmark. */
+:root {
+  --tn-brand-accent: #d4f848;
+  --tn-lime: var(--tn-brand-accent);
+  --lime: var(--tn-brand-accent);
+  --tn-cta-height: 44px;
+  --tn-cta-width: 208px;
+}
+.tn-primary,
+.tn-auth-card .tn-primary,
+.tn-welcome-start,
+.final-onboarding .primary-button,
+.welcome-onboarding .onboarding-actions .primary-button {
+  width: var(--tn-cta-width);
+  max-width: 100%;
+  min-width: 0;
+  min-height: var(--tn-cta-height);
+  height: auto;
+  padding: 10px 18px;
+  flex: none;
+  border: 0;
+  border-radius: 999px;
+  background: var(--tn-brand-accent);
+  color: #161a0a;
+  font-size: 14px;
+  font-weight: 450;
+  line-height: 24px;
+  letter-spacing: -.015em;
+  box-shadow: none;
+}
+.tn-primary:hover:not(:disabled), .tn-welcome-start:hover,
+.final-onboarding .primary-button:hover:not(:disabled) { background: var(--tn-brand-accent); filter: brightness(1.04); }
+.tn-primary:disabled { opacity: .5; }
+.priority-toolbar { display: flex; justify-content: flex-end; }
+.priority-select-all { background: transparent; color: var(--text); border: 0; min-height: 44px; font-weight: 400; text-decoration: underline; text-underline-offset: 4px; }
+.choice-grid .priority-expand { width: 44px; min-height: 44px; justify-content: center; padding: 0; font-size: 24px; font-weight: 300; border-radius: 50%; }
+/* Authentication reference layout with the existing TableNow palette. */
+.tn-account.theme-clear { --tn-bg: #f8f9fc; --tn-surface: #ffffff; --tn-raised: #ffffffb8; --tn-line: #d5d8e1; --tn-text: #20232b; --tn-muted: #5b6170; --tn-blue: #354667; color-scheme: light; }
+.tn-account { min-height: 100svh; padding: 36px 24px 20px; background: radial-gradient(ellipse at 15% 0, #526de339, transparent 44%), radial-gradient(ellipse at 90% 5%, #7746a126, transparent 45%), var(--tn-bg); font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+.tn-account .tn-auth-header { margin: 0 0 28px; }
+.tn-account .tn-auth-card { display: flex; flex-direction: column; flex: 1; width: min(100%, 400px); padding: 0; border: 0; border-radius: 0; background: transparent; box-shadow: none; }
+.tn-account .tn-auth-card h1 { margin: 0 0 10px; font-size: 23px; line-height: 1.3; font-weight: 650; letter-spacing: -.02em; text-align: center; }
+.tn-account .tn-auth-card > p { margin: 0; font-size: 14px; line-height: 1.5; font-weight: 400; text-align: center; }
+.tn-account .tn-auth-card form { display: flex; flex-direction: column; gap: 16px; margin-top: 32px; }
+.tn-account .tn-field { margin: 0; min-width: 0; }
+.tn-account .tn-field > span { margin-bottom: 8px; font-size: 14px; line-height: 1.4; font-weight: 450; letter-spacing: 0; text-transform: none; color: var(--tn-text); }
+.tn-account input { width: 100%; min-width: 0; min-height: 52px; border: 1px solid var(--tn-line); border-radius: 999px; padding: 14px 18px; background: var(--tn-raised); color: var(--tn-text); font-size: 16px; font-weight: 400; line-height: 22px; box-shadow: none; }
+.tn-account input::placeholder { color: var(--tn-muted); opacity: 1; }
+.tn-account input:focus { background: var(--tn-raised); border-color: var(--tn-blue); }
+.tn-account small { margin: 0; color: var(--tn-muted); font-size: 12px; line-height: 1.5; }
+.tn-account #password-help { margin-top: -8px; }
+.tn-account .tn-password-input { position: relative; }
+.tn-account .tn-password-input input { padding-right: 54px; }
+.tn-account .tn-password-input button { position: absolute; inset: 4px 8px 4px auto; width: 44px; display: grid; place-items: center; background: transparent; border: 0; border-radius: 50%; color: var(--tn-muted); padding: 0; }
+.tn-account-options { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 4px 12px; margin-top: -8px; font-size: 12px; }
+.tn-account-remember { display: flex; align-items: center; gap: 8px; min-height: 44px; cursor: pointer; }
+.tn-account .tn-account-remember > span, .tn-account .tn-backup-saved > span { margin: 0; color: var(--tn-text); font-size: 12px; font-weight: 400; letter-spacing: 0; text-transform: none; }
+.tn-account .tn-account-remember input { flex: none; width: 20px; height: 20px; min-height: 20px; padding: 0; accent-color: var(--tn-brand-accent); }
+.tn-account .tn-account-recovery { display: flex; align-items: center; min-height: 44px; color: var(--tn-text); font-size: 12px; text-align: right; }
+.tn-account .tn-account-submit { width: 100%; min-height: 52px; margin-top: 8px; background: var(--tn-brand-accent); color: #161a0a; font-size: 14px; font-weight: 450; }
+.tn-account .tn-account-submit:hover:not(:disabled) { background: var(--tn-brand-accent); filter: brightness(1.04); }
+.tn-theme-switch { position: absolute; right: 20px; top: 18px; }
+.tn-account .tn-account-back { display: grid; place-items: center; align-self: flex-start; width: 48px; height: 48px; margin-bottom: 28px; padding: 0; border: 0; border-radius: 50%; background: var(--tn-raised); color: var(--tn-text); }
+.tn-account .tn-visually-hidden { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+.tn-code-entry { position: relative; }
+.tn-code-cells { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: clamp(6px, 2vw, 12px); }
+.tn-code-cells > span { display: grid; place-items: center; aspect-ratio: 1; border-radius: 50%; background: var(--tn-raised); font-size: 20px; line-height: 1; font-variant-numeric: tabular-nums; }
+.tn-account .tn-account-code { position: absolute; inset: 0; width: 100%; height: 100%; min-height: 0; padding: 0; border: 0; border-radius: 0; opacity: 0; cursor: text; }
+.tn-code-entry:focus-within .tn-code-cells > span[data-active="true"] { outline: 2px solid var(--tn-blue); outline-offset: 3px; }
+.tn-code-entry:has(input[aria-invalid="true"]) .tn-code-cells > span { box-shadow: inset 0 0 0 1px var(--tn-red); }
+.tn-account-social { display: grid; gap: 12px; margin-top: 20px; }
+.tn-account-divider { display: flex; align-items: center; gap: 12px; margin-bottom: 4px; font-size: 13px; }
+.tn-account-divider::before, .tn-account-divider::after { content: ""; flex: 1; height: 1px; background: var(--tn-line); }
+.tn-account-social button { display: flex; align-items: center; justify-content: center; gap: 10px; width: 100%; min-height: 52px; border: 0; border-radius: 999px; background: var(--tn-raised); color: var(--tn-text); padding: 12px 18px; font-size: 14px; font-weight: 450; }
+.tn-account-social button:disabled { opacity: .65; cursor: not-allowed; }
+.tn-account-social :is(img, svg) { flex: none; object-fit: contain; }
+.tn-account-social small { text-align: center; }
+.tn-account-resend { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 0 4px; margin-top: 20px; font-size: 13px; text-align: center; }
+.tn-account .tn-link { min-height: 44px; font-weight: 500; font-size: 13px; color: var(--tn-text); }
+.tn-account .tn-link:disabled { color: var(--tn-muted); }
+.tn-account-alternative { align-self: center; margin-top: 20px; }
+.tn-account .tn-enrollment { display: grid; justify-items: center; gap: 14px; }
+.tn-account .tn-enrollment img { border-radius: 14px; max-width: 100%; height: auto; }
+.tn-account .tn-enrollment details { width: 100%; font-size: 13px; }
+.tn-account .tn-enrollment summary { cursor: pointer; padding: 12px 0; }
+.tn-account .tn-enrollment code { display: block; overflow-wrap: anywhere; user-select: all; font-size: 14px; }
+.tn-account .tn-backup-codes { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; user-select: all; }
+.tn-account .tn-backup-codes code { padding: 8px 4px; background: var(--tn-raised); border-radius: 8px; font-size: 12px; text-align: center; overflow-wrap: anywhere; }
+.tn-account .tn-backup-saved { display: flex; align-items: center; gap: 12px; font-size: 13px; cursor: pointer; }
+.tn-account .tn-backup-saved input { flex: none; width: 20px; min-height: 20px; padding: 0; accent-color: var(--tn-brand-accent); }
+.tn-account .tn-auth-card > .tn-auth-access { margin-top: auto; padding-top: 48px; font-size: 13px !important; }
+.tn-account .tn-auth-access a { font-weight: 550; }
+.tn-account .tn-auth-footer { flex-wrap: wrap; gap: 8px; margin: 28px 0 0; text-align: center; }
+.tn-account .tn-error { margin: 0; font-size: 13px; line-height: 1.5; color: var(--tn-red); }
+.tn-account a { text-underline-offset: 4px; }
+.tn-account a:hover { text-decoration: underline; }
+.tn-account :focus-visible { outline: 2px solid var(--tn-blue); outline-offset: 3px; }
+@media (min-width: 768px) { .tn-account { padding-top: 48px; } .tn-account .tn-auth-card { flex: none; min-height: 650px; } }
+@media (max-width: 359px) { .tn-account { padding-inline: 20px; } .tn-account-options { flex-direction: column; align-items: flex-start; gap: 0; } }
+.final-onboarding .onboarding-composer { background: transparent; border: 0; padding: 8px 0; box-shadow: none; }
+.final-onboarding .tn-conversation-input { display: block; width: 100%; }
+.final-onboarding .tn-conversation-bar { display: flex; align-items: center; gap: 4px; border: 1px solid var(--line); border-radius: 28px; background: var(--panel); padding: 3px; }
+.final-onboarding .tn-conversation-bar textarea { flex: 1; width: 0; min-width: 0; min-height: 44px; max-height: 140px; resize: none; border: 0; border-radius: 0; background: transparent; color: var(--text); font-size: 16px; font-weight: 400; line-height: 24px; padding: 10px 2px; box-shadow: none; }
+.final-onboarding .tn-conversation-bar button { flex: 0 0 44px; width: 44px; min-height: 44px; display: grid; place-items: center; background: transparent; color: var(--text); border: 0; border-radius: 50%; padding: 0; }
+.final-onboarding .tn-conversation-bar .tn-conversation-send { background: var(--tn-brand-accent); color: #161a0a; }
+.final-onboarding .tn-conversation-bar button:disabled { opacity: .4; }
+.final-onboarding .tn-conversation-files { display: block; width: 100%; padding: 10px 8px; color: var(--muted); font-size: 12px; }
+.tn-conversation-files summary { cursor: pointer; padding: 6px 0; }
+.tn-conversation-files ul { list-style: none; padding: 0; margin: 8px 0; }
+.tn-conversation-files li { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.tn-conversation-files a { overflow-wrap: anywhere; text-decoration: underline; }
+.final-onboarding .tn-conversation-files li button { min-width: 44px; min-height: 44px; background: transparent; border: 0; color: var(--text); }

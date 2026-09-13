@@ -23,6 +23,8 @@ export class AuthService {
 
   public async requestCode(email: string, tenantSlug?: string): Promise<void> {
     const config = getConfig();
+    const [protectedAccount] = await this.database`select c.user_id from account_credentials c join users u on u.id=c.user_id where u.email=${email}`;
+    if (protectedAccount) return;
     const target = await this.findAccessTarget(email, tenantSlug);
     if (!target) return;
 
@@ -59,7 +61,10 @@ export class AuthService {
     const expiresAt = new Date(Date.now() + maxAgeSeconds * 1000);
     const ipHash = hashSecret(context.ip, config.SESSION_SECRET);
 
-    return this.database.begin(async (transaction) => {
+    const verified = await this.database.begin(async (transaction) => {
+      await transaction`select pg_advisory_xact_lock(hashtext(${email}))`;
+      const [protectedAccount] = await transaction`select c.user_id from account_credentials c join users u on u.id=c.user_id where u.email=${email}`;
+      if (protectedAccount) return null;
       const [challenge] = await transaction<{
         id: string;
         tenant_id: string | null;
@@ -76,7 +81,8 @@ export class AuthService {
       `;
       if (!challenge || !challenge.tenant_id || challenge.attempts >= 5 || !constantTimeEqual(challenge.code_hash, candidateHash)) {
         if (challenge) await transaction`update otp_challenges set attempts = attempts + 1 where id = ${challenge.id}`;
-        throw new Error("INVALID_CODE");
+        // Commit the attempt counter before throwing outside the transaction.
+        return null;
       }
       await transaction`update otp_challenges set consumed_at = now() where id = ${challenge.id}`;
 
@@ -127,7 +133,9 @@ export class AuthService {
       `;
       await audit(transaction, challenge.tenant_id, userId, "auth.signed_in", "session", tokenHash.slice(0, 12));
       return { sessionToken, csrfToken, maxAgeSeconds, tenantId: challenge.tenant_id, userId };
-    }) as Promise<VerifiedSession>;
+    }) as VerifiedSession | null;
+    if (!verified) throw new Error("INVALID_CODE");
+    return verified;
   }
 
   public async revokeSession(sessionToken: string | undefined): Promise<void> {

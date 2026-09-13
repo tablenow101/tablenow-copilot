@@ -2,6 +2,8 @@
 
 ## Accordées
 
+Le 12 septembre 2026, le propriétaire demande de construire de façon autonome le parcours propriétaire complet, sur Copilot, en préservant le legacy. L'annuaire public français est autorisé comme point de départ gratuit. Sa correction ultérieure impose la fidélité au dernier Stitch, la conservation des fonctions et la validation des formulations une à une ; la simplicité visuelle ne permet pas une réinterprétation libre. Voir `../00-source-material/copy-approvals.md`. Ces consignes ne suppriment ni la recette obligatoire, ni les protections de branche, ni les limites sur les services payants ou les effets externes.
+
 | Date | Cible | Environnement | Portée |
 |---|---|---|---|
 | 2026-08-30 | Code TableNow Copilot | Local | Construire, corriger, tester et documenter toute la plateforme. |

@@ -5,7 +5,7 @@ export function apiHref(path: string): string {
 }
 
 export class ApiError extends Error {
-  public constructor(public readonly status: number, public readonly code: string, message: string) {
+  public constructor(public readonly status: number, public readonly code: string, message: string, public readonly details?: unknown, public readonly requestId?: string) {
     super(message);
   }
 }
@@ -28,9 +28,9 @@ export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
     : await response.text();
   if (!response.ok) {
     const error = typeof body === "object" && body && "error" in body
-      ? (body as { error: { code?: string; message?: string } }).error
+      ? (body as { error: { code?: string; message?: string; details?: unknown; requestId?: string } }).error
       : {};
-    throw new ApiError(response.status, error.code || "REQUEST_FAILED", error.message || "La demande n'a pas abouti.");
+    throw new ApiError(response.status, error.code || "REQUEST_FAILED", error.message || "La demande n'a pas abouti.", error.details, error.requestId);
   }
   return body as T;
 }

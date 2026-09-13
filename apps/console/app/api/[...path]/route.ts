@@ -8,7 +8,7 @@ type RouteContext = { params: Promise<{ path?: string[] }> };
 let appPromise: ReturnType<typeof buildApp> | undefined;
 
 function getApp(): ReturnType<typeof buildApp> {
-  appPromise ||= buildApp();
+  appPromise ||= buildApp().catch((error: unknown) => { appPromise = undefined; throw error; });
   return appPromise;
 }
 

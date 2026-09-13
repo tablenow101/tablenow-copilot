@@ -17,3 +17,7 @@ deploy/cloud/cloud.env
 .vercel/
 playwright-report/
 test-results/
+graphify-out/
+
+# Local package-manager cache, never an application artifact.
+.pnpm-store/

@@ -74,7 +74,7 @@ const documents: Record<LegalDocumentKey, LegalDocumentDefinition> = {
   },
   dpa: {
     title: "Accord de traitement des données",
-    kicker: "Article 28 RGPD · version pilote",
+    kicker: "Article 28 RGPD · version pilot-2026-08-23",
     summary: "Cadre dans lequel TableNow traite les données des clients et collaborateurs pour le compte du restaurant.",
     icon: FileCheck2,
     sections: [

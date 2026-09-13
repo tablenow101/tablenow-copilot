@@ -1,4 +1,82 @@
-# État réel — 31 août 2026
+# Adresse stable Copilot — 14 septembre 2026
+
+`copilot.tablenow.io` est désormais rattaché à la branche Preview `product/stitch-functional-owner`. DNS Gandi ajoutés et vérifiés ; 26 enregistrements existants préservés. Origine serveur de branche et nouveau retour Google configurés, ancien retour conservé pour la transition. Corrections des deux textes validés prêtes ; 135 tests passent, 4 ignorés, compilations réussies. Publication et recette du nouveau domaine en cours : aucune certification du parcours complet. Les trois nouveaux logos annoncés ne sont pas disponibles. [Preuves et écarts](../../docs/qa/stable-preview-2026-09-14.md).
+
+# Google + TOTP réussis, onboarding commencé — 13 septembre 2026, 22:40 UTC
+
+Après la saisie privée du propriétaire, le compte Google Radwan est actif, possède ses identifiants TOTP, une liaison Google et une session non expirée ; le navigateur atteint réellement `/onboarding`. Brouillon serveur en section `establishment`, révision 10, non finalisé. Le propriétaire précise qu'il manquait de temps lors des essais précédents : ne pas attribuer l'expiration à une erreur de saisie. L'onglet est désormais conservé pour sa saisie. Il signale une présentation d'onboarding ancienne et demande un compte rendu pour ChatGPT ; comparaison de la référence attendue à effectuer, sans refonte décidée. Aucun cockpit complet ni recette mobile validés. [Compte rendu complet](../../docs/qa/compte-rendu-chatgpt-2026-09-13.md). Les entrées ci-dessous sont historiques.
+
+# Diagnostic du parcours Google — 13 septembre 2026, 22:25 UTC
+
+Le propriétaire signale que sa tentative « Continuer avec Google » ne lui a pas permis d'entrer dans TableNow. Lecture Preview : la tentative Google du profil Radwan atteint la configuration TOTP à 22:13 UTC, sans tentative de validation enregistrée, puis expire à 22:23 UTC. Aucun compte n'est encore créé pour cette adresse ; le compte Bryan existe avec ses identifiants, sans liaison Google. Une demande distincte de vérification par e-mail est créée à 22:17 UTC et reste à cette étape après deux essais ; ces métadonnées seules ne permettent pas de dire si le code était erroné ou si une récupération visait un compte inexistant. Le parcours complet reste **BLOCKED**, sa compréhension est insuffisante. L'identité voulue doit être clarifiée avant une nouvelle tentative ; aucun nouveau code envoyé ni réglage changé pendant ce diagnostic. Alias de branche vérifié READY sur `f0e98b9`. [Diagnostic détaillé](../../docs/qa/google-preview-2026-09-13/report.md#diagnostic-apres-le-retour-du-proprietaire).
+
+# Google + TOTP — raccordement Preview en cours
+
+Google est ajouté comme choix facultatif avec TOTP conservé, selon confirmation du propriétaire. Projet Google séparé `tablenow-copilot-preview`, consentement en mode test et client créés ; l'ancien client et son consentement sont inchangés. Variables OAuth de type Secret, Preview et branche cible uniquement. Code `4f0512c`, Preview `hepfd5jgo` READY, migration 011 vérifiée, CI verte. 133 tests locaux passent, 4 sont ignorés ; compilation réussie. Bouton → Google → consentement → retour réel TableNow vérifié sur desktop. TOTP privé attendu avant onboarding/cockpit ; recette mobile non exécutée. La première clé, exposée par un libellé technique Google avant utilisation, a été remplacée et supprimée. [Preuves et limites](../../docs/qa/google-preview-2026-09-13/report.md).
+
+# Authentification — présentation déployée en Preview
+
+Commit `c01d192` publié sur la branche cible ; Preview `qs35jybon` READY. Couleurs TableNow conservées, logo en haut, champs et boutons alignés, six cases pour le code. « Se souvenir de moi » raccordé à la persistance des cookies à durée maximale inchangée, selon le choix explicite du propriétaire. CI GitHub verte ; présentation et navigation publiques vérifiées ordinateur/mobile. Google/Apple indisponibles en attente des accès ; connexion complète réelle et réouverture de session non testées dans ce lot. [Preuves et limites](../../docs/qa/auth-layout-2026-09-13/report.md).
+
+# Fondations déployées — 13 septembre 2026
+
+Les commits `62648ee` et `747d040` sont poussés. Preview `nlhtnepu8` READY sur la branche cible ; migration 010 confirmée dans Neon Preview. Quality Gate GitHub vert (qualité, PostgreSQL, Docker). Entrée/connexion/inscription observées desktop et mobile émulé ; la connexion privée du propriétaire manque sur la nouvelle URL pour terminer onboarding, reprise et cockpit. Aucun verdict produit complet. [Rapport détaillé](../../docs/qa/governed-2026-09-13/report.md).
+
+## Historique de cette reprise
+
+# Fondations hybrides — reprise du 13 septembre 2026
+
+GitHub CLI authentifié ; sauvegarde locale précédente poussée (`62648ee`). Mémoire canonique active et historique lus. Fondations en cours : récupération de contexte à droits réduits, connaissances communes évaluées/versionnées, missions persistantes et dédupliquées, sources/incertitudes, décisions et résultats du patron. Parcours corrigé pour ne pas confondre le drapeau du seed avec un onboarding finalisé ; seed rejoué sans écraser les corrections du propriétaire. Aucun nouveau fournisseur activé. Tests et Preview de ce lot en cours ; aucune certification utilisateur à ce stade. Voir [contrats et périmètre](../../docs/architecture/hybrid-foundations-2026-09-13.md).
+
+# Raccordement Resend — 13 septembre 2026
+
+Domaine `tablenow.io` vérifié, sept variables SMTP enregistrées pour la seule Preview de `product/stitch-functional-owner`, dont la clé sensible ajoutée par le propriétaire puis restreinte à la branche. Le redéploiement `jyp8smof5`, issu explicitement de la référence autorisée `96v84r74c`, est **READY** au commit `0d191dd`. L'écran d'inscription est accessible ; la saisie privée du mot de passe est confiée au propriétaire. Envoi réel, réception, TOTP, onboarding et cockpit ne sont pas encore validés. `8qufwgirl` (`main`) est explicitement exclu. Voir [l'état Resend](resend-preview-2026-09-13.md).
+
+## Historique avant raccordement SMTP
+
+# Reprise du déploiement Preview — 12 et 13 septembre 2026
+
+La Preview `dpl_3bkD3gAw5LZH9MaLxpn9YvvPQA2M` est **READY** sur `product/stitch-functional-owner`, commit `0d191dd34d4db2ef5078b414b7bacf408859d35d`, après correction de `OTP_PEPPER` limitée à cette branche. Accès Vercel normal établi ; navigation de compte et refus de connexion testés sur desktop/mobile. Le parcours nouveau propriétaire reste **BLOCKED** : transport d'e-mail absent, réponses 503 observées. E-mail reçu, TOTP, onboarding et cockpit **NOT_RUN**. Production et legacy inchangés. Voir [la reprise](deployment-resume-2026-09-12.md) et [la recette avec captures](../../docs/qa/deployment-2026-09-13/report.md).
+
+# Reprise locale — boucle de corrections du 12 septembre 2026
+
+Voir [le reporting de corrections](correction-loop-2026-09-12.md). Des régressions ont été reproduites puis corrigées sur l'authentification, les contrôles métier et l'onboarding. Une passe indépendante sans cache a exécuté 162 tests réussis et quatre ignorés ; elle ne constitue ni 100 parcours réels ni une attestation de livraison. Le navigateur local est bloqué par deux timeouts du téléchargement officiel de Chromium. Aucun déploiement, push ou envoi réel n'a été réalisé pendant cette reprise. Le rapport détaille le périmètre exact de la dernière relance.
+
+Le BCC existe dans les dépôts historiques frontend/backend, avec génération d'adresse et route CloudMailin ; il n'est plus considéré absent globalement. Il n'a pas été modifié ni testé en production.
+
+# Point de livraison — 12 septembre 2026, après publication
+
+Code publié dans PR 17, commit `38f73117ec94e76d865f0821688a0987f4b0e66b`. Revues produit, composants et sécurité terminées ; typage, tests locaux et build Next.js réussis.
+
+Le déploiement `dpl_BNFrayzdJHDtMGedBmJsWMFjC4re` a appliqué les migrations 008 et 009 à la Preview Neon dédiée (lecture SQL confirmée), puis a échoué : `SESSION_SECRET`, `OTP_PEPPER` et `PLATFORM_ADMIN_EMAIL` absents dans Vercel. Ne pas rétablir les anciennes valeurs dérivées automatiquement. Aucun nouveau lien fonctionnel ni certification de production à annoncer.
+
+Resend connecté à ChatGPT, mais aucune méthode Resend exposée dans cette session ; transport serveur, domaine et remise réelle non vérifiés. L'accès navigateur à la Preview reste protégé par la connexion Vercel. Détails et preuves dans `deployment-readiness-2026-09-12.md`.
+
+---
+
+# État réel — 12 septembre 2026
+
+## Reprise — comptes et composants
+
+Les formulations anciennes ci-dessous sur les identifiants à clarifier sont dépassées par les validations de la mémoire canonique : inscription, e-mail vérifié, mot de passe personnel et second facteur. Le code ajoute les routes compte, la récupération, les codes de secours, les documents privés du + et la sélection globale. Voir [architecture et modularisation](../02-architecture/owner-modularization-2026-09-12.md). La revue produit, la revue sécurité et la vérification du déploiement sont en cours ; aucune certification finale n’est annoncée ici.
+
+## Historique antérieur à cette reprise
+
+Correction du propriétaire : l'image d'entrée basse définition est rejetée et doit être remplacée par une création haut de gamme à valider. Le parcours OTP systématique ne correspond pas à la connexion récurrente souhaitée. Les identifiants permanents demandés restent à préciser avant implémentation ; voir D-021 et les validations exactes.
+
+## Livraison propriétaire en cours
+
+La branche `product/stitch-functional-owner`, issue de `product/onboarding-final-experience`, contient le parcours propriétaire fonctionnel : connexion par code, onboarding sauvegardé, recherche publique d'établissement, cockpit, décisions, communications, service/salle, équipe et conversation persistante. Voir [le bilan de livraison](owner-build-2026-09-12.md).
+
+Le dernier Stitch est la référence fonctionnelle et visuelle. La simplicité demandée concerne la lisibilité, sans autorisation de masquer les fonctions ni d'inventer des textes. Voir [les validations exactes](../00-source-material/copy-approvals.md). Les stocks et le module métier légal sont exclus ; les protections et consentements existants sont conservés.
+
+La reprise de l'entrée ajoute l'image issue du dernier Stitch et le seul CTA « Commencer », puis l'authentification avec ses deux textes validés et l'asset Google officiel. Les variantes de couleur de l'authentification suivent le système. L'image haute définition, l'harmonisation des autres écrans et la validation des autres textes restent à terminer. La recette navigateur demeure à effectuer ; ces modifications ne valent pas certification produit.
+
+Le code `f6e72bab` est sauvegardé dans la PR #17, avec Preview Vercel **READY**, Quality Gate GitHub **success** et migrations 001 à 007 confirmées sur une nouvelle branche Neon isolée (1 restaurant de démonstration). La recette humaine desktop/mobile reste **BLOCKED_AUTH** : la Preview demande une connexion Vercel ; l'aperçu local avait également été refusé (`ERR_BLOCKED_BY_CLIENT`). Aucun test visuel de la nouvelle interface ni livraison réelle d'e-mail n'est certifié. La production n'est pas modifiée.
+
+Le dépôt est actuellement public ; la mention « privé » ci-dessous décrit l'état historique, pas une garantie de confidentialité actuelle.
+
+## Historique — 31 août 2026
 
 ## Code et mémoire
 
@@ -35,3 +113,6 @@
 - migrations Neon encore à prouver sur cette Preview ;
 - SMTP réel, stockage privé, tâches durables et Computer Use cloud encore à raccorder ;
 - parcours complet ordinateur et mobile encore à certifier sur la version cloud.
+
+## Google Places — import ciblé
+Adaptation locale autorisée effectuée ; recherche Google et détails côté serveur Copilot, annuaire de secours conservé. TypeScript et 58 tests concernés passent. Clé Google absente du processus local ; navigateur Chromium manquant. Pas de test réel ni déploiement attesté. Détails : [google-places-import.md](google-places-import.md).

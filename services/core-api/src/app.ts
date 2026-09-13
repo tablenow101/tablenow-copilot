@@ -21,7 +21,8 @@ import {
   inventoryCreateSchema,
   inventoryUpdateSchema,
   invitePilotSchema,
-  onboardingSchema,
+  onboardingCompleteSchema,
+  onboardingDraftSaveSchema,
   privacyAdminDecisionSchema,
   privacyPreferencesSchema,
   privacyRequestSchema,
@@ -47,6 +48,7 @@ import {
   SmtpEmailSender,
   type Database,
   type EmailSender,
+  type ModelProvider,
 } from "@tablenow/provider-adapters";
 import { getConfig } from "./environment.js";
 import { assertAllowedOrigin, authGuard, clearSessionCookies, cookieNames, setSessionCookies } from "./auth.js";
@@ -54,11 +56,18 @@ import { AuthService } from "./auth-service.js";
 import { PlatformRepository } from "./repository.js";
 import { ComputerUseRepository } from "./computer-use-repository.js";
 import { publicCopilotReply } from "./copilot-scope.js";
+import { OnboardingIncompleteError } from "./onboarding.js";
+import { registerOwnerOperations } from "./owner-operations.js";
+import { registerAccountRoutes } from "./account-routes.js";
+import type { GoogleExchange } from "./google-identity.js";
+import { registerOnboardingAttachments } from "./onboarding-attachments.js";
 import "./types.js";
 
 export interface AppDependencies {
   database?: Database;
   email?: EmailSender;
+  model?: ModelProvider;
+  googleExchange?: GoogleExchange;
 }
 
 export async function buildApp(dependencies: AppDependencies = {}): Promise<FastifyInstance> {
@@ -71,13 +80,13 @@ export async function buildApp(dependencies: AppDependencies = {}): Promise<Fast
   const exportStore = new FileExportStore(config.EXPORTS_DIR, config.STORAGE_ENCRYPTION_KEY);
   const evidenceStore = new FileEvidenceStore(config.COMPUTER_EVIDENCE_DIR, config.STORAGE_ENCRYPTION_KEY);
   const computerUse = new ComputerUseRepository(database, config.SESSION_SECRET);
-  const modelProvider = config.AI_PROVIDER === "openai-compatible" && config.AI_BASE_URL
+  const modelProvider = dependencies.model ?? (config.AI_PROVIDER === "openai-compatible" && config.AI_BASE_URL
     ? new OpenAICompatibleProvider({
         baseUrl: config.AI_BASE_URL,
         model: config.AI_MODEL,
         ...(config.AI_API_KEY ? { apiKey: config.AI_API_KEY } : {}),
       })
-    : undefined;
+    : undefined);
   const agent = new AgentRuntime(modelProvider, {
     assertAvailable: (tenantId, estimatedCostEur) => repository.assertAgentBudget(tenantId, estimatedCostEur, config.AI_MAX_DAILY_EUR),
   });
@@ -103,6 +112,9 @@ export async function buildApp(dependencies: AppDependencies = {}): Promise<Fast
       return reply.code(403).send({ error: { code: "ORIGIN_FORBIDDEN", message: "Origine non autorisée." } });
     }
   });
+
+  await registerAccountRoutes(app, database, email, dependencies.googleExchange);
+  await registerOnboardingAttachments(app, database);
 
   app.get("/health", async () => {
     const [health] = await database<{ ok: number }[]>`select 1 as ok`;
@@ -139,15 +151,20 @@ export async function buildApp(dependencies: AppDependencies = {}): Promise<Fast
     return repository.getWorkspace(request.actor!.tenantId);
   });
 
-  app.put("/v1/onboarding", { preHandler: authGuard(database, "tenant.manage") }, async (request) => {
-    return repository.updateOnboarding(request.actor!, onboardingSchema.parse(request.body), {
+  app.get("/v1/onboarding", { preHandler: authGuard(database) }, async (request) => {
+    const { restaurantId } = onboardingQuery.parse(request.query);
+    return repository.readOnboardingDraft(request.actor!, restaurantId);
+  });
+
+  app.patch("/v1/onboarding", { preHandler: authGuard(database) }, async (request) => {
+    return repository.saveOnboardingDraft(request.actor!, onboardingDraftSaveSchema.parse(request.body));
+  });
+
+  app.post("/v1/onboarding/complete", { preHandler: authGuard(database) }, async (request) => {
+    return repository.completeOnboardingDraft(request.actor!, onboardingCompleteSchema.parse(request.body), {
       ipHash: hashSecret(request.ip, config.SESSION_SECRET),
       userAgent: request.headers["user-agent"],
     });
-  });
-
-  app.post("/v1/onboarding/complete", { preHandler: authGuard(database, "tenant.manage") }, async (request) => {
-    return repository.completeOnboarding(request.actor!);
   });
 
   app.post("/v1/restaurants", { preHandler: authGuard(database, "tenant.manage") }, async (request, reply) => {
@@ -379,10 +396,18 @@ export async function buildApp(dependencies: AppDependencies = {}): Promise<Fast
       .send(file);
   });
 
+  await registerOwnerOperations(app, database, email, modelProvider);
+
   app.setErrorHandler((error, request, reply) => {
-    request.log.warn({ err: error, requestId: request.id }, "request failed");
+    // SQL/provider errors may contain bound personal data or credentials.
+    const safeErrorCode = error instanceof Error && errorMap[error.message] ? error.message : "REQUEST_FAILED";
+    request.log.warn({ code: safeErrorCode, requestId: request.id }, "request failed");
+    if (error instanceof OnboardingIncompleteError) {
+      return reply.code(422).send({ error: { code: error.message, message: "Complétez les informations essentielles avant de terminer.", details: error.fieldErrors } });
+    }
     if (error instanceof ZodError) {
-      return reply.code(400).send({ error: { code: "INVALID_INPUT", message: "Certains champs sont invalides.", details: z.flattenError(error).fieldErrors } });
+      const status = request.url.startsWith("/v1/onboarding") ? 422 : 400;
+      return reply.code(status).send({ error: { code: "INVALID_INPUT", message: "Certains champs sont invalides.", details: z.flattenError(error).fieldErrors } });
     }
     const errorMessage = error instanceof Error ? error.message : "UNKNOWN_ERROR";
     const known = errorMap[errorMessage];
@@ -396,15 +421,27 @@ export async function buildApp(dependencies: AppDependencies = {}): Promise<Fast
 
 const idParams = z.object({ id: z.uuid() });
 const eventParams = z.object({ eventId: z.string().regex(/^\d+$/) });
+const onboardingQuery = z.object({ restaurantId: z.uuid().optional() }).strict();
 
 const errorMap: Record<string, { status: number; message: string }> = {
+  COPILOT_KEY_CONFLICT: {status:409,message:"Cette demande a changé. Envoyez-la comme une nouvelle demande."},
+  COPILOT_RUNNING: {status:409,message:"Votre demande est déjà en cours. Réessayez après sa fin."},
+  COPILOT_ATTEMPTS_EXHAUSTED: {status:409,message:"Cette demande a échoué après trois tentatives. Vérifiez les informations avant une nouvelle demande."},
+  COPILOT_TIMEOUT: {status:504,message:"Le délai de réponse est dépassé. Votre demande est conservée ; vous pouvez réessayer."},
+  COPILOT_LEASE_EXPIRED: {status:409,message:"Le délai de cette tentative est dépassé. Réessayez la demande conservée."},
+  COPILOT_OUTPUT_REJECTED: {status:502,message:"La réponse n’a pas passé les contrôles. Votre demande est conservée."},
+  COPILOT_PROVIDER_FAILED: {status:503,message:"Le conseil est indisponible. Votre demande est conservée ; réessayez."},
+  CONTEXT_TOO_LARGE: {status:422,message:"Trop de données pour une synthèse fiable de cette journée."},
+  OWNER_CONFLICT: { status: 409, message: "Ces données ont changé. Actualisez avant de réessayer." },
+  EMAIL_NOT_CONFIGURED: { status: 503, message: "L’envoi d’e-mails n’est pas configuré. Votre brouillon est conservé." },
+  EMAIL_SEND_UNCERTAIN: { status: 409, message: "L’état de l’envoi doit être vérifié auprès du service mail. Aucun nouvel envoi automatique ne sera tenté." },
   INVALID_CODE: { status: 400, message: "Code invalide ou expiré." },
   INVITATION_EXPIRED: { status: 403, message: "Cette invitation n'est plus valide." },
   ACCESS_REVOKED: { status: 403, message: "Cet accès a été révoqué." },
   NOT_FOUND: { status: 404, message: "Élément introuvable." },
   NOT_FOUND_OR_ALREADY_RESOLVED: { status: 409, message: "Cette décision a déjà été traitée." },
   NOT_FOUND_OR_ALREADY_DECIDED: { status: 409, message: "Cette action a déjà été traitée." },
-  ONBOARDING_INCOMPLETE: { status: 409, message: "Complétez les informations essentielles avant de terminer." },
+  ONBOARDING_INCOMPLETE: { status: 422, message: "Complétez les informations essentielles avant de terminer." },
   LEGAL_ACCEPTANCE_REQUIRED: { status: 409, message: "L'acceptation des documents du pilote est requise." },
   HIGH_RISK_APPROVAL_REQUIRED: { status: 403, message: "Cette action nécessite la validation d'un propriétaire ou administrateur." },
   AI_DAILY_BUDGET_EXCEEDED: { status: 429, message: "Le budget quotidien du copilote est atteint." },
@@ -414,6 +451,12 @@ const errorMap: Record<string, { status: number; message: string }> = {
   PRIVACY_REQUEST_NOT_REVIEWABLE: { status: 409, message: "Cette demande ne peut plus être revue." },
   PROTECTED_ADMIN_ACCOUNT: { status: 409, message: "Le compte administrateur initial doit d'abord être transféré à un autre responsable." },
   RESTAURANT_NOT_FOUND: { status: 404, message: "Cet établissement est introuvable." },
+  ONBOARDING_REVISION_CONFLICT: { status: 409, message: "Ces réponses ont été modifiées dans une autre session." },
+  ONBOARDING_INVALID_TRANSITION: { status: 422, message: "Le parcours doit être confirmé dans l'ordre avant la finalisation." },
+  ONBOARDING_AUTHORITY_REQUIRED: { status: 403, message: "Ces réglages doivent être confirmés par une personne autorisée." },
+  ONBOARDING_ASSIGNEE_INVALID: { status: 422, message: "Le destinataire de validation doit être une personne autorisée de cet établissement." },
+  ONBOARDING_PROVENANCE_INVALID: { status: 422, message: "La source déclarée pour cette réponse n'est pas autorisée." },
+  USER_REQUIRED: { status: 403, message: "Une session utilisateur est requise pour terminer l'onboarding." },
   WORKFLOW_NOT_FOUND: { status: 404, message: "Ce protocole d'exécution est introuvable ou inactif." },
   HEALTH_WORKFLOW_NOT_FOUND: { status: 404, message: "Le protocole de vérification est introuvable." },
   COMPUTER_CONNECTION_NOT_READY: { status: 409, message: "Cette connexion doit d'abord être vérifiée." },

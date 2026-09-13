@@ -180,6 +180,7 @@ async function handleAgentExecution(job: Job): Promise<void> {
 
 async function handleRetentionSweep(job: Job): Promise<void> {
   if (!job.tenant_id) throw new Error("TENANT_REQUIRED");
+  await database`delete from account_challenges where expires_at < now() - interval '1 day'`;
   await withTenant(database, job.tenant_id, async (transaction) => {
     await transaction`
       update reservations set guest_email = null, guest_phone = null,

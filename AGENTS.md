@@ -2,6 +2,12 @@
 
 Avant toute intervention, lire `context/CONTEXT.md`, puis le `CONTEXT.md` du dossier concerné.
 
+## Mémoire canonique du fondateur
+
+Avant tout travail produit, consulter `project_memory.current_records` dans PostgreSQL Copilot : projet `aged-haze-01205441`, branche stable `br-orange-cherry-zadw6u1y`, base `neondb`. Les validations consolidées du 12 septembre 2026 y sont enregistrées ; elles priment sur les anciennes interprétations contradictoires de ce dépôt. Le chemin `00-LIRE-DABORD.md` décrit la structure et le protocole. Chaque validation explicite doit être ajoutée comme nouvelle version, avec source et lien `supersedes`, puis relue avant d'annoncer sa sauvegarde. Ne pas considérer une branche Preview comme la mémoire canonique. En cas d'indisponibilité, signaler la sauvegarde en attente.
+
+Les fichiers de référence sont conservés dans l'archive `TableNow-Memoire.zip`, identifiant durable `libfile_772c0c6074f88191877e4433b3ad9a85`, indexée dans le même registre. Les dossiers et skills décrivent des compétences de conception ; ils ne prouvent pas l'existence d'agents métier déployés.
+
 ## Frontières absolues
 
 1. Modifier uniquement ce dépôt et les ressources cloud explicitement dédiées à TableNow Copilot.
