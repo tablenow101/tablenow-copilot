@@ -30,6 +30,8 @@ export function AccountFlow({ mode }: { mode: Mode }) {
   const [cooldown, setCooldown] = useState(0);
   const [theme, setTheme] = useState("dark");
   const [rememberMe, setRememberMe] = useState(true);
+  const [googleStart, setGoogleStart] = useState<string | null>(null);
+  const [googleFlow, setGoogleFlow] = useState(false);
   const codeRef = useRef<HTMLInputElement>(null);
   const started = useRef(false);
 
@@ -41,6 +43,16 @@ export function AccountFlow({ mode }: { mode: Mode }) {
   useEffect(() => {
     let live = true;
     try { setTheme(localStorage.getItem("tn-theme") || (matchMedia("(prefers-color-scheme: light)").matches ? "clear" : "dark")); } catch { /* Optional preference persistence. */ }
+    void api<{ enabled: boolean; startUrl: string | null }>("/v1/oauth/google/config").then(result => { if (live) setGoogleStart(result.enabled ? result.startUrl : null); }).catch(() => undefined);
+    const googleReturn = new URLSearchParams(window.location.search).get("google");
+    if (googleReturn === "error") setError("La connexion Google n’a pas abouti. Réessayez ou utilisez votre connexion habituelle.");
+    if (googleReturn === "continue") {
+      started.current = true; setBusy(true); setGoogleFlow(true);
+      void api<NextStage & { email: string }>("/v1/account/google-continuation").then(next => {
+        if (live) { setStage(next.stage); setEmail(next.email); setSecret(next.secret || ""); }
+      }).catch(() => { if (live) setError("La vérification a expiré. Recommencez la connexion Google."); }).finally(() => { if (live) setBusy(false); });
+      return () => { live = false; };
+    }
     void api<{ tenant: { onboardingComplete: boolean } }>("/v1/auth/session").then(session => {
       if (live && !started.current) router.replace(session.tenant.onboardingComplete ? "/today" : "/onboarding");
     }).catch(() => undefined);
@@ -101,6 +113,8 @@ export function AccountFlow({ mode }: { mode: Mode }) {
   function restart() {
     setStage("credentials"); setCode(""); setSecret(""); setQr("");
     setError(""); setCopyNotice(""); setUseBackup(false);
+    setGoogleFlow(false);
+    window.history.replaceState(null, "", window.location.pathname);
   }
   async function copySecret() {
     try { await navigator.clipboard.writeText(secret); setCopyNotice("Clé copiée."); }
@@ -123,8 +137,8 @@ export function AccountFlow({ mode }: { mode: Mode }) {
       <h1 id="auth-title">{title}</h1>
       {stage === "credentials" && <p>{mode === "signup" ? "Créez votre accès TableNow pour retrouver votre restaurant." : mode === "reset" ? "Choisissez un nouveau mot de passe, puis vérifiez votre e-mail et votre application d’authentification." : "Connectez-vous pour retrouver votre espace TableNow."}</p>}
       {stage === "email" && <p id="code-help">Saisissez le dernier code envoyé à <strong>{email}</strong>. Il est valable 10 minutes, dans cette fenêtre.</p>}
-      {stage === "enroll" && <p id="code-help">Votre e-mail est vérifié. Ajoutez TableNow à votre application d’authentification avec le QR code, puis saisissez le code qu’elle affiche.</p>}
-      {stage === "mfa" && <p id="code-help">{mode === "reset" && "Votre e-mail est vérifié. "}{useBackup ? "Saisissez l’un des codes de secours conservés lors de votre inscription. Chaque code ne fonctionne qu’une fois." : "Ouvrez votre application d’authentification et saisissez le code affiché pour TableNow. Ce code est différent de celui reçu par e-mail."}</p>}
+      {stage === "enroll" && <p id="code-help">{googleFlow ? "Votre compte Google est vérifié." : "Votre e-mail est vérifié."} Ajoutez TableNow à votre application d’authentification avec le QR code, puis saisissez le code qu’elle affiche.</p>}
+      {stage === "mfa" && <p id="code-help">{googleFlow ? "Votre compte Google est vérifié. " : mode === "reset" ? "Votre e-mail est vérifié. " : ""}{useBackup ? "Saisissez l’un des codes de secours conservés lors de votre inscription. Chaque code ne fonctionne qu’une fois." : googleFlow ? "Pour terminer la connexion, ouvrez votre application d’authentification et saisissez le code affiché pour TableNow." : "Ouvrez votre application d’authentification et saisissez le code affiché pour TableNow. Ce code est différent de celui reçu par e-mail."}</p>}
       {stage === "backup" && <p>Conservez ces codes dans votre gestionnaire de mots de passe. Ils permettent de vous connecter si votre application d’authentification est indisponible.</p>}
       <form onSubmit={submit}>
         {stage === "credentials" && <>
@@ -148,9 +162,9 @@ export function AccountFlow({ mode }: { mode: Mode }) {
       </form>
       {stage === "credentials" && mode !== "reset" && <div className="tn-account-social">
         <div className="tn-account-divider"><span>OU</span></div>
-        <button type="button" disabled aria-describedby="social-help"><img src="/brand/google-official.png" width={20} height={20} alt="" />Continuer avec Google</button>
+        <button type="button" disabled={busy || !googleStart} aria-describedby={!googleStart ? "social-help" : undefined} onClick={() => { if (googleStart) { setBusy(true); window.location.assign(`${googleStart}?remember=${rememberMe ? "1" : "0"}`); } }}><img src="/brand/google-official.png" width={20} height={20} alt="" />Continuer avec Google</button>
         <button type="button" disabled aria-describedby="social-help"><svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M17.1 12.5c0-2.1 1.7-3.1 1.8-3.2-1-1.4-2.5-1.6-3-1.6-1.3-.2-2.5.8-3.1.8-.6 0-1.6-.8-2.6-.8-1.4 0-2.7.8-3.4 2-1.5 2.4-.4 6.1 1 8.1.7 1 1.4 2 2.5 2 1 0 1.4-.7 2.7-.7 1.2 0 1.6.7 2.7.6 1.1 0 1.7-1 2.4-2 .8-1.1 1.1-2.2 1.1-2.3-.1 0-2.1-.8-2.1-3ZM15 6.4c.5-.7.9-1.7.8-2.7-.8 0-1.9.6-2.5 1.3-.6.6-1 1.6-.9 2.5 1 .1 2-.5 2.6-1.1Z" /></svg>Continuer avec Apple</button>
-        <small id="social-help">Connexions Google et Apple indisponibles pour le moment.</small>
+        <small id="social-help">{googleStart ? "Connexion Apple indisponible pour le moment." : "Connexions Google et Apple indisponibles pour le moment."}</small>
       </div>}
       {stage === "email" && <div className="tn-account-resend"><span>Vous n’avez pas reçu le code ?</span><button type="button" className="tn-link" disabled={busy || cooldown > 0} onClick={() => void resend()}>{cooldown ? `Renvoyer dans ${cooldown} s` : "Renvoyer le code"}</button></div>}
       {stage === "mfa" && <button type="button" className="tn-link tn-account-alternative" disabled={busy} onClick={() => { setUseBackup(value => !value); setCode(""); setError(""); }}>{useBackup ? "Utiliser mon application" : "Utiliser un code de secours"}</button>}

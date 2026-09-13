@@ -1,3 +1,7 @@
+# Google + TOTP — raccordement Preview en cours
+
+Google est ajouté comme choix facultatif avec TOTP conservé, selon confirmation du propriétaire. Projet Google séparé `tablenow-copilot-preview`, consentement et client créés après délégation du choix d'isolation ; l'ancien client et son consentement sont inchangés. Variables OAuth vérifiées de type Secret, Preview et branche cible uniquement. Code et migration préparés ; 133 tests passent, 4 sont ignorés ; compilation réussie. Déploiement et parcours réel restent à vérifier. La première clé, exposée par un libellé technique Google avant toute utilisation, a été remplacée et désactivée. [Preuves et limites](../../docs/qa/google-preview-2026-09-13/report.md).
+
 # Authentification — présentation déployée en Preview
 
 Commit `c01d192` publié sur la branche cible ; Preview `qs35jybon` READY. Couleurs TableNow conservées, logo en haut, champs et boutons alignés, six cases pour le code. « Se souvenir de moi » raccordé à la persistance des cookies à durée maximale inchangée, selon le choix explicite du propriétaire. CI GitHub verte ; présentation et navigation publiques vérifiées ordinateur/mobile. Google/Apple indisponibles en attente des accès ; connexion complète réelle et réouverture de session non testées dans ce lot. [Preuves et limites](../../docs/qa/auth-layout-2026-09-13/report.md).

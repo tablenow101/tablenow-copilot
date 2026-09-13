@@ -8,7 +8,7 @@ export async function passwordHash(password: string): Promise<string> {
   const salt = crypto.randomBytes(16);
   return `scrypt-v1$${salt.toString("hex")}$${(await derive(password, salt)).toString("hex")}`;
 }
-export async function passwordMatches(password: string, stored?: string): Promise<boolean> {
+export async function passwordMatches(password: string, stored?: string | null): Promise<boolean> {
   const parts = stored?.split("$");
   const salt = parts?.[0] === "scrypt-v1" ? Buffer.from(parts[1]!, "hex") : Buffer.alloc(16);
   const actual = await derive(password, salt);

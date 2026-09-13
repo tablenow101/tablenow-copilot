@@ -5,14 +5,16 @@ import { constantTimeEqual, hashSecret, randomDigits, randomToken, type Database
 import { getConfig } from "./environment.js";
 import { setSessionCookies } from "./auth.js";
 import { newTotpSecret, passwordHash, passwordMatches, seal, unseal, validTotpStep } from "./account-crypto.js";
+import { registerGoogleRoutes } from "./google-routes.js";
+import type { GoogleExchange } from "./google-identity.js";
 
-type Payload = { purpose: "signup" | "reset" | "login"; passwordHash?: string; name?: string; userId?: string; tenantId?: string; secret?: string; rememberMe?: boolean };
+type Payload = { purpose: "signup" | "reset" | "login" | "google"; googleSubject?: string; passwordHash?: string; name?: string; userId?: string; tenantId?: string; secret?: string; rememberMe?: boolean };
 type Challenge = { token_hash: string; email: string; stage: string; payload: string; proof_hash: string | null; attempts: number };
 const emailSchema = z.string().trim().toLowerCase().email().max(254);
 const passwordSchema = z.string().min(15).max(128);
 const proofSchema = z.object({ code: z.string().trim().min(6).max(64) }).strict();
 
-export async function registerAccountRoutes(app: FastifyInstance, database: Database, mail: EmailSender) {
+export async function registerAccountRoutes(app: FastifyInstance, database: Database, mail: EmailSender, googleExchange?: GoogleExchange) {
   const config = getConfig();
   const secret = config.SESSION_SECRET;
   const digest = (s: string) => hashSecret(s, secret);
@@ -91,6 +93,31 @@ export async function registerAccountRoutes(app: FastifyInstance, database: Data
     if (!row) return fail(reply);
     return emailRequest(reply, row.email, unseal<Payload>(row.payload, secret));
   });
+  await registerGoogleRoutes(app, database, async (identity, rememberMe, reply) => {
+    await database.begin(async tx => {
+      const [linked] = await tx<{ user_id: string; email: string }[]>`select g.user_id,u.email from google_identities g join users u on u.id=g.user_id where g.subject=${identity.sub}`;
+      const email = linked?.email || identity.email;
+      await tx`select pg_advisory_xact_lock(hashtext(${email}))`;
+      const [user] = await tx<{ id: string; status: string }[]>`select id,status from users where email=${email}`;
+      if (user && user.status !== "active") throw new Error("GOOGLE_ACCOUNT_UNAVAILABLE");
+      const [credential] = user ? await tx<{ locked: boolean }[]>`select (locked_until>now()) as locked from account_credentials where user_id=${user.id}` : [];
+      // Existing accounts must prove their existing TOTP, never enroll a replacement.
+      if (user && (!credential || credential.locked)) throw new Error("GOOGLE_ACCOUNT_UNAVAILABLE");
+      const [other] = user ? await tx<{ subject: string }[]>`select subject from google_identities where user_id=${user.id}` : [];
+      if (other && other.subject !== identity.sub) throw new Error("GOOGLE_ACCOUNT_UNAVAILABLE");
+      await challenge(reply, email, user ? "mfa" : "enroll", { purpose: "google", googleSubject: identity.sub, rememberMe,
+        ...(user ? { userId: user.id } : { name: identity.name, secret: newTotpSecret() }) }, undefined, tx);
+    });
+  }, googleExchange);
+  app.get("/v1/account/google-continuation", rate, async (request, reply) => {
+    const token = request.cookies.tn_auth;
+    if (!token) return fail(reply);
+    const [row] = await database<Challenge[]>`select * from account_challenges where token_hash=${digest(token)} and stage in ('enroll','mfa') and consumed_at is null and expires_at>now() and attempts<5`;
+    if (!row) return fail(reply);
+    const payload = unseal<Payload>(row.payload, secret);
+    if (payload.purpose !== "google") return fail(reply);
+    return { stage: row.stage, email: row.email, ...(row.stage === "enroll" ? { secret: payload.secret } : {}) };
+  });
   app.post("/v1/account/verify-email", rate, async (request, reply) => {
     const { code } = proofSchema.parse(request.body);
     const token = request.cookies.tn_auth;
@@ -133,6 +160,11 @@ export async function registerAccountRoutes(app: FastifyInstance, database: Data
       await tx`update account_challenges set attempts=attempts+1 where token_hash=${row.token_hash}`;
       const payload = unseal<Payload>(row.payload, secret);
       const [credential] = payload.userId ? await tx<{ totp_secret: string; last_totp_step: number; backup_hashes: string[]; locked: boolean }[]>`select totp_secret,last_totp_step,backup_hashes,(locked_until>now()) as locked from account_credentials where user_id=${payload.userId} for update` : [];
+      if (payload.googleSubject) {
+        await tx`select pg_advisory_xact_lock(hashtext(${`google:${payload.googleSubject}`}))`;
+        const [linked] = await tx<{ user_id: string }[]>`select user_id from google_identities where subject=${payload.googleSubject}`;
+        if (linked && linked.user_id !== payload.userId) return null;
+      }
       if (credential?.locked) return null;
       if (row.stage === "mfa" && !credential) return null;
       if (row.stage === "enroll" && credential) return null;
@@ -162,10 +194,15 @@ export async function registerAccountRoutes(app: FastifyInstance, database: Data
       }
       const backupCodes = credential ? [] : Array.from({ length: 8 }, () => randomToken(12));
       if (!credential) {
-        await tx`insert into account_credentials(user_id,password_hash,totp_secret,last_totp_step,backup_hashes) values (${userId},${payload.passwordHash!},${seal(totpSecret,secret)},${step!},${tx.json(backupCodes.map(digest))})`;
+        await tx`insert into account_credentials(user_id,password_hash,totp_secret,last_totp_step,backup_hashes) values (${userId},${payload.passwordHash || null},${seal(totpSecret,secret)},${step!},${tx.json(backupCodes.map(digest))})`;
       } else {
         const hashes = credential.backup_hashes.filter((_, i) => i !== backupIndex);
         await tx`update account_credentials set last_totp_step=${step ?? Number(credential.last_totp_step)},backup_hashes=${tx.json(hashes)},password_hash=coalesce(${payload.passwordHash || null},password_hash),failed_attempts=0,locked_until=null where user_id=${userId}`;
+      }
+      if (payload.googleSubject) {
+        const [other] = await tx<{ subject: string }[]>`select subject from google_identities where user_id=${userId}`;
+        if (other && other.subject !== payload.googleSubject) throw new Error("GOOGLE_ACCOUNT_UNAVAILABLE");
+        await tx`insert into google_identities(subject,user_id) values (${payload.googleSubject},${userId}) on conflict (subject) do nothing`;
       }
       if (payload.purpose === "reset" || !credential) {
         await tx`delete from sessions where user_id=${userId}`;

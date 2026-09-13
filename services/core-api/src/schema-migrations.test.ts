@@ -18,6 +18,8 @@ const tenantTablesWithoutRls = new Set([
   // Global identities, not restaurant business records; access is server-only.
   "account_credentials",
   "account_challenges",
+  "google_identities",
+  "google_login_attempts",
 ]);
 
 let database: PGlite;
@@ -46,7 +48,7 @@ describe("PostgreSQL schema migrations", () => {
       order by tablename
     `);
 
-    expect(expectedTables).toHaveLength(76);
+    expect(expectedTables).toHaveLength(78);
     expect(new Set(expectedTables).size).toBe(expectedTables.length);
     expect(result.rows.map((row) => row.tablename).sort()).toEqual(expectedTables.sort());
   });

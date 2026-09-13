@@ -59,6 +59,7 @@ import { publicCopilotReply } from "./copilot-scope.js";
 import { OnboardingIncompleteError } from "./onboarding.js";
 import { registerOwnerOperations } from "./owner-operations.js";
 import { registerAccountRoutes } from "./account-routes.js";
+import type { GoogleExchange } from "./google-identity.js";
 import { registerOnboardingAttachments } from "./onboarding-attachments.js";
 import "./types.js";
 
@@ -66,6 +67,7 @@ export interface AppDependencies {
   database?: Database;
   email?: EmailSender;
   model?: ModelProvider;
+  googleExchange?: GoogleExchange;
 }
 
 export async function buildApp(dependencies: AppDependencies = {}): Promise<FastifyInstance> {
@@ -111,7 +113,7 @@ export async function buildApp(dependencies: AppDependencies = {}): Promise<Fast
     }
   });
 
-  await registerAccountRoutes(app, database, email);
+  await registerAccountRoutes(app, database, email, dependencies.googleExchange);
   await registerOnboardingAttachments(app, database);
 
   app.get("/health", async () => {
