@@ -6,7 +6,7 @@ import { getConfig } from "./environment.js";
 import { setSessionCookies } from "./auth.js";
 import { newTotpSecret, passwordHash, passwordMatches, seal, unseal, validTotpStep } from "./account-crypto.js";
 
-type Payload = { purpose: "signup" | "reset" | "login"; passwordHash?: string; name?: string; userId?: string; tenantId?: string; secret?: string };
+type Payload = { purpose: "signup" | "reset" | "login"; passwordHash?: string; name?: string; userId?: string; tenantId?: string; secret?: string; rememberMe?: boolean };
 type Challenge = { token_hash: string; email: string; stage: string; payload: string; proof_hash: string | null; attempts: number };
 const emailSchema = z.string().trim().toLowerCase().email().max(254);
 const passwordSchema = z.string().min(15).max(128);
@@ -62,15 +62,15 @@ export async function registerAccountRoutes(app: FastifyInstance, database: Data
     return reply.code(202).send({ stage: "email" });
   }
   app.post("/v1/account/signup", rate, async (request, reply) => {
-    const input = z.object({ email: emailSchema, password: passwordSchema, name: z.string().trim().min(1).max(100) }).strict().parse(request.body);
-    return emailRequest(reply, input.email, { purpose: "signup", name: input.name, passwordHash: await passwordHash(input.password) });
+    const input = z.object({ email: emailSchema, password: passwordSchema, name: z.string().trim().min(1).max(100), rememberMe: z.boolean().default(true) }).strict().parse(request.body);
+    return emailRequest(reply, input.email, { purpose: "signup", rememberMe: input.rememberMe, name: input.name, passwordHash: await passwordHash(input.password) });
   });
   app.post("/v1/account/reset", rate, async (request, reply) => {
-    const input = z.object({ email: emailSchema, password: passwordSchema }).strict().parse(request.body);
-    return emailRequest(reply, input.email, { purpose: "reset", passwordHash: await passwordHash(input.password) });
+    const input = z.object({ email: emailSchema, password: passwordSchema, rememberMe: z.boolean().default(true) }).strict().parse(request.body);
+    return emailRequest(reply, input.email, { purpose: "reset", rememberMe: input.rememberMe, passwordHash: await passwordHash(input.password) });
   });
   app.post("/v1/account/login", rate, async (request, reply) => {
-    const input = z.object({ email: emailSchema, password: z.string().min(1).max(128) }).strict().parse(request.body);
+    const input = z.object({ email: emailSchema, password: z.string().min(1).max(128), rememberMe: z.boolean().default(true) }).strict().parse(request.body);
     const valid = await database.begin(async tx => {
     await tx`select pg_advisory_xact_lock(hashtext(${input.email}))`;
     const [row] = await tx<{ user_id: string; password_hash: string; locked: boolean }[]>`select c.user_id,c.password_hash,(c.locked_until>now()) as locked from account_credentials c join users u on u.id=c.user_id where u.email=${input.email} and u.status='active'`;
@@ -79,7 +79,7 @@ export async function registerAccountRoutes(app: FastifyInstance, database: Data
       if (row && !row.locked) await tx`update account_credentials set failed_attempts=failed_attempts+1, locked_until=case when failed_attempts+1>=10 then now()+interval '15 minutes' else locked_until end where user_id=${row.user_id}`;
       return false;
     }
-    await challenge(reply, input.email, "mfa", { purpose: "login", userId: row.user_id }, undefined, tx);
+    await challenge(reply, input.email, "mfa", { purpose: "login", rememberMe: input.rememberMe, userId: row.user_id }, undefined, tx);
     return true;
     });
     return valid ? { stage: "mfa" } : fail(reply);
@@ -179,7 +179,7 @@ export async function registerAccountRoutes(app: FastifyInstance, database: Data
       await tx`select set_config('app.tenant_id',${tenantId},true)`;
       await tx`insert into privacy_preferences(tenant_id,user_id) values (${tenantId},${userId}) on conflict do nothing`;
       await tx`insert into audit_events(tenant_id,actor_id,actor_type,action,resource_type,resource_id) values (${tenantId},${userId},'user',${payload.purpose === 'signup' ? 'auth.registered' : 'auth.mfa_verified'},'user',${userId})`;
-      return { sessionToken,csrfToken,maxAgeSeconds,backupCodes };
+      return { sessionToken,csrfToken,maxAgeSeconds,backupCodes,rememberMe: payload.rememberMe ?? true };
     });
     if (!result) return fail(reply);
     setSessionCookies(reply, result);

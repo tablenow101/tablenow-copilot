@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, ArrowRight, Eye, EyeOff, LoaderCircle, Moon, Sun } from "lucide-react";
+import { ArrowLeft, Eye, EyeOff, LoaderCircle, Moon, Sun } from "lucide-react";
 import { api } from "@/lib/api";
 import { Brand } from "../Brand";
 
@@ -29,6 +29,7 @@ export function AccountFlow({ mode }: { mode: Mode }) {
   const [copyNotice, setCopyNotice] = useState("");
   const [cooldown, setCooldown] = useState(0);
   const [theme, setTheme] = useState("dark");
+  const [rememberMe, setRememberMe] = useState(true);
   const codeRef = useRef<HTMLInputElement>(null);
   const started = useRef(false);
 
@@ -67,7 +68,7 @@ export function AccountFlow({ mode }: { mode: Mode }) {
     setBusy(true); setError("");
     try {
       if (stage === "credentials") {
-        const next = await api<NextStage>(`/v1/account/${mode}`, { method: "POST", body: JSON.stringify({ email, password, ...(mode === "signup" ? { name } : {}) }) });
+        const next = await api<NextStage>(`/v1/account/${mode}`, { method: "POST", body: JSON.stringify({ email, password, rememberMe, ...(mode === "signup" ? { name } : {}) }) });
         setStage(next.stage); setPassword(""); setVisible(false); setCode(""); setCooldown(60);
       } else if (stage === "email") {
         const next = await api<NextStage>("/v1/account/verify-email", { method: "POST", body: JSON.stringify({ code }) });
@@ -97,6 +98,10 @@ export function AccountFlow({ mode }: { mode: Mode }) {
     setTheme(next);
     try { localStorage.setItem("tn-theme", next); } catch { /* Optional preference persistence. */ }
   }
+  function restart() {
+    setStage("credentials"); setCode(""); setSecret(""); setQr("");
+    setError(""); setCopyNotice(""); setUseBackup(false);
+  }
   async function copySecret() {
     try { await navigator.clipboard.writeText(secret); setCopyNotice("Clé copiée."); }
     catch { setCopyNotice("Sélectionnez la clé pour la copier manuellement."); }
@@ -108,34 +113,48 @@ export function AccountFlow({ mode }: { mode: Mode }) {
     link.click();
     setTimeout(() => URL.revokeObjectURL(url), 1000);
   }
-  const title = stage === "credentials" ? (mode === "signup" ? "Créer votre compte" : mode === "reset" ? "Nouveau mot de passe" : "Connexion") : stage === "email" ? "Vérifiez votre adresse" : stage === "enroll" ? "Double authentification" : stage === "backup" ? "Codes de secours" : stage === "complete" ? "Connexion établie" : "Vérifiez votre identité";
+  const title = stage === "credentials" ? (mode === "signup" ? "Créer votre compte" : mode === "reset" ? "Mot de passe oublié" : "Bienvenue") : stage === "email" ? "Entrez le code e-mail" : stage === "enroll" ? "Configurer votre application" : stage === "backup" ? "Codes de secours" : stage === "complete" ? "Connexion établie" : useBackup ? "Code de secours" : "Code de votre application";
+  const codeLabel = useBackup ? "Code de secours" : stage === "email" ? "Code e-mail à six chiffres" : "Code d’application à six chiffres";
   return <main className={`tn-auth tn-account theme-${theme}`}>
     <button type="button" className="tn-icon tn-theme-switch" onClick={changeTheme} aria-label={theme === "dark" ? "Mode clair" : "Mode sombre"}>{theme === "dark" ? <Sun size={18} /> : <Moon size={18} />}</button>
     <header className="tn-auth-header"><Brand /></header>
     <section className="tn-auth-card" aria-labelledby="auth-title" aria-busy={busy}>
+      {stage !== "credentials" && stage !== "backup" && stage !== "complete" && <button type="button" className="tn-account-back" disabled={busy} onClick={restart} aria-label="Recommencer la connexion"><ArrowLeft size={20} /></button>}
       <h1 id="auth-title">{title}</h1>
-      {stage === "email" && <p>Le code envoyé à <strong>{email}</strong> est valable 10 minutes.</p>}
-      {stage === "enroll" && <p>Ajoutez TableNow dans votre application d’authentification, puis saisissez le code à six chiffres.</p>}
-      {stage === "mfa" && <p>{useBackup ? "Utilisez l’un de vos codes de secours. Chaque code ne fonctionne qu’une fois." : "Saisissez le code de votre application d’authentification."}</p>}
+      {stage === "credentials" && <p>{mode === "signup" ? "Créez votre accès TableNow pour retrouver votre restaurant." : mode === "reset" ? "Choisissez un nouveau mot de passe, puis vérifiez votre e-mail et votre application d’authentification." : "Connectez-vous pour retrouver votre espace TableNow."}</p>}
+      {stage === "email" && <p id="code-help">Saisissez le dernier code envoyé à <strong>{email}</strong>. Il est valable 10 minutes, dans cette fenêtre.</p>}
+      {stage === "enroll" && <p id="code-help">Votre e-mail est vérifié. Ajoutez TableNow à votre application d’authentification avec le QR code, puis saisissez le code qu’elle affiche.</p>}
+      {stage === "mfa" && <p id="code-help">{mode === "reset" && "Votre e-mail est vérifié. "}{useBackup ? "Saisissez l’un des codes de secours conservés lors de votre inscription. Chaque code ne fonctionne qu’une fois." : "Ouvrez votre application d’authentification et saisissez le code affiché pour TableNow. Ce code est différent de celui reçu par e-mail."}</p>}
       {stage === "backup" && <p>Conservez ces codes dans votre gestionnaire de mots de passe. Ils permettent de vous connecter si votre application d’authentification est indisponible.</p>}
       <form onSubmit={submit}>
         {stage === "credentials" && <>
-          {mode === "signup" && <label className="tn-field"><span>Votre nom</span><input name="name" autoComplete="name" maxLength={100} value={name} onChange={e => setName(e.target.value)} required /></label>}
-          <label className="tn-field"><span>E-mail</span><input name="email" type="email" autoComplete="email" autoCapitalize="none" maxLength={254} value={email} onChange={e => setEmail(e.target.value)} required /></label>
-          <label className="tn-field"><span>{mode === "reset" ? "Nouveau mot de passe" : "Mot de passe"}</span><div className="tn-password-input"><input name="password" type={visible ? "text" : "password"} autoComplete={mode === "login" ? "current-password" : "new-password"} minLength={mode === "login" ? 1 : 15} maxLength={128} value={password} onChange={e => setPassword(e.target.value)} required aria-describedby={mode !== "login" ? "password-help" : undefined} /><button type="button" onClick={() => setVisible(value => !value)} aria-label={visible ? "Masquer le mot de passe" : "Afficher le mot de passe"}>{visible ? <EyeOff size={18} /> : <Eye size={18} />}</button></div></label>
+          {mode === "signup" && <label className="tn-field"><span>Nom</span><input name="name" placeholder="Votre nom" autoComplete="name" maxLength={100} value={name} onChange={e => setName(e.target.value)} required /></label>}
+          <label className="tn-field"><span>E-mail</span><input name="email" type="email" placeholder="Votre adresse e-mail" autoComplete="email" autoCapitalize="none" maxLength={254} value={email} onChange={e => setEmail(e.target.value)} required /></label>
+          <label className="tn-field"><span id="password-label">{mode === "reset" ? "Nouveau mot de passe" : "Mot de passe"}</span><div className="tn-password-input"><input name="password" aria-labelledby="password-label" placeholder={mode === "reset" ? "Votre nouveau mot de passe" : "Votre mot de passe"} type={visible ? "text" : "password"} autoComplete={mode === "login" ? "current-password" : "new-password"} minLength={mode === "login" ? 1 : 15} maxLength={128} value={password} onChange={e => setPassword(e.target.value)} required aria-describedby={mode !== "login" ? "password-help" : undefined} /><button type="button" onClick={() => setVisible(value => !value)} aria-label={visible ? "Masquer le mot de passe" : "Afficher le mot de passe"}>{visible ? <EyeOff size={18} /> : <Eye size={18} />}</button></div></label>
           {mode !== "login" && <small id="password-help">Au moins 15 caractères. Vous pouvez utiliser une phrase.</small>}
-          {mode === "login" && <Link className="tn-account-recovery" href="/forgot-password">Mot de passe oublié ?</Link>}
+          {mode !== "reset" && <div className="tn-account-options"><label className="tn-account-remember"><input type="checkbox" checked={rememberMe} onChange={e => setRememberMe(e.target.checked)} /><span>Se souvenir de moi</span></label><Link className="tn-account-recovery" href="/forgot-password">Mot de passe oublié ?</Link></div>}
         </>}
         {stage === "enroll" && <div className="tn-enrollment">{qr && <img src={qr} width={208} height={208} alt="QR code à scanner dans votre application d’authentification" />}<details open={!qr}><summary>Saisir la clé manuellement</summary><code>{secret}</code><button type="button" className="tn-link" onClick={() => void copySecret()}>Copier la clé</button><p role="status">{copyNotice}</p><p>Clé basée sur le temps · TableNow</p></details></div>}
-        {["email", "enroll", "mfa"].includes(stage) && <label className="tn-field"><span>{useBackup ? "Code de secours" : "Code à six chiffres"}</span><input ref={codeRef} name="code" className={useBackup ? "" : "tn-account-code"} inputMode={useBackup ? "text" : "numeric"} autoComplete="one-time-code" autoCapitalize="none" spellCheck={false} pattern={useBackup ? undefined : "[0-9]{6}"} minLength={6} maxLength={useBackup ? 64 : 6} required value={code} onChange={e => setCode(useBackup ? e.target.value.trim() : e.target.value.replace(/\D/g, "").slice(0, 6))} /></label>}
+        {["email", "enroll", "mfa"].includes(stage) && <label className={`tn-field ${useBackup ? "" : "tn-code-field"}`}>
+          <span className={useBackup ? "" : "tn-visually-hidden"}>{codeLabel}</span>
+          <div className={useBackup ? undefined : "tn-code-entry"}>
+            {!useBackup && <div className="tn-code-cells" aria-hidden="true">{Array.from({ length: 6 }, (_, index) => <span key={index} data-active={index === Math.min(code.length, 5)}>{code[index] || ""}</span>)}</div>}
+            <input ref={codeRef} name="code" className={useBackup ? "" : "tn-account-code"} inputMode={useBackup ? "text" : "numeric"} autoComplete={stage === "email" ? "one-time-code" : "off"} autoCapitalize="none" spellCheck={false} pattern={useBackup ? undefined : "[0-9]{6}"} minLength={6} maxLength={useBackup ? 64 : 6} required onPaste={event => { if (!useBackup) { event.preventDefault(); setCode(event.clipboardData.getData("text").replace(/\D/g, "").slice(0, 6)); } }} aria-describedby="code-help" aria-invalid={error ? true : undefined} value={code} onChange={e => setCode(useBackup ? e.target.value.trim() : e.target.value.replace(/\D/g, "").slice(0, 6))} />
+          </div>
+        </label>}
         {stage === "backup" && <><div className="tn-backup-codes">{backupCodes.map(item => <code key={item}>{item}</code>)}</div><button type="button" className="tn-link" onClick={downloadBackupCodes}>Télécharger mes codes</button><label className="tn-backup-saved"><input type="checkbox" checked={backupSaved} onChange={e => setBackupSaved(e.target.checked)} required /><span>J’ai conservé mes codes de secours.</span></label></>}
         {error && <p className="tn-error" role="alert">{error}</p>}
-        <button className="tn-primary tn-account-submit" type="submit" disabled={busy || (stage === "backup" && !backupSaved)}>{busy ? <LoaderCircle size={17} className="spinning" /> : null}{stage === "credentials" ? mode === "signup" ? "Créer mon compte" : mode === "login" ? "Se connecter" : "Continuer" : stage === "backup" || stage === "complete" ? "Continuer" : "Vérifier"}<ArrowRight size={17} /></button>
+        <button className="tn-primary tn-account-submit" type="submit" disabled={busy || (stage === "backup" && !backupSaved)}>{busy && <LoaderCircle size={17} className="spinning" />}{stage === "credentials" ? mode === "signup" ? "Créer mon compte" : mode === "login" ? "Se connecter" : "Continuer" : "Continuer"}</button>
       </form>
-      {stage === "email" && <button type="button" className="tn-link" disabled={busy || cooldown > 0} onClick={() => void resend()}>{cooldown ? `Renvoyer le code dans ${cooldown} s` : "Renvoyer le code"}</button>}
-      {stage === "email" && <p className="tn-auth-access"><Link href="/login">Se connecter</Link><span> · </span><Link href="/forgot-password">Mot de passe oublié</Link></p>}
-      {stage === "mfa" && <button type="button" className="tn-link" disabled={busy} onClick={() => { setUseBackup(value => !value); setCode(""); setError(""); }}>{useBackup ? "Utiliser mon application" : "Utiliser un code de secours"}</button>}
-      {stage === "credentials" ? <p className="tn-auth-access">{mode === "login" ? <>Pas encore de compte ? <Link href="/register">Créer votre compte</Link></> : <>Déjà inscrit ? <Link href="/login">Se connecter</Link></>}</p> : stage !== "backup" && stage !== "complete" && <button type="button" className="tn-back" disabled={busy} onClick={() => { setStage("credentials"); setCode(""); setSecret(""); setQr(""); setError(""); setCopyNotice(""); setUseBackup(false); }}><ArrowLeft size={16} /> Recommencer</button>}
+      {stage === "credentials" && mode !== "reset" && <div className="tn-account-social">
+        <div className="tn-account-divider"><span>OU</span></div>
+        <button type="button" disabled aria-describedby="social-help"><img src="/brand/google-official.png" width={20} height={20} alt="" />Continuer avec Google</button>
+        <button type="button" disabled aria-describedby="social-help"><svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M17.1 12.5c0-2.1 1.7-3.1 1.8-3.2-1-1.4-2.5-1.6-3-1.6-1.3-.2-2.5.8-3.1.8-.6 0-1.6-.8-2.6-.8-1.4 0-2.7.8-3.4 2-1.5 2.4-.4 6.1 1 8.1.7 1 1.4 2 2.5 2 1 0 1.4-.7 2.7-.7 1.2 0 1.6.7 2.7.6 1.1 0 1.7-1 2.4-2 .8-1.1 1.1-2.2 1.1-2.3-.1 0-2.1-.8-2.1-3ZM15 6.4c.5-.7.9-1.7.8-2.7-.8 0-1.9.6-2.5 1.3-.6.6-1 1.6-.9 2.5 1 .1 2-.5 2.6-1.1Z" /></svg>Continuer avec Apple</button>
+        <small id="social-help">Connexions Google et Apple indisponibles pour le moment.</small>
+      </div>}
+      {stage === "email" && <div className="tn-account-resend"><span>Vous n’avez pas reçu le code ?</span><button type="button" className="tn-link" disabled={busy || cooldown > 0} onClick={() => void resend()}>{cooldown ? `Renvoyer dans ${cooldown} s` : "Renvoyer le code"}</button></div>}
+      {stage === "mfa" && <button type="button" className="tn-link tn-account-alternative" disabled={busy} onClick={() => { setUseBackup(value => !value); setCode(""); setError(""); }}>{useBackup ? "Utiliser mon application" : "Utiliser un code de secours"}</button>}
+      {stage === "credentials" && <p className="tn-auth-access">{mode === "login" ? <>Pas encore de compte ? <Link href="/register">Créer un compte</Link></> : <>Déjà inscrit ? <Link href="/login">Se connecter</Link></>}</p>}
     </section>
     <footer className="tn-auth-footer"><Link href="/legal/privacy">Confidentialité</Link><span>·</span><Link href="/legal/terms">Conditions d’utilisation</Link></footer>
   </main>;

@@ -2,6 +2,7 @@ import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import type { FastifyInstance } from "fastify";
 import type { Database } from "@tablenow/provider-adapters";
 import { createTestDatabase } from "./testing/pglite.js";
+import { getConfig } from "./environment.js";
 import { totpAt } from "./account-crypto.js";
 
 let app: FastifyInstance, database: Database;
@@ -28,7 +29,7 @@ afterAll(async () => { await app?.close(); await database?.end(); vi.unstubAllEn
 describe("registration and recurring authentication", () => {
   it("requires email ownership and TOTP before issuing an owner session", async () => {
     expect((await post("account/signup", { email, name: "Owner", password: "short" })).statusCode).toBe(400);
-    const signup = await post("account/signup", { email, name: "Owner", password });
+    const signup = await post("account/signup", { email, name: "Owner", password, rememberMe: false });
     expect(signup.statusCode).toBe(202);
     const cookie = authCookie(signup);
     expect(cookie).not.toContain("tn_session");
@@ -40,6 +41,10 @@ describe("registration and recurring authentication", () => {
     expect((await post("account/verify-mfa", { code: "abcdef" }, cookie)).statusCode).toBe(400);
     const verified = await post("account/verify-mfa", { code: totpAt(totpSecret, Math.floor(Date.now()/30000)) }, cookie);
     expect(verified.statusCode, verified.body).toBe(200);
+    const transientCookies = verified.cookies.filter(c => ["tn_session", "tn_csrf"].includes(c.name));
+    expect(transientCookies).toHaveLength(2);
+    expect(transientCookies.every(c => c.maxAge === undefined && c.expires === undefined)).toBe(true);
+    expect(transientCookies.find(c => c.name === "tn_session")?.httpOnly).toBe(true);
     backup = verified.json().backupCodes;
     expect(backup).toHaveLength(8);
     sessionCookie = authCookie(verified);
@@ -50,13 +55,21 @@ describe("registration and recurring authentication", () => {
     expect((await post("account/verify-mfa", { code: backup[0] }, cookie)).statusCode).toBe(400);
   });
   it("does not allow password-only or legacy email-code access; backup codes are single-use", async () => {
-    const login = await post("account/login", { email, password });
+    const login = await post("account/login", { email, password, rememberMe: true });
     expect(login.json()).toEqual({ stage: "mfa" });
     const cookie = authCookie(login);
     expect((await app.inject({ method: "GET", url: "/v1/auth/session", headers: { cookie } })).statusCode).toBe(401);
     const [credential] = await database<{ last_totp_step: number }[]>`select last_totp_step from account_credentials`;
     expect((await post("account/verify-mfa", { code: totpAt(totpSecret, Number(credential!.last_totp_step)) }, cookie)).statusCode).toBe(400);
-    expect((await post("account/verify-mfa", { code: backup[0] }, cookie)).statusCode).toBe(200);
+    const remembered = await post("account/verify-mfa", { code: backup[0] }, cookie);
+    expect(remembered.statusCode).toBe(200);
+    const persistentCookies = remembered.cookies.filter(c => ["tn_session", "tn_csrf"].includes(c.name));
+    expect(persistentCookies).toHaveLength(2);
+    expect(persistentCookies.every(c => Number(c.maxAge) === getConfig().SESSION_TTL_HOURS * 3600)).toBe(true);
+    expect(persistentCookies.find(c => c.name === "tn_session")?.httpOnly).toBe(true);
+    // Browser persistence must not extend the server-side lifetime of any session.
+    const [sessionBounds] = await database<{ bounded: boolean }[]>`select bool_and(expires_at <= now() + (${getConfig().SESSION_TTL_HOURS} * interval '1 hour')) as bounded from sessions`;
+    expect(sessionBounds?.bounded).toBe(true);
     const another = await post("account/login", { email, password });
     expect((await post("account/verify-mfa", { code: backup[0] }, authCookie(another))).statusCode).toBe(400);
     const count = inbox.length;

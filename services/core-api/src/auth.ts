@@ -112,7 +112,7 @@ export async function resolveActor(database: Database, request: FastifyRequest):
   return null;
 }
 
-export function setSessionCookies(reply: FastifyReply, values: { sessionToken: string; csrfToken: string; maxAgeSeconds: number }): void {
+export function setSessionCookies(reply: FastifyReply, values: { sessionToken: string; csrfToken: string; maxAgeSeconds: number; rememberMe?: boolean }): void {
   const config = getConfig();
   // A restaurant node may intentionally run on an isolated HTTP LAN. Cloud
   // deployments use HTTPS and therefore receive Secure cookies automatically.
@@ -122,14 +122,14 @@ export function setSessionCookies(reply: FastifyReply, values: { sessionToken: s
     secure,
     sameSite: "lax",
     path: "/",
-    maxAge: values.maxAgeSeconds,
+    ...(values.rememberMe === false ? {} : { maxAge: values.maxAgeSeconds }),
   });
   reply.setCookie(csrfCookie, values.csrfToken, {
     httpOnly: false,
     secure,
     sameSite: "lax",
     path: "/",
-    maxAge: values.maxAgeSeconds,
+    ...(values.rememberMe === false ? {} : { maxAge: values.maxAgeSeconds }),
   });
 }
 

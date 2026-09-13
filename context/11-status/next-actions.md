@@ -1,3 +1,7 @@
+# Authentification — lot visuel du 13 septembre 2026
+
+Publier et contrôler la Preview de la branche cible avec les couleurs conservées et « Se souvenir de moi » raccordé à la session. Google/Apple : attendre les précisions du propriétaire sur les applications et accès dédiés ; ne pas prétendre les avoir activés. Aucun changement d’onboarding ni de production. [Recette](../../docs/qa/auth-layout-2026-09-13/report.md).
+
 # Prochaine action — parcours authentifié
 
 Reprendre l'onglet `nlhtnepu8` après connexion du propriétaire. Vérifier onboarding automatique, sauvegarde/reprise et cockpit, puis scénario de service avec décision et résultat enregistrés sur desktop/mobile. Toute nouvelle réception e-mail doit être confirmée réellement. La production et le legacy restent exclus. [Rapport du lot](../../docs/qa/governed-2026-09-13/report.md).
