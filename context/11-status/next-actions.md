@@ -1,6 +1,6 @@
 # Google + TOTP — prochaine étape
 
-Terminer le client Web du projet Google isolé `tablenow-copilot-preview`, puis enregistrer ses variables uniquement en Preview sur `product/stitch-functional-owner`. Publier et vérifier Google → TOTP → onboarding pour un nouveau profil et cockpit pour un profil complet, sur ordinateur et mobile. Ne pas confondre les tests locaux avec cette recette réelle. [Rapport](../../docs/qa/google-preview-2026-09-13/report.md).
+Client Google isolé et variables Preview configurés, code publié et retour Google réel vérifié. Reprendre le propriétaire après sa saisie privée du TOTP sur l'alias Preview de `product/stitch-functional-owner` ; si la vérification a expiré, recommencer par le bouton Google. Conserver les codes de secours puis jouer onboarding complet et cockpit ; tester aussi le profil complet existant et le mobile. Le compte Google actuellement sélectionné est `radwan.arbane@gmail.com`, nouveau profil distinct du compte de recette `bryanduvalpro@gmail.com`. Ne pas fusionner les comptes ni modifier le profil existant pour simuler un succès. [Rapport](../../docs/qa/google-preview-2026-09-13/report.md).
 
 # Authentification — lot visuel du 13 septembre 2026
 

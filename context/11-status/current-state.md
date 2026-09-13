@@ -1,6 +1,6 @@
 # Google + TOTP — raccordement Preview en cours
 
-Google est ajouté comme choix facultatif avec TOTP conservé, selon confirmation du propriétaire. Projet Google séparé `tablenow-copilot-preview`, consentement et client créés après délégation du choix d'isolation ; l'ancien client et son consentement sont inchangés. Variables OAuth vérifiées de type Secret, Preview et branche cible uniquement. Code et migration préparés ; 133 tests passent, 4 sont ignorés ; compilation réussie. Déploiement et parcours réel restent à vérifier. La première clé, exposée par un libellé technique Google avant toute utilisation, a été remplacée et désactivée. [Preuves et limites](../../docs/qa/google-preview-2026-09-13/report.md).
+Google est ajouté comme choix facultatif avec TOTP conservé, selon confirmation du propriétaire. Projet Google séparé `tablenow-copilot-preview`, consentement en mode test et client créés ; l'ancien client et son consentement sont inchangés. Variables OAuth de type Secret, Preview et branche cible uniquement. Code `4f0512c`, Preview `hepfd5jgo` READY, migration 011 vérifiée, CI verte. 133 tests locaux passent, 4 sont ignorés ; compilation réussie. Bouton → Google → consentement → retour réel TableNow vérifié sur desktop. TOTP privé attendu avant onboarding/cockpit ; recette mobile non exécutée. La première clé, exposée par un libellé technique Google avant utilisation, a été remplacée et supprimée. [Preuves et limites](../../docs/qa/google-preview-2026-09-13/report.md).
 
 # Authentification — présentation déployée en Preview
 

@@ -33,9 +33,24 @@ Cas vérifiés : cookie/état manquants ou falsifiés, annulation, expiration, u
 
 La première création du client Web a échoué côté Google : « The attempted action failed, please try again », suivi `c7093656697482854`. La cause n'est pas précisée. Après confirmation de l'absence de doublon, une nouvelle tentative a réussi : client `821975624190-inqv4e50mr2248a4mefpbg2e7rj786s8.apps.googleusercontent.com`, retour Preview unique conforme au code, aucune origine JavaScript requise par ce flux serveur.
 
-Incident de manipulation : Google a inclus la première clé dans le libellé accessible de son bouton de copie ; une sortie d'inspection l'a exposée. Cette clé, jamais configurée ni utilisée par Copilot, a immédiatement été remplacée, puis désactivée et sa suppression demandée. La clé de remplacement a été transférée en mémoire vers Vercel sans affichage ni fichier. La vérification CLI confirme les deux variables OAuth de type Secret, uniquement Preview et branche cible. Aucun secret n'est reproduit dans ce rapport.
+Incident de manipulation : Google a inclus la première clé dans le libellé accessible de son bouton de copie ; une sortie d'inspection l'a exposée. Cette clé, jamais configurée ni utilisée par Copilot, a immédiatement été remplacée, puis désactivée et supprimée. La relecture de la fiche confirme qu'il ne reste que la clé de remplacement active. Celle-ci a été transférée en mémoire vers Vercel sans affichage ni fichier. La vérification CLI confirme les deux variables OAuth de type Secret, uniquement Preview et branche cible. Aucun secret n'est reproduit dans ce rapport.
 
-Aucun déploiement du lot Google n'est encore attesté ici. Le parcours navigateur Google → TOTP → onboarding/cockpit desktop/mobile est **NOT_RUN** ; verdict produit **BLOCKED**, en attente du déploiement et de la recette réelle. Les tests et la compilation ne valent pas authentification Google fonctionnelle.
+Commit de code `4f0512cc975af7de74dc793ae7d9f9fc000fb5a5` poussé sur la branche cible. Preview `https://tablenow-copilot-v2-hepfd5jgo-tablenow101.vercel.app`, déploiement `dpl_7dYLEchAZ97gQEQXRWnbprWCmSXU`, **READY**, compilation 25 s. Alias de branche confirmé. Migration 011 relue sur Neon Preview `br-ancient-sun-za1ku4d2`. GitHub Quality Gate `34785982463` : qualité, PostgreSQL externe et Docker tous réussis. Aucune entrée dans le filtre 5xx du déploiement sur les quinze minutes contrôlées ; cela ne certifie pas toutes les routes.
+
+Google Cloud confirme le mode Testing et les utilisateurs de recette `radwan.arbane@gmail.com` et `bryanduvalpro@gmail.com`.
+
+### Parcours réellement joué
+
+Persona : propriétaire découvrant la connexion Google. Environnement : alias Preview ci-dessus, vrais Google OAuth et PostgreSQL Preview, navigateur desktop 1280 × 720.
+
+1. Ouvrir `/login` : bouton Google actif, Apple inactif, palette existante, aucun débordement horizontal.
+2. Cliquer Google : arrivée sur le sélecteur de compte officiel.
+3. Choisir le compte du propriétaire déjà connecté `radwan.arbane@gmail.com` : consentement limité au profil et à l'adresse e-mail.
+4. Continuer : retour réel sur l'origine Preview, `/login`, titre **Configurer votre application**, sans alerte applicative.
+5. La saisie privée du TOTP est confiée au propriétaire. Aucun code, QR ou clé TOTP lu ni enregistré dans les preuves. Le profil Google est nouveau dans Copilot ; il ne remplace pas le compte de test existant. La création du compte et du restaurant attend la vérification TOTP.
+6. Écran public `/register` également vérifié : Google actif, champs vides, aucun débordement desktop ; capture `preview-desktop-register.png`.
+
+Verdict du parcours complet : **BLOCKED** à la saisie privée du TOTP. **VERIFIED** : bouton → Google → consentement → retour TableNow. **NOT_RUN** : validation réelle du TOTP, conservation des codes de secours, onboarding complet, cockpit d'un profil complet et parcours mobile. Les tests automatisés de ces destinations ne remplacent pas cette recette réelle. Ne pas déclarer le parcours livré ou certifié avant sa fin.
 
 ## Références officielles
 
