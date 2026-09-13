@@ -39,14 +39,14 @@ describe("PostgreSQL schema migrations", () => {
   });
 
   it("applies all migrations and creates the complete operating schema", async () => {
-    const expectedTables = [...migrationSql.matchAll(/CREATE TABLE\s+(?:IF NOT EXISTS\s+)?([a-z_]+)/g)].map((match) => match[1]);
+    const expectedTables = [...migrationSql.matchAll(/CREATE TABLE\s+(?:IF NOT EXISTS\s+)?([a-z_]+)\s*\(/g)].map((match) => match[1]);
     const result = await database.query<{ tablename: string }>(`
       select tablename from pg_tables
       where schemaname = 'public'
       order by tablename
     `);
 
-    expect(expectedTables).toHaveLength(73);
+    expect(expectedTables).toHaveLength(76);
     expect(new Set(expectedTables).size).toBe(expectedTables.length);
     expect(result.rows.map((row) => row.tablename).sort()).toEqual(expectedTables.sort());
   });

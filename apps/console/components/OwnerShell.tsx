@@ -64,6 +64,7 @@ import type { Workspace } from "@/lib/types";
 import { Brand } from "./Brand";
 import { OwnerDialog } from "./OwnerDialog";
 import { ConversationInput } from "./ConversationInput";
+import { CopilotEvidence } from "./CopilotEvidence";
 
 const mainNav = [
   { key: "today", label: "Aujourd’hui", icon: Activity },
@@ -167,6 +168,8 @@ export function OwnerShell({ section }: { section: string }) {
   const [message, setMessage] = useState("");
   const [chatBusy, setChatBusy] = useState(false);
   const chatInFlight = useRef(false);
+  const chatRequest = useRef<{ restaurantId: string; message: string; key: string } | null>(null);
+  const [chatRevision, setChatRevision] = useState(0);
   const refreshNumber = useRef(0);
   const heading = useRef<HTMLHeadingElement>(null);
   const dictation = useDictation((text) =>
@@ -369,13 +372,17 @@ export function OwnerShell({ section }: { section: string }) {
     if (chatInFlight.current || !message.trim() || !restaurantId) return;
     chatInFlight.current = true;
     const submittedMessage = message;
+    if (chatRequest.current?.restaurantId !== restaurantId || chatRequest.current.message !== message.trim()) {
+      chatRequest.current = { restaurantId, message: message.trim(), key: crypto.randomUUID() };
+    }
     setChatBusy(true);
     setError("");
     try {
       await api("/v1/operating/chat", {
         method: "POST",
-        body: JSON.stringify({ restaurantId, message: submittedMessage.trim() }),
+        body: JSON.stringify({ restaurantId, message: submittedMessage.trim(), idempotencyKey: chatRequest.current.key }),
       });
+      chatRequest.current = null;
       setMessage((current) => current === submittedMessage ? "" : current);
       await refresh();
       if (active !== "copilot") router.push("/copilot");
@@ -388,6 +395,7 @@ export function OwnerShell({ section }: { section: string }) {
     } finally {
       chatInFlight.current = false;
       setChatBusy(false);
+      setChatRevision(value => value + 1);
     }
   }
   async function logout() {
@@ -1108,6 +1116,7 @@ export function OwnerShell({ section }: { section: string }) {
                 Mes priorités <ChevronRight size={15} />
               </Link>
             </div>
+            {restaurantId && <CopilotEvidence key={restaurantId} restaurantId={restaurantId} revision={chatRevision} onRetry={(text, key) => { chatRequest.current = { restaurantId, message: text, key }; setMessage(text); }} canDecide={["owner", "group_admin", "platform_admin"].includes(session?.membership.role || "")} />}
             <div className="tn-chat">
               {operating.chat.filter(
                 (entry) => entry.restaurantId === restaurantId,

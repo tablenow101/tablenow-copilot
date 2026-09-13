@@ -24,7 +24,7 @@ function sessionCookies(header: string | string[] | undefined): { cookie: string
   return { cookie: pairs.join("; "), csrf };
 }
 
-export async function runPreviewSmoke(environment: NodeJS.ProcessEnv = process.env): Promise<boolean> {
+export async function runPreviewSmoke(environment: NodeJS.ProcessEnv = process.env): Promise<false | "legacy-session" | "registered-account"> {
   if (!shouldRunPreviewSmoke(environment)) return false;
   const config = getConfig();
   const database = createDatabase(config.DATABASE_URL, 1);
@@ -39,12 +39,20 @@ export async function runPreviewSmoke(environment: NodeJS.ProcessEnv = process.e
     const health = await app.inject({ method: "GET", url: "/health" });
     requireStatus("health", health.statusCode, 200);
 
+    const [registered] = await database`select c.user_id from account_credentials c join users u on u.id=c.user_id where u.email=${config.PLATFORM_ADMIN_EMAIL}`;
     const requestCode = await app.inject({
       method: "POST",
       url: "/v1/auth/request-code",
       payload: { email: config.PLATFORM_ADMIN_EMAIL },
     });
     requireStatus("request code", requestCode.statusCode, 202);
+    if (registered) {
+      if (issuedCode) throw new Error("Registered account unexpectedly received a legacy sign-in code");
+      requireStatus("anonymous session", (await app.inject({method:"GET",url:"/v1/auth/session"})).statusCode, 401);
+      requireStatus("anonymous workspace", (await app.inject({method:"GET",url:"/v1/workspace"})).statusCode, 401);
+      requireStatus("legacy sign-in denied", (await app.inject({method:"POST",url:"/v1/auth/verify-code",payload:{email:config.PLATFORM_ADMIN_EMAIL,code:"000000"}})).statusCode, 400);
+      return "registered-account";
+    }
     if (!issuedCode) throw new Error("Preview smoke did not receive its generated access code");
 
     const verifyCode = await app.inject({
@@ -70,7 +78,7 @@ export async function runPreviewSmoke(environment: NodeJS.ProcessEnv = process.e
 
     const revoked = await app.inject({ method: "GET", url: "/v1/auth/session", headers: { cookie: cookies.cookie } });
     requireStatus("revoked session", revoked.statusCode, 401);
-    return true;
+    return "legacy-session";
   } finally {
     await app.close();
     await database.end();
@@ -79,9 +87,9 @@ export async function runPreviewSmoke(environment: NodeJS.ProcessEnv = process.e
 
 if (import.meta.url === `file://${process.argv[1]}`) {
   runPreviewSmoke()
-    .then((ran) => process.stdout.write(ran
-      ? "Preview smoke passed: database, login, session, workspace, CSRF and logout.\n"
-      : "Preview smoke skipped.\n"))
+    .then((ran) => process.stdout.write(ran === "registered-account"
+      ? "Preview smoke passed: database, anonymous access denied, legacy email sign-in denied for registered account. Password/TOTP and real email are not tested by this build.\n"
+      : ran === "legacy-session" ? "Preview smoke passed: database, injected legacy login, session, workspace, CSRF and logout. Real email and account/TOTP are not tested by this build.\n" : "Preview smoke skipped.\n"))
     .catch((error) => {
       process.stderr.write(`${error instanceof Error ? error.stack : String(error)}\n`);
       process.exitCode = 1;

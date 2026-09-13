@@ -112,3 +112,5 @@ function actionArguments(tool: string, context: CopilotContext): Record<string, 
   if (tool === "reservation.follow_up") return { scope: "at_risk", channel: "sms" };
   return {};
 }
+
+export { assessService, serviceAssessmentText, type ServiceAssessment, type ServiceContext } from './service-assessment.js';

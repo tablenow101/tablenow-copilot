@@ -48,6 +48,7 @@ import {
   SmtpEmailSender,
   type Database,
   type EmailSender,
+  type ModelProvider,
 } from "@tablenow/provider-adapters";
 import { getConfig } from "./environment.js";
 import { assertAllowedOrigin, authGuard, clearSessionCookies, cookieNames, setSessionCookies } from "./auth.js";
@@ -64,6 +65,7 @@ import "./types.js";
 export interface AppDependencies {
   database?: Database;
   email?: EmailSender;
+  model?: ModelProvider;
 }
 
 export async function buildApp(dependencies: AppDependencies = {}): Promise<FastifyInstance> {
@@ -76,13 +78,13 @@ export async function buildApp(dependencies: AppDependencies = {}): Promise<Fast
   const exportStore = new FileExportStore(config.EXPORTS_DIR, config.STORAGE_ENCRYPTION_KEY);
   const evidenceStore = new FileEvidenceStore(config.COMPUTER_EVIDENCE_DIR, config.STORAGE_ENCRYPTION_KEY);
   const computerUse = new ComputerUseRepository(database, config.SESSION_SECRET);
-  const modelProvider = config.AI_PROVIDER === "openai-compatible" && config.AI_BASE_URL
+  const modelProvider = dependencies.model ?? (config.AI_PROVIDER === "openai-compatible" && config.AI_BASE_URL
     ? new OpenAICompatibleProvider({
         baseUrl: config.AI_BASE_URL,
         model: config.AI_MODEL,
         ...(config.AI_API_KEY ? { apiKey: config.AI_API_KEY } : {}),
       })
-    : undefined;
+    : undefined);
   const agent = new AgentRuntime(modelProvider, {
     assertAvailable: (tenantId, estimatedCostEur) => repository.assertAgentBudget(tenantId, estimatedCostEur, config.AI_MAX_DAILY_EUR),
   });
@@ -420,6 +422,14 @@ const eventParams = z.object({ eventId: z.string().regex(/^\d+$/) });
 const onboardingQuery = z.object({ restaurantId: z.uuid().optional() }).strict();
 
 const errorMap: Record<string, { status: number; message: string }> = {
+  COPILOT_KEY_CONFLICT: {status:409,message:"Cette demande a changé. Envoyez-la comme une nouvelle demande."},
+  COPILOT_RUNNING: {status:409,message:"Votre demande est déjà en cours. Réessayez après sa fin."},
+  COPILOT_ATTEMPTS_EXHAUSTED: {status:409,message:"Cette demande a échoué après trois tentatives. Vérifiez les informations avant une nouvelle demande."},
+  COPILOT_TIMEOUT: {status:504,message:"Le délai de réponse est dépassé. Votre demande est conservée ; vous pouvez réessayer."},
+  COPILOT_LEASE_EXPIRED: {status:409,message:"Le délai de cette tentative est dépassé. Réessayez la demande conservée."},
+  COPILOT_OUTPUT_REJECTED: {status:502,message:"La réponse n’a pas passé les contrôles. Votre demande est conservée."},
+  COPILOT_PROVIDER_FAILED: {status:503,message:"Le conseil est indisponible. Votre demande est conservée ; réessayez."},
+  CONTEXT_TOO_LARGE: {status:422,message:"Trop de données pour une synthèse fiable de cette journée."},
   OWNER_CONFLICT: { status: 409, message: "Ces données ont changé. Actualisez avant de réessayer." },
   EMAIL_NOT_CONFIGURED: { status: 503, message: "L’envoi d’e-mails n’est pas configuré. Votre brouillon est conservé." },
   EMAIL_SEND_UNCERTAIN: { status: 409, message: "L’état de l’envoi doit être vérifié auprès du service mail. Aucun nouvel envoi automatique ne sera tenté." },

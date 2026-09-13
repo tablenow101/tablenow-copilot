@@ -38,13 +38,19 @@ export class PlatformRepository {
   public constructor(public readonly database: Database) {}
 
   public async sessionView(actor: AuthActor, csrfToken: string | undefined) {
+    // A seeded demo flag is not a completed owner profile. Never rewrite the
+    // existing workspace to recover this journey; derive completeness at read.
+    const profileComplete = actor.onboardingComplete && await withTenant(this.database, actor.tenantId, async tx => {
+      const [profile] = await tx`select id from onboarding_drafts where tenant_id=${actor.tenantId} and status='completed' and completed_at is not null limit 1`;
+      return Boolean(profile);
+    });
     return {
       user: { id: actor.userId, email: actor.email, displayName: actor.displayName },
       tenant: {
         id: actor.tenantId,
         name: actor.tenantName,
         slug: actor.tenantSlug,
-        onboardingComplete: actor.onboardingComplete,
+        onboardingComplete: Boolean(profileComplete),
       },
       membership: { role: actor.role },
       csrfToken: csrfToken || null,

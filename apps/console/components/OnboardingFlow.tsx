@@ -165,6 +165,10 @@ export function OnboardingFlow({ initialRestaurantId, initialSection }: { initia
       const query = restaurantId ? `?restaurantId=${encodeURIComponent(restaurantId)}` : "";
       const loaded = await api<OnboardingDraftView>(`/v1/onboarding${query}`);
       if (loadRequestRef.current !== requestId) return;
+      if (loaded.status === "completed" && !initialSection) {
+        router.replace("/today");
+        return;
+      }
       const loadedAnswers = mergeOnboardingAnswers(loaded.answers);
       const requestedSection = !initialNavigationUsedRef.current ? initialSection : undefined;
       const canOpenRequested = requestedSection

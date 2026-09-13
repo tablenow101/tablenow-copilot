@@ -1,18 +1,18 @@
-import { createDatabase, hashSecret, withTenant } from "@tablenow/provider-adapters";
+import { createDatabase, hashSecret, withTenant, type Database } from "@tablenow/provider-adapters";
 import { tenantSlug } from "@tablenow/domain";
 import { getConfig } from "./environment.js";
 import { ensureDemoWorkspace } from "./demo.js";
 import { ensureComputerUseDemo } from "./computer-use-demo.js";
 
-export async function seed(): Promise<void> {
+export async function seed(databaseOverride?: Database): Promise<void> {
   const config = getConfig();
-  const database = createDatabase(config.DATABASE_URL, 1);
+  const database = databaseOverride || createDatabase(config.DATABASE_URL, 1);
   try {
     const slug = tenantSlug("TableNow Lab");
     const deploymentMode = process.env.VERCEL === "1" ? "cloud" : "local";
     const [tenant] = await database<{ id: string }[]>`
       insert into tenants (name, slug, status, deployment_mode, onboarding_complete)
-      values ('TableNow Lab', ${slug}, 'pilot', ${deploymentMode}, true)
+      values ('TableNow Lab', ${slug}, 'pilot', ${deploymentMode}, false)
       on conflict (slug) do update set deployment_mode = excluded.deployment_mode, updated_at = now()
       returning id
     `;
@@ -20,35 +20,38 @@ export async function seed(): Promise<void> {
     const [user] = await database<{ id: string }[]>`
       insert into users (email, display_name)
       values (${config.PLATFORM_ADMIN_EMAIL}, 'TableNow Founder')
-      on conflict (email) do update set display_name = excluded.display_name
+      on conflict (email) do update set email = excluded.email
       returning id
     `;
     if (!user) throw new Error("Failed to seed user");
     await database`
       insert into memberships (tenant_id, user_id, role)
       values (${tenant.id}, ${user.id}, 'platform_admin')
-      on conflict (tenant_id, user_id) do update set role = 'platform_admin'
+      on conflict (tenant_id, user_id) do nothing
     `;
     await withTenant(database, tenant.id, async (transaction) => {
-      const [restaurant] = await transaction<{ id: string }[]>`
+      const [createdRestaurant] = await transaction<{ id: string }[]>`
         insert into restaurants (tenant_id, name, slug, address, phone, timezone, capacity, is_demo)
         values (${tenant.id}, 'Maison TableNow', 'maison-tablenow', '12 rue du Service, Paris', '+33100000000', 'Europe/Paris', 62, true)
-        on conflict (tenant_id, slug) do update set name = excluded.name
+        on conflict (tenant_id, slug) do nothing
         returning id
       `;
+      const restaurant = createdRestaurant || (await transaction<{ id: string }[]>`select id from restaurants where tenant_id=${tenant.id} and slug='maison-tablenow'`)[0];
       if (!restaurant) throw new Error("Failed to seed restaurant");
       await transaction`
         insert into onboarding_profiles (tenant_id, restaurant_id, owner_name, role_title, phone, address, timezone, service_goals, completed_at)
-        values (${tenant.id}, ${restaurant.id}, 'TableNow Founder', 'Direction', '+33100000000', '12 rue du Service, Paris', 'Europe/Paris', '["capture_demand","improve_service","group_visibility"]'::jsonb, now())
-        on conflict (tenant_id, restaurant_id) do update set completed_at = excluded.completed_at
+        values (${tenant.id}, ${restaurant.id}, 'TableNow Founder', 'Direction', '+33100000000', '12 rue du Service, Paris', 'Europe/Paris', '["capture_demand","improve_service","group_visibility"]'::jsonb, null)
+        on conflict (tenant_id, restaurant_id) do nothing
       `;
       await transaction`
         insert into privacy_preferences (tenant_id, user_id)
         values (${tenant.id}, ${user.id})
         on conflict (tenant_id, user_id) do nothing
       `;
-      await ensureDemoWorkspace(transaction, tenant.id, restaurant.id);
-      await ensureComputerUseDemo(transaction, tenant.id, restaurant.id, config.COMPUTER_SIMULATOR_URL, user.id);
+      if (createdRestaurant) {
+        await ensureDemoWorkspace(transaction, tenant.id, restaurant.id);
+        await ensureComputerUseDemo(transaction, tenant.id, restaurant.id, config.COMPUTER_SIMULATOR_URL, user.id);
+      }
     });
     if (config.TABLENOW_NODE_TOKEN) {
       await database`
@@ -66,7 +69,7 @@ export async function seed(): Promise<void> {
     }
     process.stdout.write(`Seeded private pilot admin: ${config.PLATFORM_ADMIN_EMAIL}\n`);
   } finally {
-    await database.end();
+    if (!databaseOverride) await database.end();
   }
 }
 

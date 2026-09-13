@@ -33,3 +33,5 @@
 - D-028 — 2026-09-13 : le propriétaire désigne `96v84r74c` comme référence produit et exclut explicitement `8qufwgirl`, issue de `main`. Toute reprise doit vérifier `product/stitch-functional-owner` et son commit, sans choisir le déploiement le plus récent du projet à l'aveugle. Les nouvelles URLs de redéploiement doivent provenir de la référence autorisée.
 
 - 2026-09-12 : import ciblé de la recherche et du préremplissage Google Places autorisé ; aucun autre module legacy importé. Voir `../11-status/google-places-import.md`. Adaptation locale testée ; activation Google réelle non attestée.
+
+- D-029 — 2026-09-13 : instruction de reprise jointe par le propriétaire : sauvegarder/pousser les changements pertinents, consulter toute la mémoire gouvernée et implémenter fondations hybrides et parcours propriétaire ; livraison par lots et Preview seule. Mémoire canonique 74–85 lue, historique préservé. L'autorisation d'orchestrer n'autorise aucun acte externe général, fournisseur payant ou exposition de mémoire privée. Contrats préalables et limites dans [hybrid-foundations-2026-09-13.md](../../docs/architecture/hybrid-foundations-2026-09-13.md).

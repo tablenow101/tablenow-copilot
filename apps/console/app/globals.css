@@ -1176,3 +1176,12 @@ button:disabled { cursor: not-allowed; opacity: .45; }
   .welcome-onboarding .final-onboarding-header { gap: 5px; }
   .welcome-onboarding .input-with-action input { font-size: 12px; }
 }
+
+/* Traceability uses the existing owner card and input styles in both themes. */
+.tn-copilot-evidence { margin-bottom: 1rem; overflow-wrap: anywhere; }
+.tn-copilot-evidence summary { cursor: pointer; padding: .75rem 0; }
+.tn-copilot-evidence article { padding: 1rem 0; border-top: 1px solid var(--line); }
+.tn-copilot-evidence form, .tn-copilot-evidence label { display: grid; gap: .6rem; }
+.tn-copilot-evidence form { max-width: 40rem; gap: 1rem; }
+.tn-copilot-evidence textarea, .tn-copilot-evidence select { width: 100%; min-height: 44px; font: inherit; color: inherit; background: transparent; border: 1px solid var(--line); border-radius: .5rem; padding: .65rem; }
+.tn-copilot-evidence textarea { min-height: 5rem; resize: vertical; }

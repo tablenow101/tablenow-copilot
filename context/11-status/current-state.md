@@ -1,3 +1,7 @@
+# Fondations hybrides — reprise du 13 septembre 2026
+
+GitHub CLI authentifié ; sauvegarde locale précédente poussée (`62648ee`). Mémoire canonique active et historique lus. Fondations en cours : récupération de contexte à droits réduits, connaissances communes évaluées/versionnées, missions persistantes et dédupliquées, sources/incertitudes, décisions et résultats du patron. Parcours corrigé pour ne pas confondre le drapeau du seed avec un onboarding finalisé ; seed rejoué sans écraser les corrections du propriétaire. Aucun nouveau fournisseur activé. Tests et Preview de ce lot en cours ; aucune certification utilisateur à ce stade. Voir [contrats et périmètre](../../docs/architecture/hybrid-foundations-2026-09-13.md).
+
 # Raccordement Resend — 13 septembre 2026
 
 Domaine `tablenow.io` vérifié, sept variables SMTP enregistrées pour la seule Preview de `product/stitch-functional-owner`, dont la clé sensible ajoutée par le propriétaire puis restreinte à la branche. Le redéploiement `jyp8smof5`, issu explicitement de la référence autorisée `96v84r74c`, est **READY** au commit `0d191dd`. L'écran d'inscription est accessible ; la saisie privée du mot de passe est confiée au propriétaire. Envoi réel, réception, TOTP, onboarding et cockpit ne sont pas encore validés. `8qufwgirl` (`main`) est explicitement exclu. Voir [l'état Resend](resend-preview-2026-09-13.md).
