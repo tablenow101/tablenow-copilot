@@ -1,3 +1,13 @@
+# Raccordement Resend — 13 septembre 2026
+
+Domaine `tablenow.io` vérifié, sept variables SMTP enregistrées pour la seule Preview de `product/stitch-functional-owner`, dont la clé sensible ajoutée par le propriétaire puis restreinte à la branche. Le redéploiement `jyp8smof5`, issu explicitement de la référence autorisée `96v84r74c`, est **READY** au commit `0d191dd`. L'écran d'inscription est accessible ; la saisie privée du mot de passe est confiée au propriétaire. Envoi réel, réception, TOTP, onboarding et cockpit ne sont pas encore validés. `8qufwgirl` (`main`) est explicitement exclu. Voir [l'état Resend](resend-preview-2026-09-13.md).
+
+## Historique avant raccordement SMTP
+
+# Reprise du déploiement Preview — 12 et 13 septembre 2026
+
+La Preview `dpl_3bkD3gAw5LZH9MaLxpn9YvvPQA2M` est **READY** sur `product/stitch-functional-owner`, commit `0d191dd34d4db2ef5078b414b7bacf408859d35d`, après correction de `OTP_PEPPER` limitée à cette branche. Accès Vercel normal établi ; navigation de compte et refus de connexion testés sur desktop/mobile. Le parcours nouveau propriétaire reste **BLOCKED** : transport d'e-mail absent, réponses 503 observées. E-mail reçu, TOTP, onboarding et cockpit **NOT_RUN**. Production et legacy inchangés. Voir [la reprise](deployment-resume-2026-09-12.md) et [la recette avec captures](../../docs/qa/deployment-2026-09-13/report.md).
+
 # Reprise locale — boucle de corrections du 12 septembre 2026
 
 Voir [le reporting de corrections](correction-loop-2026-09-12.md). Des régressions ont été reproduites puis corrigées sur l'authentification, les contrôles métier et l'onboarding. Une passe indépendante sans cache a exécuté 162 tests réussis et quatre ignorés ; elle ne constitue ni 100 parcours réels ni une attestation de livraison. Le navigateur local est bloqué par deux timeouts du téléchargement officiel de Chromium. Aucun déploiement, push ou envoi réel n'a été réalisé pendant cette reprise. Le rapport détaille le périmètre exact de la dernière relance.

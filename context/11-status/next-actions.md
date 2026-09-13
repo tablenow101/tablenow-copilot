@@ -1,4 +1,20 @@
-# Prochaines actions — recette propriétaire
+# Prochaine action — recette Resend, 13 septembre 2026
+
+1. Terminer l'inscription normale sur la [Preview SMTP issue de 96v84r74c](https://tablenow-copilot-v2-jyp8smof5-tablenow101.vercel.app/register), avec saisie privée du mot de passe par le propriétaire.
+2. Vérifier l'envoi applicatif vers `bryanduvalpro@gmail.com`, demander sa confirmation de réception réelle et lui laisser saisir le code dans l'interface.
+3. Poursuivre TOTP, onboarding et cockpit sur ordinateur/mobile avec preuves distinctes. Si le compte pilote existe déjà, suivre la récupération normale et distinguer ce parcours de l'inscription d'un nouvel utilisateur.
+
+Voir [l'état Resend](resend-preview-2026-09-13.md). La référence `8qufwgirl` est exclue. Aucune production ni application historique à modifier.
+
+## Séquence avant autorisation Resend — 13 septembre 2026
+
+La correction `OTP_PEPPER`, le déploiement READY et l'accès normal à la Preview sont vérifiés. Le blocage actuel est l'e-mail de compte absent, pas l'authentification Vercel. Voir [la recette et ses limites](../../docs/qa/deployment-2026-09-13/report.md).
+
+1. Définir et autoriser le fournisseur d'e-mail, l'expéditeur, les secrets Preview et le destinataire de test avant toute nouvelle configuration SMTP ; ce chantier n'a pas été entrepris pendant cette passe.
+2. Après raccordement autorisé, vérifier l'envoi et la réception réelle, puis terminer inscription, second facteur, reconnexion et récupération par les écrans normaux.
+3. Rejouer l'onboarding jusqu'au premier résultat et au cockpit sur ordinateur/mobile, avec preuves de persistance, reprise et verdict produit. Ne promouvoir aucune version avant recette complète.
+
+## Séquence antérieure — recette propriétaire
 
 1. Reprendre [le bilan du 12 septembre](owner-build-2026-09-12.md) et [la recette détaillée](../../docs/product/OWNER_DELIVERY.fr.md).
 2. Vérifier la Preview de `product/stitch-functional-owner`, sa branche Neon distincte, sa migration 007 et les contrôles GitHub. Ne pas promouvoir ni contourner les protections si une étape bloque.
