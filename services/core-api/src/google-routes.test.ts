@@ -2,8 +2,8 @@ import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import type { FastifyInstance } from "fastify";
 import type { Database } from "@tablenow/provider-adapters";
 import { createTestDatabase } from "./testing/pglite.js";
-import { totpAt, passwordHash, passwordMatches, seal, newTotpSecret } from "./account-crypto.js";
-import { googleConfiguration, googlePreviewOrigin, type GoogleExchange } from "./google-identity.js";
+import { totpAt, passwordHash, passwordMatches, seal, unseal, newTotpSecret } from "./account-crypto.js";
+import { googleConfiguration, googlePreviewOrigin, googleStablePreviewOrigin, googleCallbackConfiguration, type GoogleExchange } from "./google-identity.js";
 
 let app: FastifyInstance, database: Database, n = 1;
 const exchange = vi.fn<GoogleExchange>();
@@ -43,10 +43,20 @@ describe("Google Preview authentication", () => {
   it("fails closed outside the approved Preview branch and without complete credentials", () => {
     const env = { APP_ENV: "preview", VERCEL: "1", VERCEL_ENV: "preview", VERCEL_GIT_COMMIT_REF: "product/stitch-functional-owner", GOOGLE_OAUTH_CLIENT_ID: "id", GOOGLE_OAUTH_CLIENT_SECRET: "secret" };
     expect(googleConfiguration(env)?.origin).toBe(googlePreviewOrigin);
+    expect(googleConfiguration({ ...env, PUBLIC_ORIGIN: googleStablePreviewOrigin })?.origin).toBe(googleStablePreviewOrigin);
+    expect(googleConfiguration({ ...env, PUBLIC_ORIGIN: "https://app.tablenow.io" })?.origin).toBe(googlePreviewOrigin);
     expect(googleConfiguration({ ...env, APP_ENV: "production" })).toBeNull();
     expect(googleConfiguration({ ...env, VERCEL_ENV: "production" })).toBeNull();
     expect(googleConfiguration({ ...env, VERCEL_GIT_COMMIT_REF: "main" })).toBeNull();
     expect(googleConfiguration({ ...env, GOOGLE_OAUTH_CLIENT_SECRET: "" })).toBeNull();
+  });
+  it("allows only the two approved callback hosts during the domain transition", () => {
+    const config = { clientId: "fixture", clientSecret: "fixture", origin: googleStablePreviewOrigin };
+    expect(googleCallbackConfiguration(config, "copilot.tablenow.io")?.origin).toBe(googleStablePreviewOrigin);
+    expect(googleCallbackConfiguration(config, new URL(googlePreviewOrigin).host)?.origin).toBe(googlePreviewOrigin);
+    for (const host of ["app.tablenow.io", "tablenow.io", "copilot.tablenow.io.attacker.test", "copilot.tablenow.io:444", "localhost:3000"]) {
+      expect(googleCallbackConfiguration(config, host)).toBeNull();
+    }
   });
   it("rejects missing browser binding, forged state, cancellation, expiry and replay before exchanging codes", async () => {
     const s = await start();
@@ -57,6 +67,16 @@ describe("Google Preview authentication", () => {
     const expired = await start();
     await database`update google_login_attempts set expires_at=now()-interval '1 second'`;
     expect((await get(`/v1/oauth/google/callback?state=${expired.state}&code=fixture`, expired.cookie)).headers.location).toContain("google=error");
+    expect(exchange.mock.calls).toHaveLength(calls);
+  });
+  it("rejects an attempt returned on an origin different from its sealed redirect", async () => {
+    const s = await start();
+    const calls = exchange.mock.calls.length;
+    const [row] = await database<{ state_hash: string; payload: string }[]>`select state_hash,payload from google_login_attempts order by expires_at desc limit 1`;
+    const payload = unseal<Record<string, unknown>>(row!.payload, "s".repeat(48));
+    await database`update google_login_attempts set payload=${seal({ ...payload, origin: googleStablePreviewOrigin }, "s".repeat(48))} where state_hash=${row!.state_hash}`;
+    const response = await get(`/v1/oauth/google/callback?state=${s.state}&code=fixture`, s.cookie);
+    expect(response.headers.location).toBe("http://localhost:3000/login?google=error");
     expect(exchange.mock.calls).toHaveLength(calls);
   });
   it("creates no account or session until the new Google owner proves TOTP; respects transient cookies", async () => {

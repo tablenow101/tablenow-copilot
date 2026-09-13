@@ -1,3 +1,11 @@
+# Recette de copilot.tablenow.io — 14 septembre 2026
+
+Publier les corrections sur la branche autorisée, vérifier le commit réellement servi et jouer les parcours sur la nouvelle adresse. Laisser l'onglet ouvert pour les saisies privées ; préserver comptes, TOTP et brouillons. Contrôler textes/périmètre puis finalisation, résultat enregistré, cockpit et mobile. Réception e-mail à confirmer par le propriétaire ; trois logos officiels encore manquants. [Rapport du lot](../../docs/qa/stable-preview-2026-09-14.md). Les entrées suivantes sont historiques.
+
+# Après connexion réussie — attente du retour produit du propriétaire
+
+Google et TOTP ont permis d'atteindre l'onboarding ; ne pas relancer l'authentification. Laisser l'onglet et le brouillon à disposition du propriétaire. Il transmet [le compte rendu](../../docs/qa/compte-rendu-chatgpt-2026-09-13.md) à ChatGPT puis revient avec un rapport. Comparer ensuite l'expérience attendue au rendu avant toute correction produit ; finir onboarding/cockpit et recette mobile après clarification. Les séquences ci-dessous décrivent les états antérieurs.
+
 # Google + TOTP — prochaine étape
 
 Client Google isolé et variables Preview configurés, code publié et retour Google réel vérifié. Reprendre le propriétaire après sa saisie privée du TOTP sur l'alias Preview de `product/stitch-functional-owner` ; si la vérification a expiré, recommencer par le bouton Google. Conserver les codes de secours puis jouer onboarding complet et cockpit ; tester aussi le profil complet existant et le mobile. Le compte Google actuellement sélectionné est `radwan.arbane@gmail.com`, nouveau profil distinct du compte de recette `bryanduvalpro@gmail.com`. Ne pas fusionner les comptes ni modifier le profil existant pour simuler un succès. [Rapport](../../docs/qa/google-preview-2026-09-13/report.md).

@@ -1,5 +1,9 @@
 # Google + TOTP — Copilot Preview
 
+## Actualisation — 13 septembre 2026, 22:40 UTC
+
+Le propriétaire a terminé la saisie privée du TOTP et atteint `/onboarding`, observé en lecture seule. SQL Preview confirme le compte actif Radwan, ses identifiants, sa liaison Google et une session non expirée ; le brouillon onboarding est en section `establishment`, révision 10, non finalisé. **VERIFIED** : Google → TOTP → compte/session → arrivée onboarding. **NOT_RUN** : onboarding complet/cockpit et Google mobile ; conservation privée des codes de secours non attestée. Le précédent blocage TOTP ci-dessous est historique. Le propriétaire précise qu'il n'avait pas le temps de tester ; les onglets doivent être conservés pour lui, ce qui a été corrigé par une remise explicite de l'onglet. Il demande désormais une revue de la présentation onboarding dans ChatGPT : [compte rendu complet](../compte-rendu-chatgpt-2026-09-13.md). Aucun changement fonctionnel pour ce compte rendu.
+
 ## Périmètre et décisions
 
 Le propriétaire autorise Google en Preview sur `product/stitch-functional-owner`, avec les comptes et protections existants conservés. Il confirme ensuite le maintien du TOTP et délègue le choix du meilleur périmètre d'isolation. Apple reste hors de ce lot.
@@ -51,6 +55,17 @@ Persona : propriétaire découvrant la connexion Google. Environnement : alias P
 6. Écran public `/register` également vérifié : Google actif, champs vides, aucun débordement desktop ; capture `preview-desktop-register.png`.
 
 Verdict du parcours complet : **BLOCKED** à la saisie privée du TOTP. **VERIFIED** : bouton → Google → consentement → retour TableNow. **NOT_RUN** : validation réelle du TOTP, conservation des codes de secours, onboarding complet, cockpit d'un profil complet et parcours mobile. Les tests automatisés de ces destinations ne remplacent pas cette recette réelle. Ne pas déclarer le parcours livré ou certifié avant sa fin.
+
+## Diagnostic apres le retour du proprietaire
+
+Le 13 septembre à 22:25 UTC, le propriétaire indique avoir utilisé « Continuer avec Google » et ne pas avoir pu terminer. Lecture seule de Neon Preview, sans lecture des secrets ou contenus scellés :
+
+- Profil Radwan : challenge `enroll` créé à 22:13:34 UTC, zéro tentative TOTP enregistrée, non consommé, expiration 22:23:34 UTC. Aucun utilisateur créé pour cette adresse.
+- Même adresse : autre challenge `email` à 22:17:42 UTC, deux essais, non consommé, toujours au stade e-mail. La cause précise n'est pas déductible de ces métadonnées : le code rejette également une récupération pour un utilisateur inexistant, même après un code correct.
+- Profil Bryan : utilisateur actif avec identifiants existants, aucune liaison Google. Les deux adresses représentent des identités distinctes ; ne pas fusionner ni réinitialiser les facteurs implicitement.
+- Vercel : alias stable de branche READY sur `f0e98b9119f585b466ab639afceca8e2af59cc97`, déploiement `dpl_E9wYLpf1BhbkHSrE6KhX45NjJJJc`. Navigateur : seul Google Cloud Audience reste ouvert au moment du contrôle.
+
+Le précédent lien `/login?google=continue` dépendait d'une vérification de dix minutes : il ne constitue pas une entrée durable. Aucun nouveau parcours, e-mail ou changement de configuration lancé pendant ce diagnostic. Verdict complet **BLOCKED** ; problème de compréhension produit signalé par le propriétaire, aucune certification. Clarifier le compte souhaité puis accompagner une seule tentative depuis l'entrée stable, sans code partagé dans le chat.
 
 ## Références officielles
 
