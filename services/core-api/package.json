@@ -45,7 +45,7 @@
   "devDependencies": {
     "@electric-sql/pglite": "^0.5.8",
     "rimraf": "^6.1.2",
-    "tsx": "^4.23.12",
+    "tsx": "^4.23.13",
     "vitest": "^4.1.11"
   }
 }
