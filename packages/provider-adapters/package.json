@@ -19,9 +19,9 @@
     "clean": "rimraf dist"
   },
   "dependencies": {
-    "nodemailer": "^9.0.5",
+    "nodemailer": "^9.1.1",
     "postgres": "^3.4.9",
-    "zod": "^4.4.3"
+    "zod": "^4.6.2"
   },
   "devDependencies": {
     "@types/nodemailer": "^7.0.4",
