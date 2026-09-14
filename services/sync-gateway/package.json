@@ -19,9 +19,9 @@
     "@tablenow/contracts": "workspace:*",
     "@tablenow/provider-adapters": "workspace:*",
     "dotenv": "^17.3.1",
-    "fastify": "^5.12.1",
+    "fastify": "^5.12.3",
     "postgres": "^3.4.9",
-    "zod": "^4.4.3"
+    "zod": "^4.6.2"
   },
   "devDependencies": {
     "rimraf": "^6.1.2",

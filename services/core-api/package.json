@@ -37,10 +37,10 @@
     "@tablenow/domain": "workspace:*",
     "@tablenow/provider-adapters": "workspace:*",
     "dotenv": "^17.3.1",
-    "fastify": "^5.12.1",
+    "fastify": "^5.12.3",
     "pino": "^10.3.1",
     "postgres": "^3.4.9",
-    "zod": "^4.4.3"
+    "zod": "^4.6.2"
   },
   "devDependencies": {
     "@electric-sql/pglite": "^0.5.8",
