@@ -18,14 +18,14 @@ export function useSession(options: { requireOnboarding?: boolean; allowComplete
     setError(null);
     if (isPublicPilotRuntime()) {
       setSession(publicPilotSession);
-      if (options.requireOnboarding === true) router.replace("/today");
+      if (options.requireOnboarding === true) router.replace("/dashboard");
       setLoading(false);
       return publicPilotSession;
     }
     try {
       const next = await api<Session>("/v1/auth/session");
       setSession(next);
-      if (options.requireOnboarding === true && next.tenant.onboardingComplete && !options.allowCompletedOnboarding) router.replace("/today");
+      if (options.requireOnboarding === true && next.tenant.onboardingComplete && !options.allowCompletedOnboarding) router.replace("/dashboard");
       if (options.requireOnboarding !== true && !next.tenant.onboardingComplete) router.replace("/onboarding");
       return next;
     } catch (caught) {

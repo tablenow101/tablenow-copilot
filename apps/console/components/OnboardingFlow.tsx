@@ -432,7 +432,7 @@ export function OnboardingFlow({ initialRestaurantId, initialSection }: { initia
         }),
       });
       await refreshSession();
-      router.replace("/today");
+      router.replace("/dashboard");
       router.refresh();
     } catch (caught) {
       setError(onboardingErrorMessage(caught, copy, "complete"));
@@ -546,7 +546,7 @@ export function OnboardingFlow({ initialRestaurantId, initialSection }: { initia
   return <main className={`onboarding-layout final-onboarding theme-${answers.interaction.theme}${isWelcome ? " welcome-onboarding" : ""}`} dir={copy.direction} lang={locale}>
     <div className={isWelcome ? "welcome-frame" : undefined}>
     <header className="onboarding-header final-onboarding-header">
-      <Link href="/today" aria-label="TableNow"><Brand /></Link>
+      <Link href="/dashboard" aria-label="TableNow"><Brand /></Link>
       {isWelcome && <span className="welcome-stage"><i />{copy.sections.establishment}</span>}
       {draft.restaurants.length > 1 && <label className="restaurant-switcher"><Building2 size={14} /><span className="sr-only">{copy.common.selectRestaurant}</span><select value={draft.restaurantId} onChange={(event) => void changeRestaurant(event.target.value)}>{draft.restaurants.map((restaurant) => <option key={restaurant.id} value={restaurant.id}>{restaurant.name}</option>)}</select></label>}
       <div className="onboarding-top-controls">

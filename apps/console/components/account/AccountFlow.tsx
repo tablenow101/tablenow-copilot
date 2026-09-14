@@ -37,7 +37,7 @@ export function AccountFlow({ mode }: { mode: Mode }) {
 
   async function enterApp() {
     const session = await api<{ tenant: { onboardingComplete: boolean } }>("/v1/auth/session");
-    router.replace(session.tenant.onboardingComplete ? "/today" : "/onboarding");
+    router.replace(session.tenant.onboardingComplete ? "/dashboard" : "/onboarding");
     router.refresh();
   }
   useEffect(() => {
@@ -54,7 +54,7 @@ export function AccountFlow({ mode }: { mode: Mode }) {
       return () => { live = false; };
     }
     void api<{ tenant: { onboardingComplete: boolean } }>("/v1/auth/session").then(session => {
-      if (live && !started.current) router.replace(session.tenant.onboardingComplete ? "/today" : "/onboarding");
+      if (live && !started.current) router.replace(session.tenant.onboardingComplete ? "/dashboard" : "/onboarding");
     }).catch(() => undefined);
     return () => { live = false; };
   }, [router]);

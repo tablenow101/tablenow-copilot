@@ -29,9 +29,10 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import type { Session, Workspace } from "@/lib/types";
 import { api } from "@/lib/api";
 import { isPublicPilotRuntime } from "@/lib/public-pilot-host";
+import { Brand } from "./Brand";
 
 const nav = [
-  { key: "today", href: "/today", label: "Aujourd'hui", icon: Activity },
+  { key: "dashboard", href: "/dashboard", label: "Aujourd'hui", icon: Activity },
   { key: "communications", href: "/communications", label: "Communications", icon: MessageSquareText },
   { key: "reservations", href: "/reservations", label: "Réservations", icon: CalendarDays },
   { key: "operations", href: "/operations", label: "Opérations", icon: ClipboardCheck },
@@ -125,9 +126,8 @@ export function AppChrome({
   return (
     <div className="product-root">
       <aside className="sidebar">
-        <Link className="logo-lockup" href="/today" aria-label="TableNow — Aujourd'hui">
-          <span className="brand-mark brand-mark-small">T<span>N</span></span>
-          <span>TableNow<small>Operating Copilot</small></span>
+        <Link className="logo-lockup" href="/dashboard" aria-label="TableNow — Aujourd'hui">
+          <Brand />
         </Link>
         <nav className="main-nav" aria-label="Navigation produit">
           {nav.map((item) => {
@@ -136,7 +136,7 @@ export function AppChrome({
           })}
         </nav>
         <div className="sidebar-divider" />
-        <Link href="/copilot" className={`copilot-nav ${active === "copilot" ? "active" : ""}`}><Sparkles size={17} /><span>TableNow Copilot</span><i>AI</i></Link>
+        <Link href="/copilot" className={`copilot-nav ${active === "copilot" ? "active" : ""}`}><Sparkles size={17} /><span>TableNow OS</span><i>AI</i></Link>
         <div className="sidebar-spacer" />
         {session.membership.role === "platform_admin" && <Link href="/admin/pilots" className={active === "admin" ? "utility-active" : ""}><Settings2 size={16} /> Pilotes privés</Link>}
         <Link href="/privacy" className={active === "privacy" ? "utility-active" : ""}><ShieldCheck size={16} /> Confidentialité</Link>
@@ -154,7 +154,7 @@ export function AppChrome({
             {onRefresh && <button className="icon-button" onClick={onRefresh} aria-label="Actualiser" title="Actualiser"><RefreshCw size={16} className={refreshing ? "spinning" : ""} /></button>}
             <div className="topbar-menu-anchor">
               <button className="icon-button notification-button" onClick={() => setMenu(menu === "notifications" ? null : "notifications")} aria-label={`Notifications${notifications.length ? `, ${notifications.length} non lues` : ""}`} aria-expanded={menu === "notifications"} aria-controls="notifications-popover"><Bell size={16} />{notifications.length > 0 && <i />}</button>
-              {menu === "notifications" && <div id="notifications-popover" className="topbar-popover notifications-popover" role="region" aria-label="Notifications"><header><strong>À traiter</strong><span>{notifications.length}</span></header>{notifications.length ? notifications.map((notification) => <Link href={notification.href} key={notification.id} onClick={() => setMenu(null)}><span><strong>{notification.title}</strong><small>{notification.detail}</small></span><ArrowRight size={14} /></Link>) : <p>Rien ne demande votre attention.</p>}<Link className="popover-footer" href="/today" onClick={() => setMenu(null)}>Ouvrir le cockpit <ArrowRight size={14} /></Link></div>}
+              {menu === "notifications" && <div id="notifications-popover" className="topbar-popover notifications-popover" role="region" aria-label="Notifications"><header><strong>À traiter</strong><span>{notifications.length}</span></header>{notifications.length ? notifications.map((notification) => <Link href={notification.href} key={notification.id} onClick={() => setMenu(null)}><span><strong>{notification.title}</strong><small>{notification.detail}</small></span><ArrowRight size={14} /></Link>) : <p>Rien ne demande votre attention.</p>}<Link className="popover-footer" href="/dashboard" onClick={() => setMenu(null)}>Ouvrir le cockpit <ArrowRight size={14} /></Link></div>}
             </div>
             <div className="topbar-menu-anchor">
               <button className="profile-chip" onClick={() => setMenu(menu === "profile" ? null : "profile")} aria-expanded={menu === "profile"} aria-controls="profile-popover"><span>{initials(session.user.displayName || session.user.email)}</span><div><strong>{session.user.displayName || "Direction"}</strong><small>{roleLabel(session.membership.role)}</small></div><ChevronDown size={13} /></button>

@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { ArrowLeft, Bot, Cookie, FileCheck2, Landmark, Scale, ShieldCheck } from "lucide-react";
+import { Brand } from "./Brand";
 
 export type LegalDocumentKey = "privacy" | "cookies" | "terms" | "dpa" | "legal-notice" | "ai-transparency";
 
@@ -57,9 +58,9 @@ const documents: Record<LegalDocumentKey, LegalDocumentDefinition> = {
     ],
   },
   terms: {
-    title: "Conditions du pilote privé",
-    kicker: "Version pilot-2026-08-23",
-    summary: "Règles d'accès et d'utilisation de la bêta privée TableNow Copilot.",
+    title: "Conditions d’utilisation",
+    kicker: "TableNow OS · version en vigueur",
+    summary: "Règles d’accès et d’utilisation de TableNow OS.",
     icon: Scale,
     sections: [
       { title: "1. Parties et objet", paragraphs: [`Le pilote est fourni par ${company.name}, ${company.form}, ${company.address}, au restaurant ou groupe ayant accepté une invitation privée. Il permet d'évaluer le cockpit TableNow sur des données de démonstration ou des données volontairement configurées.`] },
@@ -74,7 +75,7 @@ const documents: Record<LegalDocumentKey, LegalDocumentDefinition> = {
   },
   dpa: {
     title: "Accord de traitement des données",
-    kicker: "Article 28 RGPD · version pilot-2026-08-23",
+    kicker: "Article 28 RGPD · version en vigueur",
     summary: "Cadre dans lequel TableNow traite les données des clients et collaborateurs pour le compte du restaurant.",
     icon: FileCheck2,
     sections: [
@@ -100,9 +101,9 @@ const documents: Record<LegalDocumentKey, LegalDocumentDefinition> = {
     ],
   },
   "ai-transparency": {
-    title: "Transparence du copilote IA",
+    title: "Transparence de l’IA TableNow",
     kicker: "Contrôle humain par conception",
-    summary: "Ce que le copilote peut faire, ce qu'il ne fait jamais seul et comment ses actions sont tracées.",
+    summary: "Ce que TableNow peut analyser, ses limites et la manière dont ses recommandations sont tracées.",
     icon: Bot,
     sections: [
       { title: "Fonctionnement", paragraphs: ["Le copilote analyse uniquement les informations accessibles au rôle connecté, explique les signaux utilisés et peut proposer une action structurée. Le moteur de règles TableNow décide ensuite si une validation humaine est obligatoire."] },
@@ -125,14 +126,14 @@ export function LegalDocument({ documentKey }: { documentKey: LegalDocumentKey }
   const document = documents[documentKey];
   const Icon = document.icon;
   const incomplete = Object.values(company).some((value) => value.includes("À COMPLÉTER"));
-  return <main className="legal-layout"><header className="legal-topbar"><Link href="/login" className="logo-lockup"><span className="brand-mark brand-mark-small">T<span>N</span></span><span>TableNow<small>Confiance & conformité</small></span></Link><Link href="/login" className="back-link"><ArrowLeft size={15} /> Retour à l'application</Link></header><div className="legal-shell"><aside className="legal-index"><span className="eyebrow">Documents du pilote</span><nav>{legalLinks.map(([key, label]) => <Link key={key} href={`/legal/${key}`} className={documentKey === key ? "active" : ""}>{label}</Link>)}</nav><p>Version pilote<br />23 août 2026</p></aside><article className="legal-document"><div className="legal-hero"><span><Icon size={22} /></span><p>{document.kicker}</p><h1>{document.title}</h1><strong>{document.summary}</strong></div>{incomplete && <div className="legal-warning"><ShieldCheck size={18} /><p><strong>Document opérationnel avec identité à finaliser.</strong> Les protections, finalités et procédures sont définies ; les champs société entre crochets doivent être remplacés avant ouverture publique ou signature définitive.</p></div>}{document.sections.map((section) => <section key={section.title}><h2>{section.title}</h2>{section.paragraphs?.map((paragraph) => <p key={paragraph}>{paragraph}</p>)}{section.items && <ul>{section.items.map((item) => <li key={item}>{item}</li>)}</ul>}</section>)}<footer><p>Questions ou exercice de droits : <a href="mailto:privacy@tablenow.io">privacy@tablenow.io</a></p><Link href="/legal/ai-transparency">Comprendre le copilote IA →</Link></footer></article></div></main>;
+  return <main className="legal-layout"><header className="legal-topbar"><Link href="/login" aria-label="TableNow OS"><Brand /></Link><Link href="/login" className="back-link"><ArrowLeft size={15} /> Retour à l'application</Link></header><div className="legal-shell"><aside className="legal-index"><span className="eyebrow">Informations juridiques</span><nav>{legalLinks.map(([key, label]) => <Link key={key} href={`/legal/${key}`} className={documentKey === key ? "active" : ""}>{label}</Link>)}</nav></aside><article className="legal-document"><div className="legal-hero"><span><Icon size={22} /></span><p>{document.kicker}</p><h1>{document.title}</h1><strong>{document.summary}</strong></div>{incomplete && <div className="legal-warning"><ShieldCheck size={18} /><p><strong>Document opérationnel avec identité à finaliser.</strong> Les protections, finalités et procédures sont définies ; les champs société entre crochets doivent être remplacés avant ouverture publique ou signature définitive.</p></div>}{document.sections.map((section) => <section key={section.title}><h2>{section.title}</h2>{section.paragraphs?.map((paragraph) => <p key={paragraph}>{paragraph}</p>)}{section.items && <ul>{section.items.map((item) => <li key={item}>{item}</li>)}</ul>}</section>)}<footer><p>Questions ou exercice de droits : <a href="mailto:privacy@tablenow.io">privacy@tablenow.io</a></p><Link href="/legal/ai-transparency">Comprendre TableNow OS →</Link></footer></article></div></main>;
 }
 
 const legalLinks: Array<[LegalDocumentKey, string]> = [
   ["privacy", "Confidentialité"],
   ["cookies", "Cookies"],
-  ["terms", "Conditions du pilote"],
+  ["terms", "Conditions d’utilisation"],
   ["dpa", "DPA · traitement des données"],
-  ["ai-transparency", "Transparence IA"],
+  ["ai-transparency", "Transparence de l’IA"],
   ["legal-notice", "Mentions légales"],
 ];

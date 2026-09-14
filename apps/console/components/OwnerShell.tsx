@@ -67,7 +67,7 @@ import { ConversationInput } from "./ConversationInput";
 import { CopilotEvidence } from "./CopilotEvidence";
 
 const mainNav = [
-  { key: "today", label: "Aujourd’hui", icon: Activity },
+  { key: "dashboard", label: "Aujourd’hui", icon: Activity },
   { key: "decisions", label: "Décisions", icon: ListChecks },
   { key: "communications", label: "Communications", icon: MessageSquareText },
   { key: "service", label: "Service & salle", icon: UtensilsCrossed },
@@ -99,7 +99,7 @@ type Modal =
     }
   | { kind: "send"; id: string; recipient: string; body: string };
 const titles: Record<string, [string, string]> = {
-  today: [
+  dashboard: [
     "Le service, sous contrôle.",
     "Vos priorités. Les bonnes décisions. Au bon moment.",
   ],
@@ -134,8 +134,8 @@ export function OwnerShell({ section }: { section: string }) {
     (
       {
         reservations: "service",
-        operations: "today",
-        performance: "today",
+        operations: "dashboard",
+        performance: "dashboard",
         locations: "profile",
         systems: "profile",
       } as Record<string, string>
@@ -239,7 +239,7 @@ export function OwnerShell({ section }: { section: string }) {
     (item) => item.restaurantId === restaurantId,
   );
   const open = (scoped?.decisions || []).filter((d) => d.status === "open");
-  const [title, subtitle] = titles[active] || titles.today!;
+  const [title, subtitle] = titles[active] || titles.dashboard!;
 
   function openModal(next: Modal) {
     draftRequestId.current = crypto.randomUUID();
@@ -449,7 +449,7 @@ export function OwnerShell({ section }: { section: string }) {
         Aller au contenu
       </a>
       <header className="tn-topbar">
-        <Link href="/today" aria-label="TableNow — Aujourd’hui">
+        <Link href="/dashboard" aria-label="TableNow — Aujourd’hui">
           <Brand />
         </Link>
         <nav className="tn-desktop-nav" aria-label="Navigation principale">
@@ -560,7 +560,7 @@ export function OwnerShell({ section }: { section: string }) {
             </button>
           </div>
         )}
-        {active === "today" && (
+        {active === "dashboard" && (
           <>
             <div className="tn-tabs" aria-label="Moment du service">
               {[

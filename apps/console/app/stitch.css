@@ -1647,3 +1647,23 @@
     scroll-behavior: auto !important;
   }
 }
+.tn-launch {
+  min-height: 100dvh;
+  display: grid;
+  place-items: center;
+  background: radial-gradient(circle at 50% 42%, #17243a 0, #0c1422 38%, #070c13 100%);
+  overflow: hidden;
+}
+.tn-launch-brand {
+  width: clamp(150px, 42vw, 230px);
+  opacity: 0;
+  transform: scale(.97);
+  animation: tn-launch-reveal 900ms cubic-bezier(.22, 1, .36, 1) forwards;
+}
+@keyframes tn-launch-reveal {
+  45%, 80% { opacity: 1; transform: scale(1); }
+  100% { opacity: 0; transform: scale(1.01); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .tn-launch-brand { animation: none; opacity: 1; transform: none; }
+}

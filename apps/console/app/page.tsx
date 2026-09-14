@@ -1,11 +1,10 @@
-import Image from "next/image";
-import Link from "next/link";
+import { headers } from "next/headers";
+import { redirect } from "next/navigation";
+import { LaunchScreen } from "@/components/LaunchScreen";
+import { shouldShowLaunchScreen } from "@/lib/entry-device";
 
-export default function Home() {
-  return (
-    <main className="tn-welcome">
-      <Image src="/brand/restaurant-stitch.jpg" alt="" fill priority sizes="100vw" className="tn-welcome-photo" />
-      <Link href="/login" className="tn-welcome-start">Commencer</Link>
-    </main>
-  );
+export default async function Home() {
+  const userAgent = (await headers()).get("user-agent") || "";
+  if (!shouldShowLaunchScreen(userAgent)) redirect("/login");
+  return <LaunchScreen />;
 }
