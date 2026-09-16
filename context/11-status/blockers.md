@@ -1,6 +1,8 @@
 # Blocages avant promotion de TableNow OS — 16 septembre 2026
 
-- La connexion Google est vérifiée jusqu'au retour TableNow et à l'écran TOTP sur `preview.tablenow.io`, mais `copilot.tablenow.io` pointe encore vers une ancienne Preview. Le correctif de redirection doit être publié puis l'alias réaffecté avant une nouvelle recette Chrome.
+- La connexion Google est vérifiée depuis `copilot.tablenow.io` jusqu'au retour TableNow et à l'écran TOTP sur `preview.tablenow.io`. La panne `redirect_uri_mismatch` est levée.
+- Google OAuth reste en mode Testing : les 2 adresses inscrites fonctionnent, et chaque nouveau bêta-testeur doit être ajouté à la liste, dans la limite actuelle de 100 utilisateurs.
+- La protection Vercel Standard reste active ; les testeurs externes doivent disposer d'un accès Vercel autorisé ou d'un lien de partage Vercel avant d'atteindre TableNow.
 - La vérification serveur indique Google Places et le transport e-mail prêts ; leurs parcours réels restent à exécuter.
 - TOTP complet, inscription avec réception réelle de l'e-mail, sauvegarde/reprise d'onboarding, premier résultat, cockpit, reconnexion, ordinateur, téléphone et iPad restent à certifier sur le nouveau déploiement.
 - `main`, `os.tablenow.io` et la production restent inchangés jusqu'à réussite complète de la Preview.

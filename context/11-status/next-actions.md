@@ -1,7 +1,7 @@
 # Séquence de publication TableNow OS — 16 septembre 2026
 
-1. Publier le correctif de redirection sur `product/onboarding-owner`, vérifier le commit exact servi par `preview.tablenow.io`, puis réaffecter `copilot.tablenow.io` à cette Preview.
-2. Vérifier que l'ancien domaine redirige vers la Preview avant le départ OAuth, puis rejouer Google jusqu'au retour TableNow.
+1. Terminer le TOTP privé depuis l'écran laissé ouvert, puis vérifier onboarding, sauvegarde/reprise, premier résultat et cockpit.
+2. Ajouter les adresses des bêta-testeurs à l'audience Google et leur fournir un accès Vercel autorisé tant que la Preview reste protégée.
 3. Jouer le parcours réel complet sur ordinateur, téléphone et iPad ; la réception e-mail doit être confirmée par le propriétaire.
 4. Fusionner dans `main` uniquement si la Preview est complète, puis migrer et déployer la production contrôlée sur `os.tablenow.io`.
 5. Vérifier HTTPS et redirections, archiver la livraison, puis supprimer `product/onboarding-owner` devenue inutile conformément à la décision canonique 90.
