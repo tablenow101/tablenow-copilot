@@ -97,6 +97,8 @@ describe("Google authentication", () => {
   it("creates no account or session until the new Google owner proves TOTP; respects transient cookies", async () => {
     const flow = await google("new-sub", "google-new@tablenow.test", "0");
     expect(flow.next.stage).toBe("enroll");
+    expect(new Date(flow.next.expiresAt).getTime()).toBeGreaterThan(Date.now());
+    expect(flow.next.expiresInSeconds).toBeGreaterThan(0);
     expect(await database`select id from users`).toHaveLength(0);
     const r = await post("/v1/account/verify-mfa", { code: totpAt(flow.next.secret, Math.floor(Date.now()/30000)) }, flow.cookie);
     expect(r.statusCode, r.body).toBe(200);
@@ -125,6 +127,8 @@ describe("Google authentication", () => {
     await database`insert into account_credentials(user_id,password_hash,totp_secret) values (${fixture.userId},${hash},${seal(totp,"s".repeat(48))})`;
     const flow = await google("existing-sub", "existing@tablenow.test");
     expect(flow.next.stage).toBe("mfa");
+    expect(new Date(flow.next.expiresAt).getTime()).toBeGreaterThan(Date.now());
+    expect(flow.next.expiresInSeconds).toBeGreaterThan(0);
     expect(flow.next.secret).toBeUndefined();
     expect(await database`select subject from google_identities where subject='existing-sub'`).toHaveLength(0);
     const r = await post("/v1/account/verify-mfa", { code: totpAt(totp, Math.floor(Date.now()/30000)) }, flow.cookie);
@@ -138,6 +142,17 @@ describe("Google authentication", () => {
     expect(session.tenant.onboardingComplete).toBe(true);
     const again = await google("existing-sub", "changed-email@tablenow.test");
     expect(again.next.email).toBe("existing@tablenow.test");
+    const mailCalls = send.mock.calls.length;
+    await database`update account_challenges set expires_at=now()-interval '1 second' where email='existing@tablenow.test' and stage='mfa' and consumed_at is null`;
+    const expiredContinuation = await get("/v1/account/google-continuation", again.cookie);
+    expect(expiredContinuation.statusCode).toBe(410);
+    expect(expiredContinuation.json().error.code).toBe("ACCOUNT_CHALLENGE_EXPIRED");
+    const expired = await post("/v1/account/verify-mfa", { code: "000000" }, again.cookie);
+    expect(expired.statusCode).toBe(410);
+    expect(expired.json().error.code).toBe("ACCOUNT_CHALLENGE_EXPIRED");
+    const [expiredChallenge] = await database<{ attempts: number }[]>`select attempts from account_challenges where email='existing@tablenow.test' and stage='mfa' and consumed_at is null order by created_at desc limit 1`;
+    expect(expiredChallenge?.attempts).toBe(0);
+    expect(send.mock.calls).toHaveLength(mailCalls);
     exchange.mockResolvedValueOnce({ sub: "different-sub", email: "existing@tablenow.test", name: "Other" });
     const s = await start();
     expect((await get(`/v1/oauth/google/callback?state=${s.state}&code=fixture`, s.cookie)).headers.location).toContain("google=error");

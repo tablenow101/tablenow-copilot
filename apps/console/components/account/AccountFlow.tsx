@@ -4,12 +4,13 @@ import { useEffect, useRef, useState, type FormEvent } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, Eye, EyeOff, LoaderCircle, Moon, Sun } from "lucide-react";
-import { api } from "@/lib/api";
+import { api, ApiError } from "@/lib/api";
+import { challengeSecondsRemaining } from "@/lib/account-challenge";
 import { Brand } from "../Brand";
 
 type Mode = "signup" | "login" | "reset";
 type Stage = "credentials" | "email" | "enroll" | "mfa" | "backup" | "complete";
-type NextStage = { stage: "email" | "enroll" | "mfa"; secret?: string };
+type NextStage = { stage: "email" | "enroll" | "mfa"; secret?: string; expiresAt: string; expiresInSeconds: number };
 
 export function AccountFlow({ mode }: { mode: Mode }) {
   const router = useRouter();
@@ -32,6 +33,8 @@ export function AccountFlow({ mode }: { mode: Mode }) {
   const [rememberMe, setRememberMe] = useState(true);
   const [googleStart, setGoogleStart] = useState<string | null>(null);
   const [googleFlow, setGoogleFlow] = useState(false);
+  const [challengeExpiresAt, setChallengeExpiresAt] = useState("");
+  const [challengeSeconds, setChallengeSeconds] = useState(0);
   const codeRef = useRef<HTMLInputElement>(null);
   const started = useRef(false);
 
@@ -39,6 +42,11 @@ export function AccountFlow({ mode }: { mode: Mode }) {
     const session = await api<{ tenant: { onboardingComplete: boolean } }>("/v1/auth/session");
     router.replace(session.tenant.onboardingComplete ? "/dashboard" : "/onboarding");
     router.refresh();
+  }
+  function recordChallengeExpiry(expiresInSeconds: number) {
+    const deadline = new Date(Date.now() + Math.max(0, expiresInSeconds) * 1000).toISOString();
+    setChallengeExpiresAt(deadline);
+    setChallengeSeconds(challengeSecondsRemaining(deadline));
   }
   useEffect(() => {
     let live = true;
@@ -49,8 +57,11 @@ export function AccountFlow({ mode }: { mode: Mode }) {
     if (googleReturn === "continue") {
       started.current = true; setBusy(true); setGoogleFlow(true);
       void api<NextStage & { email: string }>("/v1/account/google-continuation").then(next => {
-        if (live) { setStage(next.stage); setEmail(next.email); setSecret(next.secret || ""); }
-      }).catch(() => { if (live) setError("La vérification a expiré. Recommencez la connexion Google."); }).finally(() => { if (live) setBusy(false); });
+        if (live) { setStage(next.stage); setEmail(next.email); setSecret(next.secret || ""); recordChallengeExpiry(next.expiresInSeconds); }
+      }).catch(caught => {
+        if (!live) return;
+        setError(caught instanceof ApiError && caught.code === "ACCOUNT_CHALLENGE_EXPIRED" ? caught.message : "La connexion Google n’a pas pu reprendre. Relancez-la depuis cette page.");
+      }).finally(() => { if (live) setBusy(false); });
       return () => { live = false; };
     }
     void api<{ tenant: { onboardingComplete: boolean } }>("/v1/auth/session").then(session => {
@@ -63,6 +74,13 @@ export function AccountFlow({ mode }: { mode: Mode }) {
     const timer = setTimeout(() => setCooldown(value => Math.max(0, value - 1)), 1000);
     return () => clearTimeout(timer);
   }, [cooldown]);
+  useEffect(() => {
+    if (!challengeExpiresAt) { setChallengeSeconds(0); return; }
+    const update = () => setChallengeSeconds(challengeSecondsRemaining(challengeExpiresAt));
+    update();
+    const timer = setInterval(update, 1000);
+    return () => clearInterval(timer);
+  }, [challengeExpiresAt]);
   useEffect(() => { codeRef.current?.focus(); }, [stage, useBackup]);
   useEffect(() => {
     if (!secret) return;
@@ -76,32 +94,39 @@ export function AccountFlow({ mode }: { mode: Mode }) {
   async function submit(event: FormEvent) {
     event.preventDefault();
     if (busy) return;
+    if (challengeExpiresAt && challengeSeconds === 0 && stage !== "credentials" && stage !== "backup" && stage !== "complete") {
+      setError("Cette vérification a expiré. Relancez la connexion pour continuer.");
+      return;
+    }
     started.current = true;
     setBusy(true); setError("");
     try {
       if (stage === "credentials") {
         const next = await api<NextStage>(`/v1/account/${mode}`, { method: "POST", body: JSON.stringify({ email, password, rememberMe, ...(mode === "signup" ? { name } : {}) }) });
-        setStage(next.stage); setPassword(""); setVisible(false); setCode(""); setCooldown(60);
+        setStage(next.stage); setPassword(""); setVisible(false); setCode(""); setCooldown(60); recordChallengeExpiry(next.expiresInSeconds);
       } else if (stage === "email") {
         const next = await api<NextStage>("/v1/account/verify-email", { method: "POST", body: JSON.stringify({ code }) });
-        setStage(next.stage); setSecret(next.secret || ""); setCode("");
+        setStage(next.stage); setSecret(next.secret || ""); setCode(""); recordChallengeExpiry(next.expiresInSeconds);
       } else if (stage === "complete") {
         await enterApp();
       } else if (stage === "backup") {
         if (backupSaved) await enterApp();
       } else {
         const result = await api<{ backupCodes: string[] }>("/v1/account/verify-mfa", { method: "POST", body: JSON.stringify({ code }) });
-        setSecret(""); setQr(""); setCode("");
+        setSecret(""); setQr(""); setCode(""); setChallengeExpiresAt("");
         if (result.backupCodes.length) { setBackupCodes(result.backupCodes); setStage("backup"); }
         else { setStage("complete"); await enterApp(); }
       }
-    } catch (caught) { setError(caught instanceof Error ? caught.message : "La demande n’a pas abouti. Réessayez."); }
+    } catch (caught) {
+      if (caught instanceof ApiError && caught.code === "ACCOUNT_CHALLENGE_EXPIRED") setChallengeSeconds(0);
+      setError(caught instanceof Error ? caught.message : "La demande n’a pas abouti. Réessayez.");
+    }
     finally { setBusy(false); }
   }
   async function resend() {
     if (busy || cooldown) return;
     setBusy(true); setError("");
-    try { await api("/v1/account/resend", { method: "POST" }); setCode(""); setCooldown(60); }
+    try { const next = await api<NextStage>("/v1/account/resend", { method: "POST" }); setCode(""); setCooldown(60); recordChallengeExpiry(next.expiresInSeconds); }
     catch (caught) { setError(caught instanceof Error ? caught.message : "L’envoi est indisponible."); }
     finally { setBusy(false); }
   }
@@ -111,7 +136,7 @@ export function AccountFlow({ mode }: { mode: Mode }) {
     try { localStorage.setItem("tn-theme", next); } catch { /* Optional preference persistence. */ }
   }
   function restart() {
-    setStage("credentials"); setCode(""); setSecret(""); setQr("");
+    setStage("credentials"); setCode(""); setSecret(""); setQr(""); setChallengeExpiresAt(""); setChallengeSeconds(0);
     setError(""); setCopyNotice(""); setUseBackup(false);
     setGoogleFlow(false);
     window.history.replaceState(null, "", window.location.pathname);
@@ -129,6 +154,7 @@ export function AccountFlow({ mode }: { mode: Mode }) {
   }
   const title = stage === "credentials" ? (mode === "signup" ? "Créer votre compte" : mode === "reset" ? "Mot de passe oublié" : "Bienvenue") : stage === "email" ? "Entrez le code e-mail" : stage === "enroll" ? "Configurer votre application" : stage === "backup" ? "Codes de secours" : stage === "complete" ? "Connexion établie" : useBackup ? "Code de secours" : "Code de votre application";
   const codeLabel = useBackup ? "Code de secours" : stage === "email" ? "Code e-mail à six chiffres" : "Code d’application à six chiffres";
+  const challengeExpired = Boolean(challengeExpiresAt) && challengeSeconds === 0;
   return <main className={`tn-auth tn-account theme-${theme}`}>
     <button type="button" className="tn-icon tn-theme-switch" onClick={changeTheme} aria-label={theme === "dark" ? "Mode clair" : "Mode sombre"}>{theme === "dark" ? <Sun size={18} /> : <Moon size={18} />}</button>
     <header className="tn-auth-header"><Brand /></header>
@@ -139,6 +165,7 @@ export function AccountFlow({ mode }: { mode: Mode }) {
       {stage === "email" && <p id="code-help">Saisissez le dernier code envoyé à <strong>{email}</strong>. Il est valable 10 minutes, dans cette fenêtre.</p>}
       {stage === "enroll" && <p id="code-help">{googleFlow ? "Votre compte Google est vérifié." : "Votre e-mail est vérifié."} Ajoutez TableNow à votre application d’authentification avec le QR code, puis saisissez le code qu’elle affiche.</p>}
       {stage === "mfa" && <p id="code-help">{googleFlow ? "Votre compte Google est vérifié. " : mode === "reset" ? "Votre e-mail est vérifié. " : ""}{useBackup ? "Saisissez l’un des codes de secours conservés lors de votre inscription. Chaque code ne fonctionne qu’une fois." : googleFlow ? "Pour terminer la connexion, ouvrez votre application d’authentification et saisissez le code affiché pour TableNow." : "Ouvrez votre application d’authentification et saisissez le code affiché pour TableNow. Ce code est différent de celui reçu par e-mail."}</p>}
+      {challengeExpiresAt && ["email", "enroll", "mfa"].includes(stage) && <p className={challengeExpired ? "tn-error" : undefined} role={challengeExpired ? "alert" : "status"}>{challengeExpired ? "Cette vérification a expiré. Votre code n’a pas été testé." : `Cette vérification expire dans ${Math.max(1, Math.ceil(challengeSeconds / 60))} min.`}</p>}
       {stage === "backup" && <p>Conservez ces codes dans votre gestionnaire de mots de passe. Ils permettent de vous connecter si votre application d’authentification est indisponible.</p>}
       <form onSubmit={submit}>
         {stage === "credentials" && <>
@@ -153,12 +180,12 @@ export function AccountFlow({ mode }: { mode: Mode }) {
           <span className={useBackup ? "" : "tn-visually-hidden"}>{codeLabel}</span>
           <div className={useBackup ? undefined : "tn-code-entry"}>
             {!useBackup && <div className="tn-code-cells" aria-hidden="true">{Array.from({ length: 6 }, (_, index) => <span key={index} data-active={index === Math.min(code.length, 5)}>{code[index] || ""}</span>)}</div>}
-            <input ref={codeRef} name="code" className={useBackup ? "" : "tn-account-code"} inputMode={useBackup ? "text" : "numeric"} autoComplete={stage === "email" ? "one-time-code" : "off"} autoCapitalize="none" spellCheck={false} pattern={useBackup ? undefined : "[0-9]{6}"} minLength={6} maxLength={useBackup ? 64 : 6} required onPaste={event => { if (!useBackup) { event.preventDefault(); setCode(event.clipboardData.getData("text").replace(/\D/g, "").slice(0, 6)); } }} aria-describedby="code-help" aria-invalid={error ? true : undefined} value={code} onChange={e => setCode(useBackup ? e.target.value.trim() : e.target.value.replace(/\D/g, "").slice(0, 6))} />
+            <input ref={codeRef} name="code" className={useBackup ? "" : "tn-account-code"} inputMode={useBackup ? "text" : "numeric"} autoComplete={stage === "email" ? "one-time-code" : "off"} autoCapitalize="none" spellCheck={false} pattern={useBackup ? undefined : "[0-9]{6}"} minLength={6} maxLength={useBackup ? 64 : 6} required disabled={challengeExpired} onPaste={event => { if (!useBackup) { event.preventDefault(); setCode(event.clipboardData.getData("text").replace(/\D/g, "").slice(0, 6)); } }} aria-describedby="code-help" aria-invalid={error ? true : undefined} value={code} onChange={e => setCode(useBackup ? e.target.value.trim() : e.target.value.replace(/\D/g, "").slice(0, 6))} />
           </div>
         </label>}
         {stage === "backup" && <><div className="tn-backup-codes">{backupCodes.map(item => <code key={item}>{item}</code>)}</div><button type="button" className="tn-link" onClick={downloadBackupCodes}>Télécharger mes codes</button><label className="tn-backup-saved"><input type="checkbox" checked={backupSaved} onChange={e => setBackupSaved(e.target.checked)} required /><span>J’ai conservé mes codes de secours.</span></label></>}
         {error && <p className="tn-error" role="alert">{error}</p>}
-        <button className="tn-primary tn-account-submit" type="submit" disabled={busy || (stage === "backup" && !backupSaved)}>{busy && <LoaderCircle size={17} className="spinning" />}{stage === "credentials" ? mode === "signup" ? "Créer mon compte" : mode === "login" ? "Se connecter" : "Continuer" : "Continuer"}</button>
+        {challengeExpired ? <button className="tn-primary tn-account-submit" type="button" disabled={busy || (googleFlow && !googleStart)} onClick={() => { if (googleFlow && googleStart) { setBusy(true); window.location.assign(`${googleStart}?remember=${rememberMe ? "1" : "0"}`); } else restart(); }}>{googleFlow ? "Relancer la connexion Google" : "Recommencer la connexion"}</button> : <button className="tn-primary tn-account-submit" type="submit" disabled={busy || (stage === "backup" && !backupSaved)}>{busy && <LoaderCircle size={17} className="spinning" />}{stage === "credentials" ? mode === "signup" ? "Créer mon compte" : mode === "login" ? "Se connecter" : "Continuer" : "Continuer"}</button>}
       </form>
       {stage === "credentials" && mode !== "reset" && <div className="tn-account-social">
         <div className="tn-account-divider"><span>OU</span></div>

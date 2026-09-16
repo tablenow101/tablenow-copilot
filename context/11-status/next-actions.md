@@ -1,3 +1,14 @@
+# Porte active — saisie TOTP du propriétaire
+
+1. Publier sur `product/onboarding-owner` la correction d'expiration TOTP, sans toucher à `main` ni à la production.
+2. Relancer Google pour créer un défi neuf, puis laisser le navigateur ouvert pour le TOTP, sans relancer ni fermer la page pendant la saisie.
+3. Tester réellement priorités, sauvegarde, établissement, déconnexion/reconnexion et reprise sur ordinateur et mobile.
+4. Présenter les preuves puis demander la validation explicite du lot 1.
+5. Lot 2 : préparation indépendante autorisée ; aucun commit final avant les preuves de migration sans perte, le diff fonctionnel et la validation explicite.
+6. Arrêt à chaque porte de validation produit. Aucune progression au lot 3 ni promotion main/production avant les validations requises.
+
+Les séquences ci-dessous sont antérieures ; la porte ci-dessus prévaut.
+
 # Séquence de publication TableNow OS — 16 septembre 2026
 
 1. Exécuter les huit lots de `docs/superpowers/plans/2026-09-16-continuous-advisor.md` sur `product/onboarding-owner`, avec tests et commit par lot.

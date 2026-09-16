@@ -38,6 +38,8 @@ describe("registration and recurring authentication", () => {
     expect((await post("account/verify-email", { code: "000000" }, cookie)).statusCode).toBe(400);
     const enrollment = await post("account/verify-email", { code: emailCode() }, cookie);
     expect(enrollment.json()).toMatchObject({ stage: "enroll" });
+    expect(enrollment.json()).toMatchObject({ expiresAt: expect.any(String), expiresInSeconds: expect.any(Number) });
+    expect(enrollment.cookies.find(c => c.name === "tn_auth")?.maxAge).toBe(600);
     totpSecret = enrollment.json().secret;
     expect((await post("account/verify-mfa", { code: "abcdef" }, cookie)).statusCode).toBe(400);
     const verified = await post("account/verify-mfa", { code: totpAt(totpSecret, Math.floor(Date.now()/30000)) }, cookie);
@@ -57,7 +59,7 @@ describe("registration and recurring authentication", () => {
   });
   it("does not allow password-only or legacy email-code access; backup codes are single-use", async () => {
     const login = await post("account/login", { email, password, rememberMe: true });
-    expect(login.json()).toEqual({ stage: "mfa" });
+    expect(login.json()).toMatchObject({ stage: "mfa", expiresAt: expect.any(String), expiresInSeconds: expect.any(Number) });
     const cookie = authCookie(login);
     expect((await app.inject({ method: "GET", url: "/v1/auth/session", headers: { cookie } })).statusCode).toBe(401);
     const [credential] = await database<{ last_totp_step: number }[]>`select last_totp_step from account_credentials`;
@@ -82,7 +84,7 @@ describe("registration and recurring authentication", () => {
     const pending = await post("account/login", { email, password });
     const reset = await post("account/reset", { email, password: "Une nouvelle phrase privée 456" });
     const cookie = authCookie(reset);
-    expect((await post("account/verify-email", { code: emailCode() }, cookie)).json()).toEqual({ stage: "mfa" });
+    expect((await post("account/verify-email", { code: emailCode() }, cookie)).json()).toMatchObject({ stage: "mfa", expiresAt: expect.any(String), expiresInSeconds: expect.any(Number) });
     const completed = await post("account/verify-mfa", { code: backup[1] }, cookie);
     expect(completed.statusCode, completed.body).toBe(200);
     expect((await app.inject({ method: "GET", url: "/v1/auth/session", headers: { cookie: sessionCookie } })).statusCode).toBe(401);
@@ -94,6 +96,16 @@ describe("registration and recurring authentication", () => {
     const signup = await post("account/signup", { email: "expired@tablenow.test", name: "Expired", password });
     await database`update account_challenges set expires_at=now()-interval '1 minute' where email='expired@tablenow.test'`;
     expect((await post("account/verify-email", { code: emailCode() }, authCookie(signup))).statusCode).toBe(400);
+
+    const login = await post("account/login", { email, password: "Une nouvelle phrase privée 456" });
+    const loginCookie = authCookie(login);
+    await database`update account_challenges set expires_at=now()-interval '1 minute' where email=${email} and stage='mfa' and consumed_at is null`;
+    const expiredMfa = await post("account/verify-mfa", { code: "000000" }, loginCookie);
+    expect(expiredMfa.statusCode).toBe(410);
+    expect(expiredMfa.json()).toEqual({ error: { code: "ACCOUNT_CHALLENGE_EXPIRED", message: "Cette vérification a expiré. Relancez la connexion pour continuer." } });
+    const [expiredChallenge] = await database<{ attempts: number }[]>`select attempts from account_challenges where email=${email} and stage='mfa' and consumed_at is null order by created_at desc limit 1`;
+    expect(expiredChallenge?.attempts).toBe(0);
+
     const response = await app.inject({ method: "POST", url: "/v1/account/login", payload: { email, password }, headers: { origin: "https://unrelated.example" } });
     expect(response.statusCode).toBe(403);
   });
@@ -138,7 +150,7 @@ describe("registration and recurring authentication", () => {
     for (let index = 0; index < 5; index++) {
       const reset = await post("account/reset", { email, password: currentPassword });
       expect(reset.statusCode).toBe(202);
-      expect((await post("account/verify-email", { code: emailCode() }, authCookie(reset))).json()).toEqual({ stage: "mfa" });
+      expect((await post("account/verify-email", { code: emailCode() }, authCookie(reset))).json()).toMatchObject({ stage: "mfa", expiresAt: expect.any(String), expiresInSeconds: expect.any(Number) });
     }
     expect((await post("account/reset", { email, password: currentPassword })).statusCode).toBe(429);
     expect(inbox.length - before).toBe(5);
