@@ -1,5 +1,6 @@
 import type { NextConfig } from "next";
 import { assertVercelDeploymentBoundary } from "./deployment-boundary";
+import { legacyCopilotRedirect } from "./legacy-host-redirect";
 
 assertVercelDeploymentBoundary(process.env);
 
@@ -8,6 +9,9 @@ const nextConfig: NextConfig = {
   poweredByHeader: false,
   reactStrictMode: true,
   outputFileTracingRoot: new URL("../../", import.meta.url).pathname,
+  async redirects() {
+    return [legacyCopilotRedirect(process.env)];
+  },
   async rewrites() {
     if (process.env.VERCEL === "1") return [];
     const apiTarget = process.env.CORE_API_INTERNAL_URL || "http://localhost:4000";

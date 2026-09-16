@@ -1,8 +1,8 @@
-# Blocages avant promotion de TableNow OS — 15 septembre 2026
+# Blocages avant promotion de TableNow OS — 16 septembre 2026
 
-- Le lot corrigé est encore local : aucun commit Vercel ne le sert.
-- `GOOGLE_PLACES_API_KEY` n'est pas encore présente dans le périmètre Preview ; Google Places n'est donc pas testable en ligne.
-- Inscription, réception réelle de l'e-mail, Google, TOTP, sauvegarde/reprise d'onboarding, premier résultat, cockpit, ordinateur, téléphone et iPad restent à exécuter sur le nouveau déploiement.
+- La connexion Google est vérifiée jusqu'au retour TableNow et à l'écran TOTP sur `preview.tablenow.io`, mais `copilot.tablenow.io` pointe encore vers une ancienne Preview. Le correctif de redirection doit être publié puis l'alias réaffecté avant une nouvelle recette Chrome.
+- La vérification serveur indique Google Places et le transport e-mail prêts ; leurs parcours réels restent à exécuter.
+- TOTP complet, inscription avec réception réelle de l'e-mail, sauvegarde/reprise d'onboarding, premier résultat, cockpit, reconnexion, ordinateur, téléphone et iPad restent à certifier sur le nouveau déploiement.
 - `main`, `os.tablenow.io` et la production restent inchangés jusqu'à réussite complète de la Preview.
 
 # Blocage de recette — session propriétaire

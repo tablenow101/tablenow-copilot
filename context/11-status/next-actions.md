@@ -1,7 +1,7 @@
-# Séquence de publication TableNow OS — 15 septembre 2026
+# Séquence de publication TableNow OS — 16 septembre 2026
 
-1. Publier le lot contrôlé sur `product/onboarding-owner` et vérifier le commit exact servi par `preview.tablenow.io`.
-2. Raccorder une clé Google Places dédiée et restreinte à la Preview, puis vérifier les services externes sans exposer leurs secrets.
+1. Publier le correctif de redirection sur `product/onboarding-owner`, vérifier le commit exact servi par `preview.tablenow.io`, puis réaffecter `copilot.tablenow.io` à cette Preview.
+2. Vérifier que l'ancien domaine redirige vers la Preview avant le départ OAuth, puis rejouer Google jusqu'au retour TableNow.
 3. Jouer le parcours réel complet sur ordinateur, téléphone et iPad ; la réception e-mail doit être confirmée par le propriétaire.
 4. Fusionner dans `main` uniquement si la Preview est complète, puis migrer et déployer la production contrôlée sur `os.tablenow.io`.
 5. Vérifier HTTPS et redirections, archiver la livraison, puis supprimer `product/onboarding-owner` devenue inutile conformément à la décision canonique 90.

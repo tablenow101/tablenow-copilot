@@ -1,5 +1,6 @@
 # Journal des décisions
 
+- D-034 — 2026-09-16 : `copilot.tablenow.io` devient uniquement une adresse de transition. En Preview, elle redirige temporairement vers `preview.tablenow.io` ; après promotion de `main`, elle redirigera définitivement vers `os.tablenow.io`. Google OAuth conserve seulement les deux retours canoniques Preview et production afin d'éviter qu'une ancienne Preview puisse relancer un parcours obsolète.
 - D-033 — 2026-09-16 : `product/onboarding-owner` est une branche de sécurité temporaire. Ordre obligatoire : dernière Preview et recette complète, fusion dans `main`, déploiement de `main` sur `os.tablenow.io`, puis archivage et suppression de la branche devenue inutile. Cette décision est enregistrée et relue dans la mémoire PostgreSQL canonique, enregistrement 90 version 3, qui remplace 89.
 
 | ID | Date | Décision | Pourquoi | Statut |
