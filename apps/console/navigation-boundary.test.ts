@@ -30,14 +30,22 @@ describe("TableNow OS navigation boundaries", () => {
   });
 
   it("uses the official TableNow OS brand on loading and legal pages", async () => {
-    const [loading, legal] = await Promise.all([
+    const [brand, loading, legal, layout, chrome, product, styles] = await Promise.all([
+      source("components/Brand.tsx"),
       source("components/LoadingScreen.tsx"),
       source("components/LegalDocument.tsx"),
+      source("app/layout.tsx"),
+      source("components/AppChrome.tsx"),
+      source("components/ProductShell.tsx"),
+      source("app/globals.css"),
     ]);
 
     expect(loading).toContain("<Brand");
     expect(legal).toContain("<Brand");
-    expect(`${loading}\n${legal}`).not.toContain("brand-mark");
+    expect(brand).toContain("width={2172}");
+    expect(brand).toContain("height={724}");
+    expect(`${brand}\n${loading}\n${legal}\n${layout}\n${chrome}\n${product}\n${styles}`).not.toContain("brand-mark");
+    expect(`${layout}\n${chrome}\n${product}`).not.toContain("TableNow Copilot");
     expect(legal).not.toContain("Confiance & conformité");
     expect(legal).not.toContain("23 août 2026");
     expect(legal).not.toContain("Version pilot-2026-08-23");

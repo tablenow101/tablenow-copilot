@@ -17,6 +17,8 @@ Object.assign(process.env, {
   // below captures synthetic mail instead; no SMTP transport is instantiated.
   EMAIL_TRANSPORT: "smtp",
   SMTP_HOST: "local.invalid",
+  SMTP_USER: "local-test-user",
+  SMTP_PASSWORD: "local-test-password",
   AUTH_FIXED_OTP: "424242",
   AI_PROVIDER: "deterministic",
   LOG_LEVEL: "warn",

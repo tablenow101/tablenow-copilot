@@ -74,9 +74,6 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--lime); outline-
 button:disabled { cursor: not-allowed; opacity: .45; }
 ::selection { background: var(--lime); color: #10120d; }
 
-.brand-mark { width: 54px; height: 54px; display: grid; place-items: center; border: 1px solid #394039; border-radius: 15px; background: #121513; font-size: 18px; font-weight: 900; letter-spacing: 0; box-shadow: inset 0 1px rgba(255,255,255,.05); }
-.brand-mark span { color: var(--lime); }
-.brand-mark-small { width: 37px; height: 37px; border-radius: 10px; font-size: 13px; flex: 0 0 auto; }
 .logo-lockup { display: flex; align-items: center; gap: 11px; font-weight: 750; letter-spacing: 0; }
 .logo-lockup > span:last-child { display: flex; flex-direction: column; }
 .logo-lockup small { color: var(--muted-2); font-size: 9px; font-weight: 700; letter-spacing: .11em; text-transform: uppercase; margin-top: 2px; }
@@ -1092,9 +1089,7 @@ button:disabled { cursor: not-allowed; opacity: .45; }
 .welcome-onboarding .final-onboarding-header { position: static; min-height: 42px; height: auto; padding: 0 8px; border: 0; background: transparent; backdrop-filter: none; justify-content: flex-start; gap: 24px; }
 .welcome-onboarding .logo-lockup { gap: 0; }
 .welcome-onboarding .logo-lockup > span:last-child { display: block; font-size: 16px; font-weight: 600; letter-spacing: 0; }
-.welcome-onboarding .logo-lockup small, .welcome-onboarding .logo-lockup .brand-mark { display: none; }
-.welcome-onboarding .brand-mark { background: transparent; border: 0; box-shadow: none; color: var(--text); }
-.welcome-onboarding .brand-mark span { color: var(--text); }
+.welcome-onboarding .logo-lockup small { display: none; }
 .welcome-stage { display: flex; align-items: center; gap: 10px; padding-left: 25px; border-left: 1px solid var(--line); color: var(--muted); font-size: 15px; }
 .welcome-stage i { width: 6px; height: 6px; border-radius: 50%; background: #c5ed40; }
 .welcome-onboarding .onboarding-top-controls { margin-left: auto; gap: 6px; }

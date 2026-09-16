@@ -41,7 +41,7 @@ server.registerTool(
 server.registerTool(
   "ask_copilot",
   {
-    title: "Ask TableNow Copilot",
+    title: "Ask TableNow OS",
     description: "Gets a grounded answer and may create a proposed action. Proposed actions remain blocked until an authorized human approves them in TableNow.",
     inputSchema: { message: z.string().min(2).max(4000) },
     annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },

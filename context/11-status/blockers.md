@@ -1,3 +1,10 @@
+# Blocages avant promotion de TableNow OS — 15 septembre 2026
+
+- Le lot corrigé est encore local : aucun commit Vercel ne le sert.
+- `GOOGLE_PLACES_API_KEY` n'est pas encore présente dans le périmètre Preview ; Google Places n'est donc pas testable en ligne.
+- Inscription, réception réelle de l'e-mail, Google, TOTP, sauvegarde/reprise d'onboarding, premier résultat, cockpit, ordinateur, téléphone et iPad restent à exécuter sur le nouveau déploiement.
+- `main`, `os.tablenow.io` et la production restent inchangés jusqu'à réussite complète de la Preview.
+
 # Blocage de recette — session propriétaire
 
 La Preview du lot `747d040` est prête. La suite exige la connexion normale du propriétaire sur la nouvelle URL ; mot de passe et TOTP ne sont jamais demandés dans le chat. Onboarding/cockpit et conseil depuis les écrans non certifiés tant que cette étape reste ouverte. [Preuves et limites](../../docs/qa/governed-2026-09-13/report.md).

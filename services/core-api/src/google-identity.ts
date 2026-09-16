@@ -1,29 +1,23 @@
 import crypto from "node:crypto";
 import { OAuth2Client, CodeChallengeMethod } from "google-auth-library";
 import { z } from "zod";
+import { resolveVercelDeployment, tableNowDeploymentTopology } from "@tablenow/contracts";
 
-export const googlePreviewOrigin = "https://tablenow-copilot-v2-git-product-stitch-funct-786bbe-tablenow101.vercel.app";
-export const googleStablePreviewOrigin = "https://copilot.tablenow.io";
-export const googlePreviewOrigins = [googlePreviewOrigin, googleStablePreviewOrigin] as const;
+export const googlePreviewOrigin = tableNowDeploymentTopology.preview.origin;
+export const googleProductionOrigin = tableNowDeploymentTopology.production.origin;
 export const googleCallbackPath = "/api/v1/oauth/google/callback";
 export type GoogleConfig = { clientId: string; clientSecret: string; origin: string };
 export type GoogleIdentity = { sub: string; email: string; name: string };
 export function googleConfiguration(environment: NodeJS.ProcessEnv = process.env): GoogleConfig | null {
-  const preview = (environment.APP_ENV || environment.VERCEL_ENV) === "preview";
   const test = environment.APP_ENV === "test" && environment.NODE_ENV === "test" && !environment.VERCEL;
-  if (!preview && !test) return null;
-  if (environment.VERCEL && (environment.VERCEL_ENV !== "preview" || environment.VERCEL_GIT_COMMIT_REF !== "product/stitch-functional-owner")) return null;
   const clientId = environment.GOOGLE_OAUTH_CLIENT_ID, clientSecret = environment.GOOGLE_OAUTH_CLIENT_SECRET;
   if (!clientId || !clientSecret) return null;
-  // Switch only through the branch-scoped server origin, after DNS is ready.
-  // Keep the existing branch alias usable while the new domain is verified.
-  const origin = environment.PUBLIC_ORIGIN === googleStablePreviewOrigin ? googleStablePreviewOrigin : googlePreviewOrigin;
-  return { clientId, clientSecret, origin: test ? "http://localhost:3000" : origin };
+  if (test) return { clientId, clientSecret, origin: "http://localhost:3000" };
+  const deployment = resolveVercelDeployment(environment);
+  return deployment ? { clientId, clientSecret, origin: deployment.origin } : null;
 }
 export function googleCallbackConfiguration(config: GoogleConfig, host: string): GoogleConfig | null {
-  const origins: readonly string[] = config.origin === "http://localhost:3000" ? [config.origin] : googlePreviewOrigins;
-  const origin = origins.find(candidate => new URL(candidate).host === host);
-  return origin ? { ...config, origin } : null;
+  return new URL(config.origin).host === host ? config : null;
 }
 export type GoogleExchange = (config: GoogleConfig, code: string, verifier: string, nonce: string) => Promise<GoogleIdentity>;
 function client(config: GoogleConfig) {

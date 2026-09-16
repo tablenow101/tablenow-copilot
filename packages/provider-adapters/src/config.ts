@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { resolveVercelDeployment, tableNowDeploymentTopology } from "@tablenow/contracts";
 
 const optionalString = z.preprocess((value) => value === "" ? undefined : value, z.string().optional());
 const booleanString = z.preprocess(
@@ -69,6 +70,22 @@ export function loadRuntimeConfig(environment: NodeJS.ProcessEnv = process.env):
   if ((config.APP_ENV === "production" || environment.VERCEL === "1") && config.DATABASE_SCOPE !== "tablenow-v2") {
     throw new Error("Production requires DATABASE_SCOPE=tablenow-v2");
   }
+  if (environment.VERCEL === "1") {
+    if (environment.VERCEL_PROJECT_PRODUCTION_URL?.toLowerCase() !== tableNowDeploymentTopology.vercelProject) {
+      throw new Error("Unapproved Vercel project");
+    }
+    if (environment.VERCEL_ENV === "preview") {
+      if (!resolveVercelDeployment(environment) || config.APP_ENV !== "preview") {
+        throw new Error("Unapproved Vercel Preview deployment");
+      }
+    } else if (environment.VERCEL_ENV === "production") {
+      if (!resolveVercelDeployment(environment) || config.APP_ENV !== "production") {
+        throw new Error("Unapproved Vercel production deployment");
+      }
+    } else {
+      throw new Error("Unsupported Vercel deployment environment");
+    }
+  }
   if (config.APP_ENV === "production" && ["app.tablenow.io", "tablenow.io", "www.tablenow.io"].includes(publicHost)) {
     throw new Error("V2 cannot use a V1 or website production origin");
   }
@@ -81,8 +98,8 @@ export function loadRuntimeConfig(environment: NodeJS.ProcessEnv = process.env):
   if (config.APP_ENV === "production" && !config.STORAGE_ENCRYPTION_KEY) {
     throw new Error("Production requires STORAGE_ENCRYPTION_KEY");
   }
-  if (config.EMAIL_TRANSPORT === "smtp" && !config.SMTP_HOST) {
-    throw new Error("SMTP_HOST is required when EMAIL_TRANSPORT=smtp");
+  if (config.EMAIL_TRANSPORT === "smtp" && (!config.SMTP_HOST || !config.SMTP_USER || !config.SMTP_PASSWORD)) {
+    throw new Error("SMTP_HOST, SMTP_USER and SMTP_PASSWORD are required when EMAIL_TRANSPORT=smtp");
   }
   return config;
 }

@@ -3,7 +3,7 @@ import { z } from "zod";
 import { hashSecret, randomToken, type Database } from "@tablenow/provider-adapters";
 import { getConfig } from "./environment.js";
 import { seal, unseal } from "./account-crypto.js";
-import { exchangeGoogleCode, googleAuthorizationUrl, googleConfiguration, googleCallbackConfiguration, googlePreviewOrigin, type GoogleExchange, type GoogleIdentity } from "./google-identity.js";
+import { exchangeGoogleCode, googleAuthorizationUrl, googleConfiguration, googleCallbackConfiguration, type GoogleExchange, type GoogleIdentity } from "./google-identity.js";
 
 type Attempt = { verifier: string; nonce: string; rememberMe: boolean; origin?: string };
 type BeginAccount = (identity: GoogleIdentity, rememberMe: boolean, reply: FastifyReply) => Promise<void>;
@@ -41,9 +41,7 @@ export async function registerGoogleRoutes(app: FastifyInstance, database: Datab
       const [row] = await database<{ payload: string }[]>`delete from google_login_attempts where state_hash=${digest(input.state)} and browser_hash=${digest(browser)} and expires_at>now() returning payload`;
       if (!row || input.error || !input.code) throw new Error();
       const attempt = unseal<Attempt>(row.payload, secret);
-      // Bind the exchange to its original redirect URI, including attempts started
-      // on the old alias just before the deployment changed PUBLIC_ORIGIN.
-      const attemptOrigin = attempt.origin ?? (config.origin === "http://localhost:3000" ? config.origin : googlePreviewOrigin);
+      const attemptOrigin = attempt.origin ?? config.origin;
       if (attemptOrigin !== callbackConfig.origin) throw new Error();
       const identity = await exchange(callbackConfig, input.code, attempt.verifier, attempt.nonce);
       await beginAccount(identity, attempt.rememberMe, reply);

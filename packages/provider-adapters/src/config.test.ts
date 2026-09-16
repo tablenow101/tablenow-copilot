@@ -12,7 +12,20 @@ const valid = {
   PLATFORM_ADMIN_EMAIL: "owner@example.test",
   EMAIL_TRANSPORT: "smtp",
   SMTP_HOST: "smtp.example.test",
+  SMTP_USER: "resend",
+  SMTP_PASSWORD: "test-only-password",
   STORAGE_ENCRYPTION_KEY: "a".repeat(64),
+};
+const vercelPreview = {
+  ...valid,
+  VERCEL: "1",
+  VERCEL_ENV: "preview",
+  VERCEL_PROJECT_PRODUCTION_URL: "tablenow-copilot-v2.vercel.app",
+  VERCEL_GIT_COMMIT_REF: "product/onboarding-owner",
+  PUBLIC_ORIGIN: "https://preview.tablenow.io",
+  EMAIL_TRANSPORT: "log",
+  SMTP_HOST: undefined,
+  STORAGE_ENCRYPTION_KEY: undefined,
 };
 
 describe("runtime safety configuration", () => {
@@ -24,6 +37,11 @@ describe("runtime safety configuration", () => {
     expect(() => loadRuntimeConfig({ ...valid, EMAIL_TRANSPORT: "log" })).toThrow("Production requires a real SMTP transport");
   });
 
+  it("requires complete SMTP authentication", () => {
+    expect(() => loadRuntimeConfig({ ...valid, SMTP_USER: undefined })).toThrow("SMTP_USER");
+    expect(() => loadRuntimeConfig({ ...valid, SMTP_PASSWORD: undefined })).toThrow("SMTP_PASSWORD");
+  });
+
   it("accepts a portable PostgreSQL and SMTP configuration", () => {
     const config = loadRuntimeConfig(valid);
     expect(config.DATABASE_URL).toBe(valid.DATABASE_URL);
@@ -31,25 +49,27 @@ describe("runtime safety configuration", () => {
   });
 
   it("treats an optimized Vercel preview as preview rather than production", () => {
-    const config = loadRuntimeConfig({
-      ...valid,
-      VERCEL: "1",
-      VERCEL_ENV: "preview",
-      VERCEL_URL: "tablenow-copilot-preview.vercel.app",
-      PUBLIC_ORIGIN: undefined,
-      EMAIL_TRANSPORT: "log",
-      SMTP_HOST: undefined,
-      STORAGE_ENCRYPTION_KEY: undefined,
-    });
+    const config = loadRuntimeConfig(vercelPreview);
     expect(config.APP_ENV).toBe("preview");
-    expect(config.PUBLIC_ORIGIN).toBe("https://tablenow-copilot-preview.vercel.app");
+    expect(config.PUBLIC_ORIGIN).toBe("https://preview.tablenow.io");
   });
 
   it("requires explicit secrets in previews and forbids fixed access codes", () => {
-    const preview = { ...valid, VERCEL: "1", VERCEL_ENV: "preview" };
-    expect(() => loadRuntimeConfig({ ...preview, SESSION_SECRET: undefined })).toThrow();
-    expect(() => loadRuntimeConfig({ ...preview, OTP_PEPPER: undefined })).toThrow();
-    expect(() => loadRuntimeConfig({ ...preview, AUTH_FIXED_OTP: "424242" })).toThrow("AUTH_FIXED_OTP is forbidden");
+    expect(() => loadRuntimeConfig({ ...vercelPreview, SESSION_SECRET: undefined })).toThrow();
+    expect(() => loadRuntimeConfig({ ...vercelPreview, OTP_PEPPER: undefined })).toThrow();
+    expect(() => loadRuntimeConfig({ ...vercelPreview, AUTH_FIXED_OTP: "424242" })).toThrow("AUTH_FIXED_OTP is forbidden");
+  });
+
+  it("rejects every other Vercel project, branch and Preview origin", () => {
+    expect(() => loadRuntimeConfig({ ...vercelPreview, VERCEL_PROJECT_PRODUCTION_URL: "another.vercel.app" })).toThrow("Vercel project");
+    expect(() => loadRuntimeConfig({ ...vercelPreview, VERCEL_GIT_COMMIT_REF: "product/stitch-functional-owner" })).toThrow("Preview deployment");
+    expect(() => loadRuntimeConfig({ ...vercelPreview, PUBLIC_ORIGIN: "https://copilot.tablenow.io" })).toThrow("Preview deployment");
+  });
+
+  it("accepts only main on os.tablenow.io in Vercel production", () => {
+    const production = { ...valid, VERCEL: "1", VERCEL_ENV: "production", VERCEL_PROJECT_PRODUCTION_URL: "tablenow-copilot-v2.vercel.app", VERCEL_GIT_COMMIT_REF: "main", PUBLIC_ORIGIN: "https://os.tablenow.io" };
+    expect(() => loadRuntimeConfig(production)).not.toThrow();
+    expect(() => loadRuntimeConfig({ ...production, VERCEL_GIT_COMMIT_REF: "product/onboarding-owner" })).toThrow("production deployment");
   });
 
   it("does not create preview defaults for production", () => {

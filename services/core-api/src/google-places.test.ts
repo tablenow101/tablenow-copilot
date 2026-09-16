@@ -1,7 +1,13 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { googlePlaces } from "./google-places.js";
+import { googlePlaces, googlePlacesConfiguration } from "./google-places.js";
 afterEach(() => vi.unstubAllEnvs());
 describe("Google Places Copilot adapter", () => {
+ it("limits a deployed key to the two canonical environments", () => {
+  const base = { VERCEL: "1", VERCEL_PROJECT_PRODUCTION_URL: "tablenow-copilot-v2.vercel.app", GOOGLE_PLACES_API_KEY: "test-only" };
+  expect(googlePlacesConfiguration({ ...base, VERCEL_ENV: "preview", VERCEL_GIT_COMMIT_REF: "product/onboarding-owner", PUBLIC_ORIGIN: "https://preview.tablenow.io" })).toBe("test-only");
+  expect(googlePlacesConfiguration({ ...base, VERCEL_ENV: "production", VERCEL_GIT_COMMIT_REF: "main", PUBLIC_ORIGIN: "https://os.tablenow.io" })).toBe("test-only");
+  expect(googlePlacesConfiguration({ ...base, VERCEL_ENV: "preview", VERCEL_GIT_COMMIT_REF: "product/stitch-functional-owner", PUBLIC_ORIGIN: "https://copilot.tablenow.io" })).toBeNull();
+ });
  it("fails before any network call when unconfigured", async () => {
   vi.stubEnv("GOOGLE_PLACES_API_KEY", ""); const fetcher = vi.fn<typeof fetch>();
   await expect(googlePlaces("search", "Paris", "s", "fr", fetcher)).rejects.toThrow("NOT_CONFIGURED");

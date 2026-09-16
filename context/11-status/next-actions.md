@@ -1,3 +1,11 @@
+# Séquence de publication TableNow OS — 15 septembre 2026
+
+1. Publier le lot contrôlé sur `product/onboarding-owner` et vérifier le commit exact servi par `preview.tablenow.io`.
+2. Raccorder une clé Google Places dédiée et restreinte à la Preview, puis vérifier les services externes sans exposer leurs secrets.
+3. Jouer le parcours réel complet sur ordinateur, téléphone et iPad ; la réception e-mail doit être confirmée par le propriétaire.
+4. Fusionner dans `main` uniquement si la Preview est complète, puis migrer et déployer la production contrôlée sur `os.tablenow.io`.
+5. Vérifier HTTPS et redirections, archiver la livraison, puis supprimer `product/onboarding-owner` devenue inutile conformément à la décision canonique 90.
+
 # Recette de copilot.tablenow.io — 14 septembre 2026
 
 Publier les corrections sur la branche autorisée, vérifier le commit réellement servi et jouer les parcours sur la nouvelle adresse. Laisser l'onglet ouvert pour les saisies privées ; préserver comptes, TOTP et brouillons. Contrôler textes/périmètre puis finalisation, résultat enregistré, cockpit et mobile. Réception e-mail à confirmer par le propriétaire ; trois logos officiels encore manquants. [Rapport du lot](../../docs/qa/stable-preview-2026-09-14.md). Les entrées suivantes sont historiques.

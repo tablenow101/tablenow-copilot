@@ -59,7 +59,7 @@ const meta: Record<ProductSection, { title: string; subtitle: string }> = {
   performance: { title: "Performance", subtitle: "L'impact opérationnel de TableNow, sans graphiques décoratifs." },
   locations: { title: "Établissements", subtitle: "Un langage commun pour chaque adresse du groupe." },
   systems: { title: "Systèmes & actions", subtitle: "TableNow choisit le chemin le plus fiable, du logiciel métier au cahier papier." },
-  copilot: { title: "TableNow Copilot", subtitle: "Questionnez vos opérations, comprenez les causes et validez les actions." },
+  copilot: { title: "TableNow OS", subtitle: "Questionnez vos opérations, comprenez les causes et validez les actions." },
 };
 
 export function ProductShell({ section }: { section: ProductSection }) {

@@ -1,8 +1,8 @@
 import { seed } from "./seed.js";
+import { resolveVercelDeployment, tableNowDeploymentTopology } from "@tablenow/contracts";
 
 export function shouldSeedPreview(environment: NodeJS.ProcessEnv = process.env): boolean {
-  return environment.VERCEL === "1"
-    && environment.VERCEL_ENV === "preview"
+  return resolveVercelDeployment(environment) === tableNowDeploymentTopology.preview
     && environment.TABLENOW_PREVIEW_SEED === "true";
 }
 

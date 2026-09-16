@@ -1,3 +1,7 @@
+# Migration TableNow OS — garde de publication, 15 septembre 2026
+
+`product/onboarding-owner` reste le sas de sécurité temporaire au commit publié `787973170fe3cde6f1e0db84fdfa5b4d3a8ef515`. Les corrections locales centralisent la topologie autorisée (`preview.tablenow.io`/branche cible et `os.tablenow.io`/`main`), bloquent toute migration avant validation du projet, de la branche, de l'origine et de l'endpoint Neon, exigent les identifiants SMTP complets et restaurent l'identité TableNow OS. `pnpm check` est vert : lint 16/16, typecheck 16/16, 207 tests réussis, 4 intégrations ignorées, build 11/11. Ce résultat est local ; le nouveau commit, le build Vercel et le parcours réel ne sont pas encore validés. La décision canonique de cycle de vie est enregistrée sous `project_memory.current_records` id 90, version 3.
+
 # Adresse stable Copilot — 14 septembre 2026
 
 `copilot.tablenow.io` est désormais rattaché à la branche Preview `product/stitch-functional-owner`. DNS Gandi ajoutés et vérifiés ; 26 enregistrements existants préservés. Origine serveur de branche et nouveau retour Google configurés, ancien retour conservé pour la transition. Corrections des deux textes validés prêtes ; 135 tests passent, 4 ignorés, compilations réussies. Publication et recette du nouveau domaine en cours : aucune certification du parcours complet. Les trois nouveaux logos annoncés ne sont pas disponibles. [Preuves et écarts](../../docs/qa/stable-preview-2026-09-14.md).

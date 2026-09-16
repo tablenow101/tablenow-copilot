@@ -20,6 +20,8 @@ beforeAll(async () => {
     PLATFORM_ADMIN_EMAIL: "admin@tablenow.test",
     EMAIL_TRANSPORT: "smtp",
     SMTP_HOST: "smtp.example.test",
+    SMTP_USER: "test-user",
+    SMTP_PASSWORD: "test-password",
     AUTH_FIXED_OTP: "424242",
     LOG_LEVEL: "silent",
   }))

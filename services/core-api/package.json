@@ -16,7 +16,7 @@
     "start": "node dist/server.js",
     "predb:migrate": "pnpm --filter '@tablenow/provider-adapters...' build",
     "db:migrate": "tsx src/migrate.ts",
-    "db:migrate:preview": "node dist/migrate-preview.js",
+    "db:migrate:vercel": "node dist/migrate-vercel.js",
     "predb:seed": "pnpm --filter '@tablenow/core-api...' build",
     "db:seed": "tsx src/seed.ts",
     "db:seed:preview": "node dist/seed-preview.js",

@@ -8,7 +8,7 @@
   },
   "scripts": {
     "build": "turbo run build",
-    "build:vercel": "turbo run build --filter=@tablenow/core-api... && pnpm --filter @tablenow/core-api db:migrate:preview && pnpm --filter @tablenow/core-api db:seed:preview && pnpm --filter @tablenow/core-api test:preview && pnpm --filter @tablenow/console build:vercel",
+    "build:vercel": "turbo run build --filter=@tablenow/core-api... && pnpm --filter @tablenow/core-api db:migrate:vercel && pnpm --filter @tablenow/core-api db:seed:preview && pnpm --filter @tablenow/core-api test:preview && pnpm --filter @tablenow/console build:vercel",
     "dev": "turbo run dev --parallel",
     "lint": "turbo run lint",
     "typecheck": "turbo run typecheck",

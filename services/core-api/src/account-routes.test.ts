@@ -20,6 +20,7 @@ beforeAll(async () => {
   vi.stubEnv("SESSION_SECRET", "s".repeat(48)); vi.stubEnv("OTP_PEPPER", "p".repeat(48));
   vi.stubEnv("PLATFORM_ADMIN_EMAIL", "admin@tablenow.test");
   vi.stubEnv("EMAIL_TRANSPORT", "smtp"); vi.stubEnv("SMTP_HOST", "test.invalid");
+  vi.stubEnv("SMTP_USER", "test-user"); vi.stubEnv("SMTP_PASSWORD", "test-password");
   vi.stubEnv("LOG_LEVEL", "silent");
   ({ sql: database } = await createTestDatabase());
   const { buildApp } = await import("./app.js");

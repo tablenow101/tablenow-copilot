@@ -1,5 +1,7 @@
 # Journal des décisions
 
+- D-033 — 2026-09-16 : `product/onboarding-owner` est une branche de sécurité temporaire. Ordre obligatoire : dernière Preview et recette complète, fusion dans `main`, déploiement de `main` sur `os.tablenow.io`, puis archivage et suppression de la branche devenue inutile. Cette décision est enregistrée et relue dans la mémoire PostgreSQL canonique, enregistrement 90 version 3, qui remplace 89.
+
 | ID | Date | Décision | Pourquoi | Statut |
 |---|---|---|---|---|
 | D-001 | 2026-08-30 | TableNow Copilot utilise une base PostgreSQL dédiée par environnement. | Éviter les doublons et garder une source de vérité. | Actif |

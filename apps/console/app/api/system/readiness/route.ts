@@ -9,18 +9,21 @@ export function GET(): Response {
   const administrator = configured("PLATFORM_ADMIN_EMAIL");
   const email = process.env.EMAIL_TRANSPORT === "smtp"
     && configured("SMTP_HOST")
+    && configured("SMTP_USER")
+    && configured("SMTP_PASSWORD")
     && configured("EMAIL_FROM");
+  const googleOAuth = configured("GOOGLE_OAUTH_CLIENT_ID") && configured("GOOGLE_OAUTH_CLIENT_SECRET");
+  const googlePlaces = configured("GOOGLE_PLACES_API_KEY");
   const storage = configured("BLOB_READ_WRITE_TOKEN");
 
-  // A Preview label or a log transport never proves a usable external service.
-  // The readyFor* flags describe explicit prerequisites, not successful delivery,
-  // a live database connection, or end-to-end product certification.
+  // Presence checks are intentionally not aggregated into a readiness verdict.
+  // External services and user journeys must be verified separately.
   return Response.json({
     service: "tablenow-copilot",
     environment: process.env.VERCEL_ENV || process.env.APP_ENV || "local",
     verification: "configuration-only",
     runtimeVerified: false,
-    checks: { database, serverSecrets, administrator, email, storage },
+    checks: { database, serverSecrets, administrator, email, googleOAuth, googlePlaces, storage },
     readyForMigrations: database,
     readyForLogin: database && serverSecrets && administrator && email,
   }, {

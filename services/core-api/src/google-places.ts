@@ -1,10 +1,19 @@
 // Adapted from tablenow101/tablenowbackend src/routes/prefill.route.ts.
 // Copilot owns its routes and credentials; no request goes to the legacy backend.
 import { z } from "zod";
+import { resolveVercelDeployment } from "@tablenow/contracts";
 const text = z.object({ text: z.string().optional() });
 const prediction = z.object({ placePrediction: z.object({ placeId: z.string(), text }).optional() });
+
+export function googlePlacesConfiguration(environment: NodeJS.ProcessEnv = process.env): string | null {
+  const key = environment.GOOGLE_PLACES_API_KEY;
+  if (!key) return null;
+  if (environment.VERCEL !== "1") return key;
+  return resolveVercelDeployment(environment) ? key : null;
+}
+
 export async function googlePlaces(kind: "search" | "details", value: string, session: string, locale: string, request: typeof fetch = fetch) {
-  const key = process.env.GOOGLE_PLACES_API_KEY;
+  const key = googlePlacesConfiguration();
   if (!key) throw new Error("GOOGLE_PLACES_NOT_CONFIGURED");
   const headers = { "Content-Type": "application/json", "X-Goog-Api-Key": key,
     "X-Goog-FieldMask": kind === "search" ? "suggestions.placePrediction.placeId,suggestions.placePrediction.text" : "id,displayName,formattedAddress,addressComponents,internationalPhoneNumber,websiteUri,location,regularOpeningHours,primaryTypeDisplayName,googleMapsUri" };

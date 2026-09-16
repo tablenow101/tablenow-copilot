@@ -4,7 +4,7 @@ import "./stitch.css";
 import "./components.css";
 
 export const metadata: Metadata = {
-  title: "TableNow Copilot",
+  title: "TableNow OS",
   description: "Le centre de commandement opérationnel du restaurant.",
   robots: { index: false, follow: false, noarchive: true },
 };

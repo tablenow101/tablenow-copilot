@@ -1,10 +1,10 @@
 import { createDatabase, type EmailSender } from "@tablenow/provider-adapters";
+import { resolveVercelDeployment, tableNowDeploymentTopology } from "@tablenow/contracts";
 import { buildApp } from "./app.js";
 import { getConfig } from "./environment.js";
 
 export function shouldRunPreviewSmoke(environment: NodeJS.ProcessEnv = process.env): boolean {
-  return environment.VERCEL === "1"
-    && environment.VERCEL_ENV === "preview"
+  return resolveVercelDeployment(environment) === tableNowDeploymentTopology.preview
     && environment.TABLENOW_PREVIEW_SEED === "true";
 }
 

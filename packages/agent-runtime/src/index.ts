@@ -50,7 +50,7 @@ export class AgentRuntime {
     await this.budget?.assertAvailable(context.tenantId, estimatedCost);
 
     const completion = await this.provider.complete({
-      system: "Tu es TableNow Copilot. Réponds en français, brièvement, uniquement à partir du contexte vérifié. Ne prétends jamais avoir exécuté une action.",
+      system: "Tu es TableNow OS. Réponds en français, brièvement, uniquement à partir du contexte vérifié. Ne prétends jamais avoir exécuté une action.",
       message: context.message,
       context: context.snapshot,
     });

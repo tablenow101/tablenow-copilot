@@ -1,5 +1,35 @@
 import { z } from "zod";
 
+export const tableNowDeploymentTopology = {
+  vercelProject: "tablenow-copilot-v2.vercel.app",
+  preview: {
+    environment: "preview",
+    branch: "product/onboarding-owner",
+    origin: "https://preview.tablenow.io",
+    neonEndpoint: "ep-rapid-leaf-zas11naf",
+  },
+  production: {
+    environment: "production",
+    branch: "main",
+    origin: "https://os.tablenow.io",
+    neonEndpoint: "ep-crimson-sound-za2s6xo0",
+  },
+  database: "neondb",
+} as const;
+
+export type DeploymentEnvironment = Readonly<Record<string, string | undefined>>;
+
+export function resolveVercelDeployment(environment: DeploymentEnvironment) {
+  if (environment.VERCEL !== "1"
+    || environment.VERCEL_PROJECT_PRODUCTION_URL?.toLowerCase() !== tableNowDeploymentTopology.vercelProject) return null;
+  for (const target of [tableNowDeploymentTopology.preview, tableNowDeploymentTopology.production] as const) {
+    if (environment.VERCEL_ENV === target.environment
+      && environment.VERCEL_GIT_COMMIT_REF === target.branch
+      && environment.PUBLIC_ORIGIN === target.origin) return target;
+  }
+  return null;
+}
+
 export const uuidSchema = z.uuid();
 export const emailSchema = z.email().transform((value) => value.trim().toLowerCase());
 

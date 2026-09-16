@@ -166,7 +166,7 @@ export function OnboardingFlow({ initialRestaurantId, initialSection }: { initia
       const loaded = await api<OnboardingDraftView>(`/v1/onboarding${query}`);
       if (loadRequestRef.current !== requestId) return;
       if (loaded.status === "completed" && !initialSection) {
-        router.replace("/today");
+        router.replace("/dashboard");
         return;
       }
       const loadedAnswers = mergeOnboardingAnswers(loaded.answers);
