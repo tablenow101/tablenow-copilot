@@ -56,6 +56,11 @@ function validAnswers(focus: NonNullable<OnboardingAnswers["priorities"]["primar
 }
 
 describe("final onboarding server rules", () => {
+  it("confirms priorities before allowing establishment discovery", () => {
+    const answers = validAnswers();
+    expect(updateConfirmedSections("priorities", "establishment", [], answers)).toEqual(["priorities"]);
+  });
+
   it("OB-01 rejects skipped sections and accepts a fully confirmed owner flow", () => {
     const answers = validAnswers();
     expect(() => updateConfirmedSections("establishment", "reservations", [], answers)).toThrow("ONBOARDING_INVALID_TRANSITION");
@@ -132,7 +137,7 @@ describe("final onboarding server rules", () => {
   it("OB-20 invalidates edited and later confirmations but preserves them on navigation only", () => {
     const answers = validAnswers();
     expect(updateConfirmedSections("review", "operations", confirmableSections, answers, false)).toEqual(confirmableSections);
-    expect(updateConfirmedSections("review", "operations", confirmableSections, answers, true)).toEqual(["establishment", "priorities", "interaction", "reservations"]);
+    expect(updateConfirmedSections("review", "operations", confirmableSections, answers, true)).toEqual(["priorities", "establishment", "interaction", "reservations"]);
   });
 
   it("OB-24 treats hostile text as inert data in the generated result", () => {

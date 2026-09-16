@@ -1,6 +1,6 @@
 import crypto from "node:crypto";
 import { describe, expect, it } from "vitest";
-import { copilotMessageSchema, inventoryCreateSchema, onboardingAnswersSchema, onboardingCompleteSchema, onboardingDraftSaveSchema, onboardingLegalVersions, onboardingSchema, privacyRequestSchema, reservationCreateSchema, restaurantCreateSchema, shiftCreateSchema, syncPushSchema, taskCreateSchema } from "./index.js";
+import { copilotMessageSchema, inventoryCreateSchema, onboardingAnswersSchema, onboardingCompleteSchema, onboardingDraftSaveSchema, onboardingLegalVersions, onboardingSchema, onboardingSectionSchema, privacyRequestSchema, reservationCreateSchema, restaurantCreateSchema, shiftCreateSchema, syncPushSchema, taskCreateSchema } from "./index.js";
 
 describe("public contracts", () => {
   it("requires explicit legal acceptance before onboarding", () => {
@@ -72,6 +72,10 @@ describe("public contracts", () => {
     expect(onboardingAnswersSchema.parse({}).interaction).toMatchObject({ locale: "fr", preferredMode: "mixed", preferredModeConfirmed: false });
     expect(onboardingAnswersSchema.safeParse({ interaction: { locale: "en" } }).success).toBe(true);
     expect(onboardingAnswersSchema.safeParse({ interaction: { locale: "ar" } }).success).toBe(false);
+  });
+
+  it("starts onboarding with priorities before establishment discovery", () => {
+    expect(onboardingSectionSchema.options.slice(0, 2)).toEqual(["priorities", "establishment"]);
   });
 
   it("limits privacy requests to supported rights", () => {

@@ -67,6 +67,12 @@ import {
 import { useSession } from "@/hooks/useSession";
 import { LoadingScreen } from "./LoadingScreen";
 import { Brand } from "./Brand";
+import {
+  nextOnboardingSection,
+  onboardingProgressGroups as progressGroups,
+  onboardingStoryboard as sectionOrder,
+  previousOnboardingSection,
+} from "@/lib/onboarding-storyboard";
 
 type SaveState = "idle" | "dirty" | "saving" | "saved" | "failed" | "conflict";
 type LoadState = "idle" | "loading" | "ready" | "failed";
@@ -94,16 +100,6 @@ interface SpeechRecognitionLike {
 }
 type SpeechRecognitionConstructor = new () => SpeechRecognitionLike;
 
-const sectionOrder: SectionKey[] = ["establishment", "priorities", "interaction", "reservations", "operations", "authority", "final_note", "review"];
-const progressGroups: Array<{ key: string; sections: SectionKey[]; target: SectionKey }> = [
-  { key: "establishment", sections: ["establishment"], target: "establishment" },
-  { key: "priorities", sections: ["priorities", "interaction"], target: "priorities" },
-  { key: "reservations", sections: ["reservations"], target: "reservations" },
-  { key: "operations", sections: ["operations"], target: "operations" },
-  { key: "authority", sections: ["authority", "final_note"], target: "authority" },
-  { key: "review", sections: ["review"], target: "review" },
-];
-
 const timeConsumers = [...priorityActivities, "other"] as const;
 const outcomes = priorityOutcomes;
 
@@ -120,7 +116,7 @@ export function OnboardingFlow({ initialRestaurantId, initialSection }: { initia
   const [draft, setDraft] = useState<OnboardingDraftView | null>(null);
   const [answers, setAnswers] = useState<OnboardingAnswers>(() => emptyOnboardingAnswers());
   const [provenance, setProvenance] = useState<OnboardingProvenance>([]);
-  const [section, setSection] = useState<SectionKey>("establishment");
+  const [section, setSection] = useState<SectionKey>("priorities");
   const [loadState, setLoadState] = useState<LoadState>("idle");
   const [saveState, setSaveState] = useState<SaveState>("idle");
   const [error, setError] = useState("");
@@ -533,8 +529,8 @@ export function OnboardingFlow({ initialRestaurantId, initialSection }: { initia
   if (loadState !== "ready" || !draft) return <LoadingScreen label={copy.common.loading} />;
 
   const currentIndex = sectionOrder.indexOf(section);
-  const nextSection = sectionOrder[Math.min(sectionOrder.length - 1, currentIndex + 1)]!;
-  const previousSection = sectionOrder[Math.max(0, currentIndex - 1)]!;
+  const nextSection = nextOnboardingSection(section);
+  const previousSection = previousOnboardingSection(section);
   const currentGroupIndex = Math.max(0, progressGroups.findIndex((group) => group.sections.includes(section)));
   const userCanComplete = canComplete(session.membership.role);
   const canFinish = userCanComplete && acceptTerms && acceptDpa;

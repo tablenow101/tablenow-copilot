@@ -83,16 +83,18 @@ export const operatingSetupSchema = z.object({
   }
 });
 
-export const onboardingSectionSchema = z.enum([
-  "establishment",
+export const onboardingSectionOrder = [
   "priorities",
+  "establishment",
   "interaction",
   "reservations",
   "operations",
   "authority",
   "final_note",
   "review",
-]);
+] as const;
+export const onboardingSectionSchema = z.enum(onboardingSectionOrder);
+export type OnboardingSection = z.infer<typeof onboardingSectionSchema>;
 
 export const onboardingSourceTypeSchema = z.enum(["user_form", "user_text", "user_voice", "public_suggestion", "connected_source"]);
 export const onboardingConfirmationStatusSchema = z.enum(["suggested", "confirmed", "rejected", "unknown"]);

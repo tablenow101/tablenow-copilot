@@ -33,6 +33,7 @@
 - Modify: `packages/contracts/src/index.ts`
 - Modify: `services/core-api/src/onboarding.ts`
 - Modify: `services/core-api/src/onboarding.test.ts`
+- Create: `services/core-api/migrations/012_onboarding_priority_first.sql`
 - Modify: `apps/console/components/OnboardingFlow.tsx`
 - Modify: `apps/console/onboarding-boundary.test.ts`
 - Modify: `apps/console/app/stitch.css`
@@ -56,7 +57,7 @@
 ### Task 2: Persister l’inventaire des systèmes et la checklist personnalisée
 
 **Files:**
-- Create: `services/core-api/migrations/012_onboarding_system_inventory.sql`
+- Create: `services/core-api/migrations/013_onboarding_system_inventory.sql`
 - Create: `packages/contracts/src/onboarding-systems.ts`
 - Create: `packages/contracts/src/onboarding-systems.test.ts`
 - Create: `services/core-api/src/connection-checklist.ts`
@@ -86,7 +87,7 @@
 ### Task 3: Construire le registre d’intégrations et les connexions vérifiables
 
 **Files:**
-- Create: `services/core-api/migrations/013_connection_verifications.sql`
+- Create: `services/core-api/migrations/014_connection_verifications.sql`
 - Create: `packages/contracts/src/integrations.ts`
 - Create: `packages/contracts/src/integrations.test.ts`
 - Create: `services/core-api/src/integration-registry.ts`
@@ -131,7 +132,7 @@
 ### Task 5: Implémenter l’Advisor à trois niveaux
 
 **Files:**
-- Create: `services/core-api/migrations/014_advisor_recommendations.sql`
+- Create: `services/core-api/migrations/015_advisor_recommendations.sql`
 - Create: `packages/contracts/src/advisor.ts`
 - Create: `packages/contracts/src/advisor.test.ts`
 - Create: `services/core-api/src/continuous-advisor.ts`
@@ -173,7 +174,7 @@
 ### Task 7: Ajouter les profils internes et photos privées
 
 **Files:**
-- Create: `services/core-api/migrations/015_private_profiles.sql`
+- Create: `services/core-api/migrations/016_private_profiles.sql`
 - Create: `services/core-api/src/private-media.ts`
 - Create: `services/core-api/src/private-media.test.ts`
 - Create: `services/core-api/src/team-profiles.ts`
@@ -215,7 +216,7 @@
 ## Auto-revue du plan
 
 - Couverture : les onze sections de la spécification sont reliées aux tâches 1 à 8.
-- Données : migrations additives 012 à 015, conservation des brouillons et vérifications d’isolation.
+- Données : migrations additives 012 à 016, conservation des brouillons et vérifications d’isolation.
 - Vérité : connecteurs, conseils et notifications proviennent de preuves persistées.
 - Livraison : aucun changement de `main`, recette réelle obligatoire, photos privées bloquantes uniquement à la porte de production.
 - Aucun placeholder fonctionnel, connecteur simulé ou métrique inventée n’est prévu.

@@ -1,5 +1,6 @@
 import { readFile } from "node:fs/promises";
 import { describe, expect, it } from "vitest";
+import { onboardingProgressGroups } from "./lib/onboarding-storyboard";
 
 const componentPath = new URL("./components/OnboardingFlow.tsx", import.meta.url);
 const shellPath = new URL("./components/ProductShell.tsx", import.meta.url);
@@ -62,8 +63,15 @@ describe("onboarding frontend boundaries", () => {
   });
 
   it("OB-21 and OB-22 keep six stable responsive progress tracks and both themes", async () => {
-    const [component, css] = await Promise.all([readFile(componentPath, "utf8"), readFile(cssPath, "utf8")]);
-    expect(component.match(/key: "(establishment|priorities|reservations|operations|authority|review)"/g)).toHaveLength(6);
+    const css = await readFile(cssPath, "utf8");
+    expect(onboardingProgressGroups.map((group) => group.target)).toEqual([
+      "priorities",
+      "establishment",
+      "reservations",
+      "operations",
+      "authority",
+      "review",
+    ]);
     expect(css).toContain("grid-template-columns: repeat(6, 1fr)");
     expect(css).toContain("grid-template-columns: repeat(3, minmax(0, 1fr))");
     expect(css).toContain(".final-onboarding.theme-clear");

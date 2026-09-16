@@ -6,6 +6,7 @@
 - La vérification serveur indique Google Places et le transport e-mail prêts ; leurs parcours réels restent à exécuter.
 - TOTP complet, inscription avec réception réelle de l'e-mail, sauvegarde/reprise d'onboarding, premier résultat, cockpit, reconnexion, ordinateur, téléphone et iPad restent à certifier sur le nouveau déploiement.
 - `main`, `os.tablenow.io` et la production restent inchangés jusqu'à réussite complète de la Preview.
+- Le stockage privé réel des photos internes n’est pas encore raccordé ; ce point ne bloque pas les lots précédents mais bloque la promotion finale.
 
 # Blocage de recette — session propriétaire
 

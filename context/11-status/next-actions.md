@@ -1,10 +1,10 @@
 # Séquence de publication TableNow OS — 16 septembre 2026
 
-1. Terminer le TOTP privé depuis l'écran laissé ouvert, puis vérifier onboarding, sauvegarde/reprise, premier résultat et cockpit.
-2. Ajouter les adresses des bêta-testeurs à l'audience Google et leur fournir un accès Vercel autorisé tant que la Preview reste protégée.
-3. Jouer le parcours réel complet sur ordinateur, téléphone et iPad ; la réception e-mail doit être confirmée par le propriétaire.
-4. Fusionner dans `main` uniquement si la Preview est complète, puis migrer et déployer la production contrôlée sur `os.tablenow.io`.
-5. Vérifier HTTPS et redirections, archiver la livraison, puis supprimer `product/onboarding-owner` devenue inutile conformément à la décision canonique 90.
+1. Exécuter les huit lots de `docs/superpowers/plans/2026-09-16-continuous-advisor.md` sur `product/onboarding-owner`, avec tests et commit par lot.
+2. Déployer chaque état cohérent sur `preview.tablenow.io` et conserver un état honnête pour toute intégration indisponible.
+3. Terminer le stockage privé des profils et photos avant la porte de production, sans bloquer les lots précédents.
+4. Rejouer Google, e-mail, TOTP, Google Places, sauvegarde/reprise, onboarding, premier résultat et cockpit sur ordinateur et mobile.
+5. Demander l’autorisation explicite du propriétaire avant toute fusion ou promotion vers `main` et `os.tablenow.io`.
 
 # Recette de copilot.tablenow.io — 14 septembre 2026
 

@@ -167,6 +167,12 @@ describe("PostgreSQL schema migrations", () => {
     `);
     expect(profiles.rows[0]?.count).toBe(2);
 
+    const drafts = await database.query<{ currentSection: string }>(`
+      select current_section as "currentSection" from onboarding_drafts
+      where id = '33000000-0000-0000-0000-000000000001'
+    `);
+    expect(drafts.rows[0]?.currentSection).toBe("priorities");
+
     await expect(database.exec(`
       insert into onboarding_profiles (tenant_id, restaurant_id)
       values ('30000000-0000-0000-0000-000000000003', '31000000-0000-0000-0000-000000000001');

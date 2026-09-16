@@ -1,5 +1,6 @@
 import {
   onboardingAnswersSchema,
+  onboardingSectionOrder as contractOnboardingSectionOrder,
   type OnboardingAnswers,
   type OnboardingDraftView,
   type OnboardingInput,
@@ -29,14 +30,7 @@ type OnboardingSection = OnboardingDraftView["currentSection"];
 type ConfirmableSection = Exclude<OnboardingSection, "review">;
 
 export const onboardingSectionOrder: OnboardingSection[] = [
-  "establishment",
-  "priorities",
-  "interaction",
-  "reservations",
-  "operations",
-  "authority",
-  "final_note",
-  "review",
+  ...contractOnboardingSectionOrder,
 ];
 
 export function initialOnboardingAnswers(input: {
