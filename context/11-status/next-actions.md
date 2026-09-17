@@ -1,4 +1,11 @@
-# Porte active — saisie TOTP du propriétaire
+# Porte active — validation produit du lot 1
+
+1. Présenter au propriétaire la recette Google + TOTP, sauvegarde/reprise et responsive enregistrée dans `docs/qa/lot-1-auth-responsive-2026-09-17.md`.
+2. Obtenir sa validation produit explicite du lot 1 ; les contrôles automatiques et la recette technique ne la remplacent pas.
+3. Conserver comme écart distinct la première arrivée d'un compte neuf sur Priorités, non prouvée avec ce compte historique déjà finalisé.
+4. Ne pas finaliser le lot 2, ne pas ouvrir le lot 3 et ne toucher ni à `main` ni à la production avant cette validation.
+
+## Historique de la porte TOTP
 
 1. Publier sur `product/onboarding-owner` la correction d'expiration TOTP, sans toucher à `main` ni à la production.
 2. Relancer Google pour créer un défi neuf, puis laisser le navigateur ouvert pour le TOTP, sans relancer ni fermer la page pendant la saisie.

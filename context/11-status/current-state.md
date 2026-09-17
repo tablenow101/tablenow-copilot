@@ -1,4 +1,12 @@
-# Porte de validation — lot 1 partiellement vérifié — BLOCKED_AUTH
+# Porte de validation — lot 1 vérifié techniquement, validation produit attendue
+
+Le 17 septembre 2026, la Preview stable sert réellement `product/onboarding-owner` au commit `47bd3d7187518d4fc915cad0c1c12e106dd17ebc`, déploiement `dpl_3d1FUGSrJBJxcDLhRLcftBroZtcj`, sur `preview.tablenow.io`. Google + TOTP ont réussi deux fois avec saisie privée du propriétaire. Priorités a été sauvegardé, Établissement ouvert, puis les deux sections ont été retrouvées après déconnexion/reconnexion. Le compte de recette avait déjà terminé l'onboarding : il revient normalement sur `/dashboard`, puis accède à Priorités par « Ajuster mes priorités » ; l'arrivée automatique d'un compte neuf sur Priorités reste distincte et non rejouée.
+
+La recette responsive du rendu déployé couvre 13 dimensions de 320×568 à 1920×1080 : iPhone, Android, iPad, Surface et ordinateurs. Onboarding et cockpit passent 26/26 mesures ; connexion, inscription et récupération passent 39/39 ; Confidentialité, Conditions et DPA passent 39/39. Aucun débordement horizontal ni contrôle hors écran n'a été mesuré. Il s'agit de viewports navigateur, pas de treize appareils physiques. Rapport : `docs/qa/lot-1-auth-responsive-2026-09-17.md`.
+
+Verdict : `VERIFIED_TECHNICALLY — AWAITING_OWNER_PRODUCT_APPROVAL`. Le lot 1 reste ouvert jusqu'à l'accord explicite du propriétaire. Aucun lot 2 final, lot 3, changement de `main` ou production.
+
+## Historique du blocage TOTP
 
 Instruction du propriétaire du 16 septembre 2026 : le lot 1 reste ouvert. Le commit publié avant correction TOTP est `0215615c08eea23cf7a29c0b622e46fb85739d55` ; les contrôles techniques ne constituent pas une validation produit.
 
