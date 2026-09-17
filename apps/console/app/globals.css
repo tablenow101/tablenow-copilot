@@ -1085,7 +1085,7 @@ button:disabled { cursor: not-allowed; opacity: .45; }
   min-height: 100dvh; padding: 9vh 32px; display: grid; place-items: center; color: var(--text);
   background: linear-gradient(125deg, #303541 0%, #151820 35%, #090b10 75%, #151923 100%);
 }
-.welcome-frame { position: relative; width: min(1120px, 100%); min-height: 660px; padding: 36px 40px 28px; border: 1px solid #787b866e; border-radius: 26px; background: linear-gradient(125deg, #ffffff09, #090b1080 70%); box-shadow: inset 0 1px 1px #ffffff20, 0 24px 42px #00000038; }
+.welcome-frame { position: relative; width: min(1120px, 100%); min-width: 0; min-height: 660px; padding: 36px 40px 28px; border: 1px solid #787b866e; border-radius: 26px; background: linear-gradient(125deg, #ffffff09, #090b1080 70%); box-shadow: inset 0 1px 1px #ffffff20, 0 24px 42px #00000038; }
 .welcome-onboarding .final-onboarding-header { position: static; min-height: 42px; height: auto; padding: 0 8px; border: 0; background: transparent; backdrop-filter: none; justify-content: flex-start; gap: 24px; }
 .welcome-onboarding .logo-lockup { gap: 0; }
 .welcome-onboarding .logo-lockup > span:last-child { display: block; font-size: 16px; font-weight: 600; letter-spacing: 0; }
