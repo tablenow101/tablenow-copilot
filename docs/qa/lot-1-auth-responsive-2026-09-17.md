@@ -6,14 +6,14 @@
 
 Le lot 1 reste ouvert. Aucun passage au lot 2 final, au lot 3, à `main` ou à la production n'est autorisé avant la validation produit explicite du propriétaire.
 
-## Version réellement servie
+## Version de l'application réellement testée
 
 - Branche : `product/onboarding-owner`.
-- Commit : `47bd3d7187518d4fc915cad0c1c12e106dd17ebc`.
+- Dernier commit applicatif : `47bd3d7187518d4fc915cad0c1c12e106dd17ebc`.
 - Déploiement Preview : `dpl_3d1FUGSrJBJxcDLhRLcftBroZtcj`.
 - URL Vercel : `https://tablenow-copilot-v2-7vc3bjwa9-tablenow101.vercel.app`.
 - Alias stable testé : `https://preview.tablenow.io`.
-- Vercel : `READY`, cible `preview` ; le journal de build confirme la branche et le commit ci-dessus.
+- Vercel : `READY`, cible `preview` ; le journal de build confirme la branche et ce dernier commit applicatif. Les commits documentaires publiés après la recette ne changent aucun fichier exécutable.
 - `main` distante est restée sur `665ca205111c7937b1e7507137e0af2b3c161c54` pendant cette vérification.
 
 ## Parcours réel exécuté
