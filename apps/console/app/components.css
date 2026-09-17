@@ -96,6 +96,7 @@
 .tn-account a:hover { text-decoration: underline; }
 .tn-account :focus-visible { outline: 2px solid var(--tn-blue); outline-offset: 3px; }
 @media (min-width: 768px) { .tn-account { padding-top: 48px; } .tn-account .tn-auth-card { flex: none; min-height: 650px; } }
+@media (max-width: 370px) { .welcome-onboarding .onboarding-actions .primary-button { width: auto; flex: 1 1 0; } }
 @media (max-width: 359px) { .tn-account { padding-inline: 20px; } .tn-account-options { flex-direction: column; align-items: flex-start; gap: 0; } }
 .final-onboarding .onboarding-composer { background: transparent; border: 0; padding: 8px 0; box-shadow: none; }
 .final-onboarding .tn-conversation-input { display: block; width: 100%; }
