@@ -111,3 +111,8 @@
 .tn-conversation-files li { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
 .tn-conversation-files a { overflow-wrap: anywhere; text-decoration: underline; }
 .final-onboarding .tn-conversation-files li button { min-width: 44px; min-height: 44px; background: transparent; border: 0; color: var(--text); }
+.tn-composer-dock .tn-conversation-input { display: block; width: 100%; }
+.tn-composer-dock .tn-conversation-bar { display: flex; align-items: center; gap: 4px; }
+.tn-composer-dock .tn-conversation-bar textarea { flex: 1; width: 0; min-width: 0; min-height: 44px; height: 44px; max-height: 140px; resize: none; border: 0; border-radius: 0; background: transparent; color: var(--tn-text); font-size: 16px; line-height: 24px; padding: 10px 2px; box-shadow: none; }
+.tn-composer-dock .tn-conversation-bar button { flex: 0 0 44px; width: 44px; min-height: 44px; display: grid; place-items: center; padding: 0; border: 0; border-radius: 50%; background: transparent; color: var(--tn-text); }
+.tn-composer-dock .tn-conversation-bar .tn-conversation-send { background: var(--tn-brand-accent); color: #161a0a; }
