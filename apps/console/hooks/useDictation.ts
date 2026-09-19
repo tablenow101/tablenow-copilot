@@ -1,89 +1,73 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
-type Recognition = {
-  lang: string;
-  continuous: boolean;
-  interimResults: boolean;
-  onresult:
-    | ((event: { results: ArrayLike<{ 0: { transcript: string } }> }) => void)
-    | null;
-  onerror: ((event: { error: string }) => void) | null;
-  onend: (() => void) | null;
-  start(): void;
-  stop(): void;
-  abort(): void;
-};
+import { createDictationSession, type Recognition } from "./dictation-session";
+
 type RecognitionConstructor = new () => Recognition;
-export function useDictation(onText: (text: string) => void) {
+type Session = ReturnType<typeof createDictationSession>;
+
+export function useDictation(onFinalText: (text: string) => void, onInterimText?: (text: string) => void) {
   const [listening, setListening] = useState(false);
   const [notice, setNotice] = useState("");
-  const ref = useRef<Recognition | null>(null);
-  const callback = useRef(onText);
-  useEffect(() => {
-    callback.current = onText;
-  }, [onText]);
-  useEffect(
-    () => () => {
-      const recognition = ref.current;
-      if (recognition) {
-        recognition.onresult = null;
-        recognition.onerror = null;
-        recognition.onend = null;
-        recognition.abort();
-      }
-    },
-    [],
-  );
+  const [interimText, setInterimText] = useState("");
+  const ref = useRef<Session | null>(null);
+  const callbacks = useRef({ onFinalText, onInterimText });
+  useEffect(() => { callbacks.current = { onFinalText, onInterimText }; }, [onFinalText, onInterimText]);
+  useEffect(() => () => {
+    const session = ref.current;
+    ref.current = null;
+    session?.cancel();
+  }, []);
+
+  function stop() { ref.current?.stop(); }
+  // Detach before accepting a manual edit so late browser results cannot
+  // overwrite it. This clears the preview; the caller keeps the visible draft,
+  // including interim words, in its own edited/submitted value.
+  function cancel() { ref.current?.cancel(); }
   function toggle() {
-    if (listening) {
-      ref.current?.stop();
-      return;
-    }
+    if (ref.current) { stop(); return; }
     const scope = window as unknown as {
       SpeechRecognition?: RecognitionConstructor;
       webkitSpeechRecognition?: RecognitionConstructor;
     };
-    const Constructor =
-      scope.SpeechRecognition || scope.webkitSpeechRecognition;
+    const Constructor = scope.SpeechRecognition || scope.webkitSpeechRecognition;
     if (!Constructor) {
-      setNotice(
-        "La dictée n’est pas disponible dans ce navigateur. Vous pouvez écrire ou utiliser le micro du clavier.",
-      );
+      setNotice("La dictée n’est pas disponible dans ce navigateur. Vous pouvez écrire ou utiliser le micro du clavier.");
       return;
     }
-    const recognition = new Constructor();
-    ref.current = recognition;
-    recognition.lang = "fr-FR";
-    recognition.continuous = false;
-    recognition.interimResults = false;
-    recognition.onresult = (event) => {
-      const text = Array.from(event.results)
-        .map((result) => result[0].transcript)
-        .join(" ");
-      callback.current(text);
-      setNotice("Dictée prête à relire. Rien n’a été envoyé.");
-    };
-    recognition.onerror = (event) => {
-      setListening(false);
-      setNotice(
-        event.error === "not-allowed"
+    const session = createDictationSession(new Constructor(), {
+      onFinalText: (text) => { if (ref.current === session) callbacks.current.onFinalText(text); },
+      onInterimText: (text) => {
+        if (ref.current !== session) return;
+        setInterimText(text);
+        callbacks.current.onInterimText?.(text);
+      },
+      onError: (error) => {
+        if (ref.current !== session) return;
+        ref.current = null;
+        setListening(false);
+        setNotice(error === "not-allowed"
           ? "Micro refusé. Autorisez-le dans votre navigateur ou continuez par écrit."
-          : "La dictée a été interrompue. Votre texte est conservé.",
-      );
-    };
-    recognition.onend = () => setListening(false);
+          : "La dictée a été interrompue. Votre texte est conservé et reste à relire.");
+      },
+      onEnd: () => {
+        if (ref.current !== session) return;
+        ref.current = null;
+        setListening(false);
+        setNotice("Dictée arrêtée. Relisez votre texte. Rien n’a été envoyé.");
+      },
+    });
+    ref.current = session;
     try {
-      recognition.start();
+      session.start();
+      setInterimText("");
+      callbacks.current.onInterimText?.("");
       setListening(true);
-      setNotice(
-        "Écoute en cours. La transcription utilise le service vocal du navigateur.",
-      );
+      setNotice("Écoute en cours. La transcription utilise le service vocal du navigateur.");
     } catch {
+      session.cancel();
       setListening(false);
-      setNotice(
-        "Impossible d’ouvrir le micro. Vous pouvez continuer par écrit.",
-      );
+      setNotice("Impossible d’ouvrir le micro. Votre texte est conservé ; vous pouvez continuer par écrit.");
     }
   }
-  return { listening, notice, toggle };
+  return { listening, notice, interimText, toggle, stop, cancel };
 }

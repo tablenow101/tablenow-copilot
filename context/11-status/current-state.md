@@ -1,3 +1,7 @@
+# Pilote visuel Aujourd’hui — 19 septembre 2026
+
+La direction sombre/claire approuvée est implémentée sur la branche unique `product/onboarding-owner`, depuis `7e8b2af`. Les API, les comptes, l’authentification et les données existantes sont préservés. Tests console : 66 réussis ; typecheck et compilation réussis. La publication et la recette réelle de ce changement restent à vérifier. Aucun lot clôturé ; main et production intacts. [Diff fonctionnel et preuves](../../docs/qa/pilote-aujourdhui-2026-09-19.md).
+
 # Porte de validation — lot 1 vérifié techniquement, validation produit attendue
 
 Le 17 septembre 2026, la source applicative réellement testée sur `preview.tablenow.io` est `product/onboarding-owner` au commit `47bd3d7187518d4fc915cad0c1c12e106dd17ebc`. Les commits documentaires ultérieurs de cette branche n'altèrent pas cette source applicative. Google + TOTP ont réussi deux fois avec saisie privée du propriétaire. Priorités a été sauvegardé, Établissement ouvert, puis les deux sections ont été retrouvées après déconnexion/reconnexion. Le compte de recette avait déjà terminé l'onboarding : il revient normalement sur `/dashboard`, puis accède à Priorités par « Ajuster mes priorités » ; l'arrivée automatique d'un compte neuf sur Priorités reste distincte et non rejouée.

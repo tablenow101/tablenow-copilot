@@ -35,7 +35,11 @@ import {
   Search,
   Settings2,
   ShieldCheck,
-  Sparkles,
+  Menu,
+  Moon,
+  Sun,
+  ChevronDown,
+  ChevronUp,
   Square,
   Users,
   UtensilsCrossed,
@@ -44,6 +48,8 @@ import {
 import { api, ApiError } from "@/lib/api";
 import { useSession } from "@/hooks/useSession";
 import { useDictation } from "@/hooks/useDictation";
+import { ownerGreeting, summarizeToday } from "@/lib/today-overview";
+import { TodayOverview } from "./TodayOverview";
 import { scopeWorkspace } from "@/lib/workspace";
 import {
   addLocalHours,
@@ -72,13 +78,6 @@ const mainNav = [
   { key: "communications", label: "Communications", icon: MessageSquareText },
   { key: "service", label: "Service & salle", icon: UtensilsCrossed },
   { key: "team", label: "Équipe", icon: Users },
-];
-const mobileNav = [
-  mainNav[0]!,
-  mainNav[1]!,
-  { key: "profile", label: "Profil", icon: Settings2 },
-  { key: "service", label: "Métiers", icon: LayoutGrid },
-  mainNav[4]!,
 ];
 type Decision = Workspace["decisions"][number];
 type Reservation = Workspace["reservations"][number];
@@ -147,6 +146,21 @@ export function OwnerShell({ section }: { section: string }) {
     error: sessionError,
     refresh: refreshSession,
   } = useSession();
+  const [theme, setTheme] = useState("dark");
+  const [navigationOpen, setNavigationOpen] = useState(false);
+  const [composerCollapsed, setComposerCollapsed] = useState(false);
+  const preparationRef = useRef<HTMLDivElement>(null);
+  const showPreparation = useRef(false);
+  const focusComposer = useRef(false);
+  const shellRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    try { setTheme(localStorage.getItem("tn-theme") === "clear" ? "clear" : "dark"); } catch { /* Optional preference. */ }
+  }, []);
+  function toggleTheme() {
+    const next = theme === "dark" ? "clear" : "dark";
+    setTheme(next);
+    try { localStorage.setItem("tn-theme", next); } catch { /* Optional preference. */ }
+  }
   const [workspace, setWorkspace] = useState<Workspace | null>(null);
   const [operating, setOperating] = useState<OperatingState>(emptyOperating);
   const [restaurantId, setRestaurantId] = useState<string | null>(null);
@@ -158,7 +172,7 @@ export function OwnerShell({ section }: { section: string }) {
       ? "after"
       : section === "operations"
         ? "before"
-        : "during",
+        : "before",
   );
   const [modal, setModal] = useState<Modal | null>(null);
   const draftRequestId = useRef("");
@@ -166,6 +180,7 @@ export function OwnerShell({ section }: { section: string }) {
   const mutationInFlight = useRef(false);
   const [formError, setFormError] = useState("");
   const [message, setMessage] = useState("");
+  const [chatError, setChatError] = useState("");
   const [chatBusy, setChatBusy] = useState(false);
   const chatInFlight = useRef(false);
   const chatRequest = useRef<{ restaurantId: string; message: string; key: string } | null>(null);
@@ -215,12 +230,34 @@ export function OwnerShell({ section }: { section: string }) {
     heading.current?.focus();
   }, [active]);
   useEffect(() => {
+    if (!composerCollapsed && focusComposer.current) {
+      document.querySelector<HTMLTextAreaElement>(".tn-composer-dock textarea")?.focus();
+      focusComposer.current = false;
+    }
+  }, [composerCollapsed, message]);
+  useEffect(() => {
+    if (phase === "before" && showPreparation.current) {
+      preparationRef.current?.focus();
+      preparationRef.current?.scrollIntoView({ block: "start" });
+      showPreparation.current = false;
+    }
+  }, [phase]);
+  useEffect(() => {
     if (!notice) return;
     const timer = window.setTimeout(() => setNotice(""), 6000);
     return () => window.clearTimeout(timer);
   }, [notice]);
 
   const scoped = scopeWorkspace(workspace, restaurantId);
+  const hasWorkspace = Boolean(scoped);
+  useEffect(() => {
+    const viewport = window.visualViewport;
+    if (!viewport) return;
+    const resize = () => shellRef.current?.style.setProperty("--tn-viewport-height", viewport.scale === 1 ? `${viewport.height}px` : "100dvh");
+    resize();
+    viewport.addEventListener("resize", resize);
+    return () => viewport.removeEventListener("resize", resize);
+  }, [hasWorkspace]);
   const restaurant = scoped?.restaurants[0];
   const tz = restaurant?.timezone || "Europe/Paris";
   const currentDay = dayKey(new Date(), tz);
@@ -240,6 +277,32 @@ export function OwnerShell({ section }: { section: string }) {
   );
   const open = (scoped?.decisions || []).filter((d) => d.status === "open");
   const [title, subtitle] = titles[active] || titles.dashboard!;
+
+  function changeRestaurant(id: string) {
+    setRestaurantId(id);
+    dictation.cancel();
+    setMessage("");
+    setChatError("");
+  }
+
+  function openPreparation() {
+    if (phase === "before") {
+      preparationRef.current?.focus();
+      preparationRef.current?.scrollIntoView({ block: "start" });
+    } else {
+      showPreparation.current = true;
+      setPhase("before");
+    }
+  }
+
+  function prepareMessage(text: string) {
+    const draft = [message, dictation.interimText].filter(Boolean).join(" ").trim();
+    dictation.cancel();
+    focusComposer.current = true;
+    setComposerCollapsed(false);
+    setMessage(draft && draft !== text ? `${draft}\n\n${text}` : text);
+    setNotice("Demande préparée. Relisez-la puis envoyez-la avec la flèche.");
+  }
 
   function openModal(next: Modal) {
     draftRequestId.current = crypto.randomUUID();
@@ -368,15 +431,17 @@ export function OwnerShell({ section }: { section: string }) {
       );
     }
   }
-  async function sendChat() {
-    if (chatInFlight.current || !message.trim() || !restaurantId) return;
+  async function sendChat(request?: string) {
+    const submittedMessage = request ?? [message, dictation.interimText].filter(Boolean).join(" ");
+    if (chatInFlight.current || !submittedMessage.trim() || !restaurantId) return;
+    dictation.cancel();
+    setMessage(submittedMessage);
     chatInFlight.current = true;
-    const submittedMessage = message;
-    if (chatRequest.current?.restaurantId !== restaurantId || chatRequest.current.message !== message.trim()) {
-      chatRequest.current = { restaurantId, message: message.trim(), key: crypto.randomUUID() };
+    if (chatRequest.current?.restaurantId !== restaurantId || chatRequest.current.message !== submittedMessage.trim()) {
+      chatRequest.current = { restaurantId, message: submittedMessage.trim(), key: crypto.randomUUID() };
     }
     setChatBusy(true);
-    setError("");
+    setChatError("");
     try {
       await api("/v1/operating/chat", {
         method: "POST",
@@ -387,7 +452,7 @@ export function OwnerShell({ section }: { section: string }) {
       await refresh();
       if (active !== "copilot") router.push("/copilot");
     } catch (caught) {
-      setError(
+      setChatError(
         caught instanceof Error
           ? caught.message
           : "Votre message n’a pas pu être traité. Il est conservé ici.",
@@ -444,11 +509,12 @@ export function OwnerShell({ section }: { section: string }) {
     );
 
   return (
-    <div className="tn-app">
+    <div className={`tn-app tn-owner theme-${theme}`} ref={shellRef}>
       <a className="tn-skip" href="#owner-main">
         Aller au contenu
       </a>
       <header className="tn-topbar">
+        <button className="tn-icon tn-menu-toggle" aria-label="Ouvrir la navigation" onClick={() => setNavigationOpen(true)}><Menu size={21} /></button>
         <Link href="/dashboard" aria-label="TableNow — Aujourd’hui">
           <Brand />
         </Link>
@@ -467,15 +533,14 @@ export function OwnerShell({ section }: { section: string }) {
             </Link>
           ))}
         </nav>
+        <button className="tn-icon tn-owner-theme" onClick={toggleTheme} aria-label={theme === "dark" ? "Mode clair" : "Mode sombre"}>{theme === "dark" ? <Sun size={20} /> : <Moon size={20} />}</button>
         <div className="tn-restaurant">
           <Building2 size={16} />
           <select
             aria-label="Établissement actif"
             value={restaurantId || ""}
-            onChange={(e) => {
-              setRestaurantId(e.target.value);
-              setMessage("");
-            }}
+            disabled={chatBusy}
+            onChange={(e) => changeRestaurant(e.target.value)}
           >
             {workspace?.restaurants.map((r) => (
               <option key={r.id} value={r.id}>
@@ -513,9 +578,9 @@ export function OwnerShell({ section }: { section: string }) {
               }).format(new Date())}
             </span>
             <h1 ref={heading} tabIndex={-1}>
-              {title}
+              {active === "dashboard" ? ownerGreeting(session.user.displayName, tz) : title}
             </h1>
-            <p>{subtitle}</p>
+            <p>{active === "dashboard" ? (() => { const next = summarizeToday(scoped.reservations, scoped.tasks, tz).nextArrival; return next ? `Prochaine arrivée enregistrée à ${formatRestaurantTime(next, tz)}.` : "Bonjour et bienvenue, comment puis-je vous aider ?"; })() : subtitle}</p>
           </div>
           <div className="tn-heading-actions">
             <button
@@ -578,18 +643,10 @@ export function OwnerShell({ section }: { section: string }) {
                 </button>
               ))}
             </div>
-            {open[0] && (
-              <div className="tn-alert">
-                <Clock3 size={23} />
-                <div>
-                  <strong>{open[0].title}</strong>
-                  <p>{open[0].description}</p>
-                </div>
-                <Link href="/decisions" className="tn-secondary">
-                  Voir la décision <ArrowRight size={16} />
-                </Link>
-              </div>
-            )}
+            <TodayOverview workspace={scoped} timeZone={tz} phase={phase} busy={chatBusy}
+              onPrepare={() => prepareMessage(phase === "after" ? "Prépare le prochain service à partir de nos données enregistrées. Distingue faits, informations manquantes et recommandations." : "Prépare un briefing pour notre service à partir des réservations, postes, tâches et décisions enregistrés. Distingue les données connues et les points à confirmer.")}
+              onAddTask={() => openModal({ kind: "task" })} onShowPreparation={openPreparation} />
+            <div id="today-preparation" className="tn-today-details" tabIndex={-1} ref={preparationRef}>
             <details className="tn-service-details">
               <summary>
                 Le service en chiffres <ChevronRight size={16} />
@@ -697,12 +754,7 @@ export function OwnerShell({ section }: { section: string }) {
                   </div>
                   <button
                     className="tn-secondary tn-wide"
-                    onClick={() => {
-                      setMessage(
-                        "Aide-moi à préparer le prochain service à partir de nos résultats.",
-                      );
-                      document.querySelector<HTMLTextAreaElement>(".tn-composer-dock textarea")?.focus();
-                    }}
+                    onClick={() => prepareMessage("Aide-moi à préparer le prochain service à partir de nos résultats.")}
                   >
                     Préparer la suite <ArrowRight size={16} />
                   </button>
@@ -809,6 +861,7 @@ export function OwnerShell({ section }: { section: string }) {
                 </div>
               </div>
             )}
+            </div>
           </>
         )}
         {active === "decisions" && (
@@ -1107,7 +1160,7 @@ export function OwnerShell({ section }: { section: string }) {
           <>
             <div className="tn-toolbar">
               <span className="tn-pill blue">
-                <Sparkles size={13} />
+                <MessageSquareText size={13} />
                 {operating.capabilities.ai
                   ? "Conversation IA configurée"
                   : "Synthèse métier · IA non configurée"}
@@ -1116,7 +1169,7 @@ export function OwnerShell({ section }: { section: string }) {
                 Mes priorités <ChevronRight size={15} />
               </Link>
             </div>
-            {restaurantId && <CopilotEvidence key={restaurantId} restaurantId={restaurantId} revision={chatRevision} onRetry={(text, key) => { chatRequest.current = { restaurantId, message: text, key }; setMessage(text); }} canDecide={["owner", "group_admin", "platform_admin"].includes(session?.membership.role || "")} />}
+            {restaurantId && <CopilotEvidence key={restaurantId} restaurantId={restaurantId} revision={chatRevision} onRetry={(text, key) => { chatRequest.current = { restaurantId, message: text, key }; prepareMessage(text); }} canDecide={["owner", "group_admin", "platform_admin"].includes(session?.membership.role || "")} />}
             <div className="tn-chat">
               {operating.chat.filter(
                 (entry) => entry.restaurantId === restaurantId,
@@ -1152,7 +1205,7 @@ export function OwnerShell({ section }: { section: string }) {
                         <button
                           key={text}
                           className="tn-secondary"
-                          onClick={() => setMessage(text)}
+                          onClick={() => prepareMessage(text)}
                         >
                           {text}
                         </button>
@@ -1165,38 +1218,36 @@ export function OwnerShell({ section }: { section: string }) {
           </>
         )}
       </main>
-      <div className="tn-composer-dock">
-        <ConversationInput
-          value={message}
-          onChange={setMessage}
-          onSend={() => void sendChat()}
-          onVoice={dictation.toggle}
-          recording={dictation.listening}
-          voiceBusy={false}
-          placeholder="Parlez à TableNow, ou écrivez ici…"
-          sendLabel={chatBusy ? "Message en cours de traitement" : "Envoyer mon message"}
-          voiceLabel={dictation.listening ? "Arrêter la dictée" : "Dicter mon message"}
-        />
-        {chatBusy && <div className="tn-composer-note" role="status">Votre message est en cours de traitement…</div>}
-        {dictation.notice && (
-          <div className="tn-composer-note" role="status">
-            {dictation.notice}
-          </div>
-        )}
+      <div className={`tn-composer-dock ${composerCollapsed ? "is-collapsed" : ""}`}>
+        <button className="tn-composer-collapse" aria-label={composerCollapsed ? "Ouvrir la barre TableNow" : "Réduire la barre TableNow"} aria-expanded={!composerCollapsed} onClick={() => setComposerCollapsed(value => !value)}>
+          {composerCollapsed ? <><MessageSquareText size={17} /> Parler à TableNow <ChevronUp size={15} /></> : <ChevronDown size={15} />}
+        </button>
+        <div hidden={composerCollapsed}>
+          <ConversationInput
+            value={[message, dictation.interimText].filter(Boolean).join(" ")}
+            onChange={value => { dictation.cancel(); setMessage(value); }}
+            onSend={() => sendChat()}
+            sending={chatBusy}
+            onVoice={dictation.toggle}
+            recording={dictation.listening}
+            voiceBusy={false}
+            placeholder="Écrivez ou parlez…"
+            sendLabel="Envoyer mon message"
+            voiceLabel={dictation.listening ? "Arrêter la dictée" : "Dicter mon message"}
+          />
+          {chatError && <div className="tn-error tn-chat-error" role="alert">{chatError}<button className="tn-link" disabled={chatBusy} onClick={() => void sendChat()}>Réessayer l’envoi</button></div>}
+          {chatBusy && <div className="tn-composer-note" role="status">Votre message est en cours de traitement…</div>}
+          {dictation.notice && <div className="tn-composer-note" role="status">{dictation.notice}</div>}
+        </div>
       </div>
-      <nav className="tn-mobile-nav" aria-label="Navigation mobile">
-        {mobileNav.map((item) => (
-          <Link
-            key={item.key}
-            href={`/${item.key}`}
-            className={active === item.key ? "active" : ""}
-            aria-current={active === item.key ? "page" : undefined}
-          >
-            <item.icon size={20} />
-            <span>{item.label}</span>
-          </Link>
-        ))}
-      </nav>
+      {navigationOpen && <OwnerDialog title="Votre TableNow" close={() => setNavigationOpen(false)}>
+        <label className="tn-drawer-restaurant">Établissement actif
+          <select value={restaurantId || ""} disabled={chatBusy} onChange={event => changeRestaurant(event.target.value)}>
+            {workspace?.restaurants.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}
+          </select>
+        </label>
+        <nav className="tn-drawer-nav" aria-label="Navigation mobile">{[...mainNav, { key: "copilot", label: "Conversation", icon: MessageSquareText }, { key: "profile", label: "Profil et connexions", icon: Settings2 }].map(item => <Link key={item.key} href={`/${item.key}`} onClick={() => setNavigationOpen(false)} aria-current={active === item.key ? "page" : undefined}><item.icon size={20} />{item.label}</Link>)}</nav>
+      </OwnerDialog>}
       {notice && (
         <div className="tn-toast" role="status">
           <Check size={18} />
@@ -1561,7 +1612,7 @@ function Empty({
 }) {
   return (
     <div className="tn-empty">
-      <Sparkles size={24} />
+      <MessageSquareText size={24} />
       <strong>{title}</strong>
       <p>{text}</p>
       {action}
@@ -1790,7 +1841,7 @@ function FirstPlan({ workspace }: { workspace: Workspace }) {
     <section className="tn-card">
       <div className="tn-card-head">
         <h2>Votre prochain pas</h2>
-        <Sparkles size={20} />
+        <MessageSquareText size={20} />
       </div>
       {plan ? (
         <>

@@ -1,3 +1,7 @@
+# Porte du pilote Aujourd’hui — 19 septembre 2026
+
+La direction visuelle est approuvée ; le code local passe les contrôles techniques. La recette de cette version sur Preview et la validation produit restent ouvertes. Micro et appareils physiques ne sont pas certifiés. Les blocs ci-dessous sont historiques et ne constituent pas un diagnostic actualisé du pilote. [État vérifiable](../../docs/qa/pilote-aujourdhui-2026-09-19.md).
+
 # Blocages avant promotion de TableNow OS — 16 septembre 2026
 
 - La connexion Google est vérifiée depuis `copilot.tablenow.io` jusqu'au retour TableNow et à l'écran TOTP sur `preview.tablenow.io`. La panne `redirect_uri_mismatch` est levée.

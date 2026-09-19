@@ -4,11 +4,14 @@ import { ArrowUp, LoaderCircle, Mic, Plus, Square, X } from "lucide-react";
 import { api, apiHref } from "@/lib/api";
 
 type Attachment = { id: string; name: string; byteSize: number };
-export function ConversationInput({ value, onChange, onSend, onVoice, recording, voiceBusy, placeholder, sendLabel, voiceLabel, french = true }: {
-  value: string; onChange: (value: string) => void; onSend: () => void; onVoice: () => void; recording: boolean; voiceBusy: boolean; placeholder: string; sendLabel: string; voiceLabel: string; french?: boolean;
+export function ConversationInput({ value, onChange, onSend, onVoice, recording, voiceBusy, placeholder, sendLabel, voiceLabel, french = true, sending = false }: {
+  value: string; onChange: (value: string) => void; onSend: () => void | Promise<void>; onVoice: () => void; recording: boolean; voiceBusy: boolean; placeholder: string; sendLabel: string; voiceLabel: string; french?: boolean; sending?: boolean;
 }) {
   const picker = useRef<HTMLInputElement>(null);
   const mutationRef = useRef(false);
+  const sendInFlight = useRef(false);
+  const [localSending, setLocalSending] = useState(false);
+  const pending = sending || localSending;
   const [files, setFiles] = useState<Attachment[]>([]);
   const [busy, setBusy] = useState(true);
   const [error, setError] = useState("");
@@ -44,13 +47,22 @@ export function ConversationInput({ value, onChange, onSend, onVoice, recording,
     catch (caught) { setError(caught instanceof Error ? caught.message : "Suppression indisponible."); }
     finally { mutationRef.current = false; setBusy(false); }
   }
-  return <div className="tn-conversation-input">
+  async function send() {
+    if (pending || sendInFlight.current || !value.trim()) return;
+    sendInFlight.current = true;
+    setLocalSending(true);
+    setError("");
+    try { await onSend(); }
+    catch (caught) { setError(caught instanceof Error ? caught.message : french ? "Envoi impossible. Votre texte est conservé ; réessayez." : "Could not send. Your text has been kept; try again."); }
+    finally { sendInFlight.current = false; setLocalSending(false); }
+  }
+  return <div className="tn-conversation-input" aria-busy={pending} data-state={pending ? "sending" : recording ? "recording" : value.trim() ? "editing" : "idle"}>
     <div className="tn-conversation-bar">
       <input className="sr-only" ref={picker} type="file" tabIndex={-1} accept="application/pdf,image/png,image/jpeg,text/plain" aria-label={french ? "Ajouter un document" : "Attach a document"} onChange={event => void upload(event.target.files?.[0])} />
       <button type="button" aria-label={french ? "Ajouter un document" : "Attach a document"} title={french ? "PDF, image ou texte · 2 Mo maximum" : "PDF, image or text · Up to 2 MB"} onClick={() => picker.current?.click()} disabled={busy}>{busy ? <LoaderCircle size={18} className="spinning" /> : <Plus size={20} strokeWidth={1.5} />}</button>
-      <textarea rows={1} maxLength={2000} aria-label={placeholder} placeholder={placeholder} value={value} onChange={event => onChange(event.target.value)} onKeyDown={event => { if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing && value.trim()) { event.preventDefault(); onSend(); } }} />
-      <button type="button" aria-label={voiceLabel} onClick={onVoice} disabled={voiceBusy}>{recording ? <Square size={18} strokeWidth={1.5} /> : <Mic size={19} strokeWidth={1.5} />}</button>
-      <button type="button" className="tn-conversation-send" aria-label={sendLabel} onClick={onSend} disabled={!value.trim()}><ArrowUp size={18} strokeWidth={1.5} /></button>
+      <textarea rows={1} maxLength={2000} aria-label={placeholder} placeholder={placeholder} value={value} onChange={event => onChange(event.target.value)} onKeyDown={event => { if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); void send(); } }} />
+      <button type="button" aria-label={voiceLabel} onClick={onVoice} aria-pressed={recording} disabled={!recording && (voiceBusy || pending)}>{recording ? <Square size={18} strokeWidth={1.5} /> : <Mic size={19} strokeWidth={1.5} />}</button>
+      <button type="button" className="tn-conversation-send" aria-label={pending ? french ? "Envoi en cours" : "Sending" : sendLabel} onClick={() => void send()} disabled={pending || !value.trim()}>{pending ? <LoaderCircle size={18} className="spinning" /> : <ArrowUp size={18} strokeWidth={1.5} />}</button>
     </div>
     {files.length > 0 && <details className="tn-conversation-files"><summary>{files.length} {french ? "document(s) enregistré(s)" : "saved document(s)"}</summary><ul>{files.map(file => <li key={file.id}><a href={apiHref(`/v1/onboarding-attachments/${file.id}`)} download>{file.name}</a><button type="button" disabled={busy} onClick={() => void remove(file.id)} aria-label={`${french ? "Retirer" : "Remove"} ${file.name}`}><X size={15} /></button></li>)}</ul><small>{french ? "Documents conservés pour votre onboarding. Leur analyse automatique n’est pas encore activée." : "Saved for your onboarding. Automatic analysis is not enabled yet."}</small></details>}
     {error && <p role="alert" className="form-error">{error}</p>}

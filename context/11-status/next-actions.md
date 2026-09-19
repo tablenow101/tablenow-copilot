@@ -1,3 +1,7 @@
+# Prochaine vérification — pilote Aujourd’hui, 19 septembre 2026
+
+Publier uniquement la branche `product/onboarding-owner` en Preview, vérifier le commit servi, puis jouer le cockpit clair/sombre et ses actions dans le navigateur authentifié. Présenter les preuves et limites au propriétaire avant toute clôture du lot. Aucun passage vers main ni vers la production.
+
 # Porte active — validation produit du lot 1
 
 1. Présenter au propriétaire la recette Google + TOTP, sauvegarde/reprise et responsive enregistrée dans `docs/qa/lot-1-auth-responsive-2026-09-17.md`.
