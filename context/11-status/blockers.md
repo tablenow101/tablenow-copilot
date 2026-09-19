@@ -1,6 +1,6 @@
 # Porte du pilote Aujourd’hui — 19 septembre 2026
 
-La direction visuelle est approuvée ; le code local passe les contrôles techniques. La recette de cette version sur Preview et la validation produit restent ouvertes. Micro et appareils physiques ne sont pas certifiés. Les blocs ci-dessous sont historiques et ne constituent pas un diagnostic actualisé du pilote. [État vérifiable](../../docs/qa/pilote-aujourdhui-2026-09-19.md).
+La direction visuelle est approuvée ; le code local passe les contrôles techniques. La recette ciblée Preview est exécutée ; la recette globale et la validation produit restent ouvertes. Le chat est une synthèse métier sans modèle IA configuré ; les documents ne sont pas analysés automatiquement. Micro et appareils physiques ne sont pas certifiés. Les blocs ci-dessous sont historiques et ne constituent pas un diagnostic actualisé du pilote. [État vérifiable](../../docs/qa/pilote-aujourdhui-2026-09-19.md).
 
 # Blocages avant promotion de TableNow OS — 16 septembre 2026
 

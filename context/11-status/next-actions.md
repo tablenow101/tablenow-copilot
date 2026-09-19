@@ -1,6 +1,6 @@
 # Prochaine vérification — pilote Aujourd’hui, 19 septembre 2026
 
-Publier uniquement la branche `product/onboarding-owner` en Preview, vérifier le commit servi, puis jouer le cockpit clair/sombre et ses actions dans le navigateur authentifié. Présenter les preuves et limites au propriétaire avant toute clôture du lot. Aucun passage vers main ni vers la production.
+Terminer la vérification déployée des deux finitions de barre sur `product/onboarding-owner`. Le parcours ciblé cockpit, message persistant, action et document est vérifié ; restent la recette globale, le micro réel et le service IA non configuré. Présenter les preuves et limites au propriétaire avant toute clôture du lot. Aucun passage vers main ni vers la production.
 
 # Porte active — validation produit du lot 1
 

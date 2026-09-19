@@ -1,6 +1,6 @@
 # Pilote visuel Aujourd’hui — 19 septembre 2026
 
-La direction sombre/claire approuvée est implémentée sur la branche unique `product/onboarding-owner`, depuis `7e8b2af`. Les API, les comptes, l’authentification et les données existantes sont préservés. Tests console : 66 réussis ; typecheck et compilation réussis. La publication et la recette réelle de ce changement restent à vérifier. Aucun lot clôturé ; main et production intacts. [Diff fonctionnel et preuves](../../docs/qa/pilote-aujourdhui-2026-09-19.md).
+La direction sombre/claire approuvée est implémentée sur la branche unique `product/onboarding-owner`, depuis `7e8b2af`. Les API, les comptes, l’authentification et les données existantes sont préservés. Tests console : 66 réussis ; typecheck et compilation réussis. Le commit `5f6cefd` est déployé READY sur Preview ; navigation, thèmes, brouillon, message/réponse persistante, action et document ont été testés réellement. Six viewports sans débordement. Deux finitions de barre passent les contrôles locaux et attendent leur dernière vérification déployée. Limite importante : le chat reste une synthèse métier, IA non configurée ; analyse automatique des documents indisponible. Aucun lot clôturé ; main et production intacts. [Diff fonctionnel et preuves](../../docs/qa/pilote-aujourdhui-2026-09-19.md).
 
 # Porte de validation — lot 1 vérifié techniquement, validation produit attendue
 

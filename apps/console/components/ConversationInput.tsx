@@ -8,6 +8,12 @@ export function ConversationInput({ value, onChange, onSend, onVoice, recording,
   value: string; onChange: (value: string) => void; onSend: () => void | Promise<void>; onVoice: () => void; recording: boolean; voiceBusy: boolean; placeholder: string; sendLabel: string; voiceLabel: string; french?: boolean; sending?: boolean;
 }) {
   const picker = useRef<HTMLInputElement>(null);
+  const textarea = useRef<HTMLTextAreaElement>(null);
+  useEffect(() => {
+    if (!textarea.current) return;
+    textarea.current.style.height = "44px";
+    textarea.current.style.height = `${Math.min(textarea.current.scrollHeight, 140)}px`;
+  }, [value]);
   const mutationRef = useRef(false);
   const sendInFlight = useRef(false);
   const [localSending, setLocalSending] = useState(false);
@@ -60,7 +66,7 @@ export function ConversationInput({ value, onChange, onSend, onVoice, recording,
     <div className="tn-conversation-bar">
       <input className="sr-only" ref={picker} type="file" tabIndex={-1} accept="application/pdf,image/png,image/jpeg,text/plain" aria-label={french ? "Ajouter un document" : "Attach a document"} onChange={event => void upload(event.target.files?.[0])} />
       <button type="button" aria-label={french ? "Ajouter un document" : "Attach a document"} title={french ? "PDF, image ou texte · 2 Mo maximum" : "PDF, image or text · Up to 2 MB"} onClick={() => picker.current?.click()} disabled={busy}>{busy ? <LoaderCircle size={18} className="spinning" /> : <Plus size={20} strokeWidth={1.5} />}</button>
-      <textarea rows={1} maxLength={2000} aria-label={placeholder} placeholder={placeholder} value={value} onChange={event => onChange(event.target.value)} onKeyDown={event => { if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); void send(); } }} />
+      <textarea ref={textarea} rows={1} maxLength={2000} aria-label={placeholder} placeholder={placeholder} value={value} onChange={event => onChange(event.target.value)} onKeyDown={event => { if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); void send(); } }} />
       <button type="button" aria-label={voiceLabel} onClick={onVoice} aria-pressed={recording} disabled={!recording && (voiceBusy || pending)}>{recording ? <Square size={18} strokeWidth={1.5} /> : <Mic size={19} strokeWidth={1.5} />}</button>
       <button type="button" className="tn-conversation-send" aria-label={pending ? french ? "Envoi en cours" : "Sending" : sendLabel} onClick={() => void send()} disabled={pending || !value.trim()}>{pending ? <LoaderCircle size={18} className="spinning" /> : <ArrowUp size={18} strokeWidth={1.5} />}</button>
     </div>
