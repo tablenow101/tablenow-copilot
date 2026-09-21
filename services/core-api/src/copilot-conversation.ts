@@ -24,7 +24,7 @@ export async function readConversationDetails(tx: Transaction, actor: AuthActor,
   const parsed = draft ? onboardingAnswersSchema.safeParse(draft.answers) : null;
   const history = await tx<{ role: string; body: string }[]>`
     select role,body from copilot_messages where tenant_id=${actor.tenantId}
-      and restaurant_id=${restaurantId} and user_id=${actor.userId}
+      and restaurant_id=${restaurantId} and user_id=${actor.userId} and data_origin='business'
     order by created_at desc,id desc limit 8
   `;
   return {

@@ -133,7 +133,7 @@ export async function registerOwnerOperations(
         const outgoing =
           await tx`select m.id, m.restaurant_id as "restaurantId", m.recipient_label as recipient, t.subject, m.body, m.delivery_status as status, m.created_at as "createdAt" from communication_messages m join communication_threads t on t.id = m.thread_id and t.tenant_id = m.tenant_id where m.tenant_id = ${actor.tenantId} and m.direction = 'outbound' and t.channel = 'email' order by m.created_at desc limit 100`;
         const chat =
-          await tx`select * from (select id, restaurant_id as "restaurantId", role, body, mode, created_at as "createdAt" from copilot_messages where tenant_id = ${actor.tenantId} and user_id = ${actor.userId} order by created_at desc, id desc limit 100) history order by "createdAt", id`;
+          await tx`select * from (select id, restaurant_id as "restaurantId", role, body, mode, created_at as "createdAt" from copilot_messages where tenant_id = ${actor.tenantId} and user_id = ${actor.userId} and data_origin = 'business' order by created_at desc, id desc limit 100) history order by "createdAt", id`;
         const paused = await tx<
           { id: string }[]
         >`select id from team_shifts where tenant_id = ${actor.tenantId} and paused_at is not null`;

@@ -74,3 +74,7 @@ Données de recette identifiées par preuve, et non par heuristique de titre :
 Migration additive 014 : origine `business` par défaut ou `acceptance_test`, sur tâches et documents. Les lignes existantes restent business tant qu’une preuve spécifique ne justifie pas leur classification. Filtrage au serveur des listes, compteurs dérivés, contexte conseiller et mutations métier ; aucune suppression. Deux objets identifiés seront classifiés explicitement dans la seule Preview, avec audit. Une tâche métier ayant le même titre reste visible : testé. Toute future recette qui crée des activités devra utiliser un périmètre de test identifié, sans polluer le restaurant du propriétaire.
 
 Mémoire canonique : 101 v9, supersedes 100, ajoutée puis relue.
+
+### Extension après recette déployée
+
+La conversation de recette du cockpit du 19 septembre (`d666f68f-df23-4d62-8056-27388a7a441d`, créée à 05:16:20.214176 UTC, rapport pilote point 4) et le briefing de recette du 21 septembre (`c1edcf12-a7b0-4b0d-ab3a-a1bafe63339e`, créé à 20:38:31.783024 UTC, rapport parcours guidé) sont également identifiés. Migration 015 ajoute l’origine aux runs et messages, sans changer 014 appliquée. Classification explicite parent/messages en une transaction, après gardes tenant/restaurant/utilisateur/date ; aucune suppression. Les autres échanges, même intitulés « Test », restent métier sans preuve contraire. Lectures, contexte, observations et réessais filtrés ; tests de conservation et concurrence exécutés.

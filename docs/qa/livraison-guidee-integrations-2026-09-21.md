@@ -63,3 +63,30 @@ Verdict de la capture initiale : `WRONG_FLOW`. Tâche de recette affichée comme
 Contrôle final après ces corrections : **132 tests API réussis, 4 ignorés** ; **125 tests console réussis** ; typechecks API/console et build API réussis. Les tests ignorés exigent un PostgreSQL externe dédié ; ils ne sont pas présentés comme réussis.
 
 Après libellé de raccordement explicite dans la checklist : 22 tests ciblés catalogue/checklist/accueil réussis. Dock : borne 42 % de `--tn-viewport-height`, cohérente avec la hauteur du shell, au lieu de 42dvh indépendant du clavier. Validation navigateur encore attendue.
+
+## Preview réellement testée — commit cca7cdd
+
+Déploiement `dpl_275zq3gRTxi7bKGr8W8Hvubqgjkx`, URL `tablenow-copilot-v2-lruswlpvg-tablenow101.vercel.app`, alias `preview.tablenow.io`, Preview READY sur `cca7cdd87cf1df5b80eebfdd99967ef95026d4d9`. Migrations 013 et 014 appliquées à 22:00:29 UTC le 21 septembre. Journaux : compilation réussie, test technique de base/session/workspace/CSRF réussi ; ce test injecté ne valide ni e-mail reçu ni Google/TOTP réel.
+
+Classification en transaction des deux objets identifiés (tâche/document), après garde tenant/identité/date exacte : deux événements `acceptance_data.classified`. Les deux lignes sont conservées, contenu du document toujours chiffré présent ; zéro tâche et zéro document business dans ce restaurant. Une première garde a annulé l’opération car l’affichage ISO avait tronqué les microsecondes ; lecture du timestamp texte exact, puis transaction réussie. Aucune suppression.
+
+Parcours navigateur, session propriétaire existante :
+- Accueil : tâche QA absente et progression artificielle 1/1 supprimée ; prochain pas équipe cohérent avec priorité enregistrée.
+- Ma configuration repliée, deux points restants ; lien Zenchef ouvre directement Connexions. « Voir la prochaine étape » affiche le bloqueur fournisseur et le lien officiel. Aucun raccordement réel prétendu.
+- « Organiser mon équipe » atteint Équipe ; « Ajouter une action » ouvre le formulaire puis Annuler/Fermer conserve l’absence de nouvelle tâche. Aucun faux poste créé.
+- Barre : saisie locale → repli → réouverture conserve exactement le brouillon ; aucun envoi automatique ; le brouillon de recette a été vidé sans être envoyé. Documents affiche les capacités et limites avant ajout. Le fichier QA n’est plus proposé.
+- Clair/sombre observés à 390×844, 820×1180 et 1440×900.
+
+| Viewport | Fin de contenu visible au bas du défilement | Début de barre | Débordement horizontal |
+|---|---:|---:|---|
+| 390×844 | 698,9 px | 739 px | absent |
+| 820×1180 | 1033,0 px | 1073 px | absent |
+| 1440×900 (barre repliée) | 804,2 px | 844 px | absent |
+
+Hauteur réduite 390×350, panneau fichiers ouvert : barre193–340px, contenu117px de haut, commandes du panneau accessibles par son défilement ; aucun débordement horizontal. Cette simulation n’est pas une validation du clavier iOS/Android. Aucun appareil physique ou microphone n’a été testé.
+
+Écart découvert en suivant Zenchef : deux conversations de recette des rapports précédents restent dans l’historique. Migration 015 et filtrage ciblé préparés ; ne pas classer les messages utilisateur « Test » ou « Ça ne fonctionne pas » par ressemblance. Les dialogues métier restent conservés.
+
+Captures de la version réellement déployée : [avant mobile](livraison-guidee-2026-09-22/dashboard-avant-mobile.png), [après mobile sombre](livraison-guidee-2026-09-22/dashboard-apres-mobile-sombre.png), [après mobile clair](livraison-guidee-2026-09-22/dashboard-apres-mobile-clair.png), [bas de page mobile](livraison-guidee-2026-09-22/dashboard-mobile-fin.png), [tablette sombre](livraison-guidee-2026-09-22/dashboard-tablette-sombre.png), [tablette claire](livraison-guidee-2026-09-22/dashboard-tablette-clair.png), [ordinateur sombre](livraison-guidee-2026-09-22/dashboard-ordinateur-sombre.png), [ordinateur clair](livraison-guidee-2026-09-22/dashboard-ordinateur-clair.png). Le profil garde le plan détaillé et les faits confirmés ; reformulation des deux anciens textes observée, sans modification du plan enregistré.
+
+Extension 015 : 35 tests ciblés réussis, typecheck API vert, revue indépendante sans défaut actionnable. Test de classement pendant une réponse modèle : aucune nouvelle réponse/message métier réintroduit. La classification des deux conversations identifiées reste à exécuter après publication ; aucun autre message utilisateur ne sera classé.

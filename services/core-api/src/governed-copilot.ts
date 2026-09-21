@@ -61,12 +61,13 @@ export function registerGovernedCopilot(app:FastifyInstance,database:Database,mo
       await tx`delete from copilot_contexts where tenant_id=${actor.tenantId} and restaurant_id=${input.restaurantId} and user_id=${actor.userId} and expires_at<=now()`;
       const [created]=await tx<Run[]>`insert into copilot_runs(tenant_id,restaurant_id,user_id,request_key,input_hash,message,request_payload) values(${actor.tenantId},${input.restaurantId},${actor.userId},${key},${hash},${input.message},${tx.json(replayRequest)}) on conflict(tenant_id,restaurant_id,user_id,request_key) do nothing returning *`;
       if(created)return created;
-      const [existing]=await tx<Run[]>`select * from copilot_runs where tenant_id=${actor.tenantId} and restaurant_id=${input.restaurantId} and user_id=${actor.userId} and request_key=${key} for update`;
-      if(!existing || existing.input_hash!==hash)throw new Error('COPILOT_KEY_CONFLICT');
+      const [existing]=await tx<Run[]>`select * from copilot_runs where tenant_id=${actor.tenantId} and restaurant_id=${input.restaurantId} and user_id=${actor.userId} and request_key=${key} and data_origin='business' for update`;
+      if(!existing)throw new Error('NOT_FOUND');
+      if(existing.input_hash!==hash)throw new Error('COPILOT_KEY_CONFLICT');
       if(existing.status==='succeeded')return existing;
       if(existing.status==='running' && new Date(existing.lease_until)>new Date())throw new Error('COPILOT_RUNNING');
       if(existing.attempt>=3)throw new Error('COPILOT_ATTEMPTS_EXHAUSTED');
-      const [resumed]=await tx<Run[]>`update copilot_runs set status='running',attempt=attempt+1,lease_until=now()+interval '45 seconds',error_code=null,updated_at=now() where id=${existing.id} and tenant_id=${actor.tenantId} and restaurant_id=${input.restaurantId} and user_id=${actor.userId} returning *`;
+      const [resumed]=await tx<Run[]>`update copilot_runs set status='running',attempt=attempt+1,lease_until=now()+interval '45 seconds',error_code=null,updated_at=now() where id=${existing.id} and tenant_id=${actor.tenantId} and restaurant_id=${input.restaurantId} and user_id=${actor.userId} and data_origin='business' returning *`;
       return resumed!;
     });
     if(run.status==='succeeded')return {saved:true,answer:run.answer,mode:run.mode,runId:run.id,report:run.report};
@@ -84,7 +85,7 @@ export function registerGovernedCopilot(app:FastifyInstance,database:Database,mo
       }
       if (documents.length && !model) throw new Error('COPILOT_AI_NOT_CONFIGURED');
       await inRestaurant(database,actor,input.restaurantId,async tx=>{
-        const [current] = await tx`select id from copilot_runs where id=${run.id} and tenant_id=${actor.tenantId} and restaurant_id=${input.restaurantId} and user_id=${actor.userId} and status='running' and attempt=${run.attempt} and lease_until>now() for update`;
+        const [current] = await tx`select id from copilot_runs where id=${run.id} and tenant_id=${actor.tenantId} and restaurant_id=${input.restaurantId} and user_id=${actor.userId} and data_origin='business' and status='running' and attempt=${run.attempt} and lease_until>now() for update`;
         if(!current)throw new Error('COPILOT_LEASE_EXPIRED');
         await tx`insert into copilot_contexts(run_id,tenant_id,restaurant_id,user_id,payload) values(${run.id},${actor.tenantId},${input.restaurantId},${actor.userId},${tx.json(JSON.parse(JSON.stringify(context)))}) on conflict(run_id) do update set payload=excluded.payload,expires_at=now()+interval '15 minutes'`;
       });
@@ -107,7 +108,7 @@ export function registerGovernedCopilot(app:FastifyInstance,database:Database,mo
         } finally {if(timer)clearTimeout(timer);}
       }
       await inRestaurant(database,actor,input.restaurantId,async tx=>{
-        const [saved]=await tx`update copilot_runs set status='succeeded',report=${tx.json(JSON.parse(JSON.stringify(report)))},answer=${answer},mode=${mode},updated_at=now() where id=${run.id} and tenant_id=${actor.tenantId} and restaurant_id=${input.restaurantId} and user_id=${actor.userId} and status='running' and attempt=${run.attempt} and lease_until>now() returning id`;
+        const [saved]=await tx`update copilot_runs set status='succeeded',report=${tx.json(JSON.parse(JSON.stringify(report)))},answer=${answer},mode=${mode},updated_at=now() where id=${run.id} and tenant_id=${actor.tenantId} and restaurant_id=${input.restaurantId} and user_id=${actor.userId} and data_origin='business' and status='running' and attempt=${run.attempt} and lease_until>now() returning id`;
         if(!saved)throw new Error('COPILOT_LEASE_EXPIRED');
         await tx`insert into copilot_messages(tenant_id,restaurant_id,user_id,role,body,mode,run_id,created_at) values(${actor.tenantId},${input.restaurantId},${actor.userId},'user',${input.message},'user',${run.id},now()),(${actor.tenantId},${input.restaurantId},${actor.userId},'assistant',${answer},${mode},${run.id},now()+interval '1 microsecond')`;
         await tx`delete from copilot_contexts where run_id=${run.id} and tenant_id=${actor.tenantId} and restaurant_id=${input.restaurantId} and user_id=${actor.userId}`;
@@ -116,8 +117,8 @@ export function registerGovernedCopilot(app:FastifyInstance,database:Database,mo
     } catch(error) {
       const code=error instanceof Error && /^(COPILOT_|AI_DAILY_|CONTEXT_)/.test(error.message)?error.message:'COPILOT_PROVIDER_FAILED';
       await inRestaurant(database,actor,input.restaurantId,async tx=>{
-        await tx`update copilot_runs set status='failed',error_code=${code},updated_at=now() where id=${run.id} and tenant_id=${actor.tenantId} and restaurant_id=${input.restaurantId} and user_id=${actor.userId} and status='running' and attempt=${run.attempt}`;
-        await tx`delete from copilot_contexts where run_id=${run.id} and tenant_id=${actor.tenantId} and restaurant_id=${input.restaurantId} and user_id=${actor.userId} and exists(select 1 from copilot_runs where id=${run.id} and attempt=${run.attempt} and status='failed')`;
+        await tx`update copilot_runs set status='failed',error_code=${code},updated_at=now() where id=${run.id} and tenant_id=${actor.tenantId} and restaurant_id=${input.restaurantId} and user_id=${actor.userId} and data_origin='business' and status='running' and attempt=${run.attempt}`;
+        await tx`delete from copilot_contexts where run_id=${run.id} and tenant_id=${actor.tenantId} and restaurant_id=${input.restaurantId} and user_id=${actor.userId} and exists(select 1 from copilot_runs where id=${run.id} and data_origin='business' and attempt=${run.attempt} and status='failed')`;
       });
       throw new Error(code);
     }
@@ -126,8 +127,8 @@ export function registerGovernedCopilot(app:FastifyInstance,database:Database,mo
     const {restaurantId}=z.object({restaurantId:z.uuid()}).strict().parse(request.query);
     const actor=request.actor!;
     return inRestaurant(database,actor,restaurantId,async tx=>{
-      const storedRuns=await tx`select input_hash,request_payload,id,status,attempt,request_key as "requestKey",lease_until as "leaseUntil",message,report,answer,mode,error_code as "errorCode",created_at as "createdAt" from copilot_runs where tenant_id=${actor.tenantId} and restaurant_id=${restaurantId} and user_id=${actor.userId} order by created_at desc limit 30`;
-      const observations=await tx`select id,run_id as "runId",kind,body,created_at as "createdAt" from copilot_observations where tenant_id=${actor.tenantId} and restaurant_id=${restaurantId} and user_id=${actor.userId} order by created_at desc limit 100`;
+      const storedRuns=await tx`select input_hash,request_payload,id,status,attempt,request_key as "requestKey",lease_until as "leaseUntil",message,report,answer,mode,error_code as "errorCode",created_at as "createdAt" from copilot_runs where tenant_id=${actor.tenantId} and restaurant_id=${restaurantId} and user_id=${actor.userId} and data_origin='business' order by created_at desc limit 30`;
+      const observations=await tx`select id,run_id as "runId",kind,body,created_at as "createdAt" from copilot_observations where tenant_id=${actor.tenantId} and restaurant_id=${restaurantId} and user_id=${actor.userId} and exists(select 1 from copilot_runs r where r.id=copilot_observations.run_id and r.tenant_id=${actor.tenantId} and r.restaurant_id=${restaurantId} and r.user_id=${actor.userId} and r.data_origin='business') order by created_at desc limit 100`;
       // A legacy row is reconstructible only when its message-only fingerprint agrees.
       // Never invent a missing document selection or onboarding step.
       const runs=storedRuns.map(({input_hash,request_payload,...run})=>({
@@ -139,7 +140,7 @@ export function registerGovernedCopilot(app:FastifyInstance,database:Database,mo
   app.post('/v1/operating/runs/:id/observations',{preHandler:authGuard(database,'tenant.manage')},async request=>{
     const {id}=z.object({id:z.uuid()}).parse(request.params), input=observationSchema.parse(request.body),actor=request.actor!;
     return inRestaurant(database,actor,input.restaurantId,async tx=>{
-      const [run]=await tx`select id from copilot_runs where id=${id} and tenant_id=${actor.tenantId} and restaurant_id=${input.restaurantId} and user_id=${actor.userId} and status='succeeded'`;
+      const [run]=await tx`select id from copilot_runs where id=${id} and tenant_id=${actor.tenantId} and restaurant_id=${input.restaurantId} and user_id=${actor.userId} and data_origin='business' and status='succeeded' for update`;
       if(!run)throw new Error('NOT_FOUND');
       const [saved]=await tx`insert into copilot_observations(tenant_id,restaurant_id,user_id,run_id,request_key,kind,body) values(${actor.tenantId},${input.restaurantId},${actor.userId},${id},${input.idempotencyKey},${input.kind},${input.body}) on conflict(tenant_id,restaurant_id,user_id,request_key) do nothing returning id`;
       if(!saved){const [prior]=await tx`select id,body,kind,run_id from copilot_observations where tenant_id=${actor.tenantId} and restaurant_id=${input.restaurantId} and user_id=${actor.userId} and request_key=${input.idempotencyKey}`;if(prior?.body!==input.body||prior?.kind!==input.kind||prior?.run_id!==id)throw new Error('COPILOT_KEY_CONFLICT');}

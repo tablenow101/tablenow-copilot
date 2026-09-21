@@ -1,3 +1,7 @@
+# Point de livraison — 22 septembre 2026
+
+Preview READY sur `cca7cdd` : accueil corrigé, recette isolée sans suppression, configuration compacte, prochain pas lié aux priorités et chiffres visibles. 132 tests API et 125 console réussis, 4 API externes non exécutés. Parcours ciblé déployé ordinateur/tablette/téléphone simulés vérifié ; captures et limites dans [la recette](../../docs/qa/livraison-guidee-integrations-2026-09-21.md). Extension 015 isole aussi deux conversations de recette prouvées ; 35 tests ciblés passent, publication en cours. Fournisseur IA et accès partenaires manquants : les intégrations ne sont pas annoncées fonctionnelles. Recette nouvel utilisateur privé et téléphone physique reste ouverte. Aucun lot clôturé, main/production intacts.
+
 # Livraison guidée et tous raccordements — 21 septembre 2026, en cours
 
 La consigne complète est en cours sur `product/onboarding-owner`, sans main/production. Récupération des codes de secours après réponse perdue, barre commune, compléments modifiables, conversation contextualisée et extraction TXT : tests locaux en cours de consolidation. Tous les outils déclarés disposent d’un guidage spécifique ; aucun adaptateur absent n’est déclaré connecté. Blocages établis : pas de fournisseur IA configuré en Preview, pas d’accès API partenaires logiciels. PDF/images stockés mais extraction non implémentée. [Rapport de recette](../../docs/qa/livraison-guidee-integrations-2026-09-21.md), [matrice des accès officiels](../../docs/product/livraison-guidee-integrations-2026-09-21.md). Aucun lot produit clôturé.
