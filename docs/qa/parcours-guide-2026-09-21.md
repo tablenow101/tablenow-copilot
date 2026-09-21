@@ -32,7 +32,7 @@ Le contrôle Git initial trouvait 60 fichiers suivis absents. Aucun checkout par
 - TOTP et bascule vers une application sur un téléphone physique : `NOT_RUN`.
 - Authentification Google/e-mail et protections : tests HTTP/PGlite réussis ; nouveau parcours réel déployé encore `NOT_RUN`.
 - Présentation 8 → 6 sans migration SQL : implémentée et testée localement ; conservation vérifiée sur trois profils.
-- Premier déploiement des corrections : `3436270e56d145283245275138725dc8f59ae44c`, `dpl_5GW4j4sXwTu7VbWSZLB3NoYygQKa`, READY sur Preview. Correctif de préférence en préparation.
+- Premier déploiement des corrections : `3436270e56d145283245275138725dc8f59ae44c`, `dpl_5GW4j4sXwTu7VbWSZLB3NoYygQKa`, READY sur Preview. Correctif de préférence déployé par `998acc9`, puis correctif de navigation par `29a1bb3`.
 
 Aucune clôture de lot ni certification produit ne découle de ce rapport. Les décisions de configuration progressive ont été enregistrées et relues dans la mémoire canonique : enregistrement 99, version 7 du design system, succédant à 98.
 
@@ -93,8 +93,32 @@ Sur `3436270`, session existante : cockpit, conseil général avec source et lim
 
 ### Défaut de position reproduit dans le navigateur
 
-Sur Preview, ouvrir Systèmes depuis Décisions → Continuer → Connexions → recharger ramenait à Systèmes ; Continuer pouvait ensuite rester sans effet car la base avait déjà enregistré Connexions. Les réponses métier étaient conservées. Correctif : synchroniser l’adresse avec la section et le groupe uniquement après sauvegarde réussie ; appliquer aussi le groupe déjà persisté quand aucune écriture n’est nécessaire. Aucun rechargement de page ni migration. Treize tests ciblés storyboard/boundary et typecheck passent. La reproduction réelle sera rejouée après déploiement.
+Sur Preview, ouvrir Systèmes depuis Décisions → Continuer → Connexions → recharger ramenait à Systèmes ; Continuer pouvait ensuite rester sans effet car la base avait déjà enregistré Connexions. Les réponses métier étaient conservées. Correctif : synchroniser l’adresse avec la section et le groupe uniquement après sauvegarde réussie ; appliquer aussi le groupe déjà persisté quand aucune écriture n’est nécessaire. Aucun rechargement de page ni migration. Treize tests ciblés storyboard/boundary et typecheck passent. Reproduction rejouée avec succès sur `29a1bb3` : le bouton débloque Connexions, son adresse reste exacte après rechargement, Compléments est ensuite retrouvé après un second rechargement en format mobile.
 
 ### Documents et affichage vérifiés
 
 Un fichier texte fictif `document-recette-tablenow.txt` a été ajouté sur Preview : explication stockage privé/sans analyse avant le sélecteur, transfert, confirmation « Document enregistré. Aucune analyse effectuée. », puis document retrouvé après navigation. Il reste dans le compte de recette, aucun fichier existant supprimé. Barre repliée/réouverte et navigation mobile vérifiées. Largeurs navigateur 390 et 820 px sans débordement ; ce ne sont pas des appareils physiques.
+
+## Bilan de la recette partielle déployée
+
+Source applicative finale : `29a1bb372ce098e6c1fe2954f98a9c23fe3298e8`. Déploiement `dpl_77zkhe2cuu4yghjAagvSXYQBiE87`, READY, Preview (`target: null`), alias `preview.tablenow.io`. Référence `main` relue à `665ca205111c7937b1e7507137e0af2b3c161c54`, inchangée.
+
+| Scénario exécuté | Preuve / résultat | Limite |
+|---|---|---|
+| Session existante → cockpit | Conseil général sourcé, checklist liée aux réponses, Zenchef déclaré sans statut connecté | Ce n’est pas une nouvelle authentification. |
+| Briefing → texte préparé → envoi explicite | Message et réponse retrouvés après rechargement ; aucune action externe | Synthèse déterministe, IA non configurée : Advisor complet non validé. |
+| Document fictif → stockage → navigation | Confirmation exacte, document encore accessible ; aucune analyse annoncée | Analyse non disponible ; aucune pièce existante supprimée. |
+| Décisions vide → outils | Deux prochaines actions explicites, plus de « Tout est clair » | Pas de prétention à une évaluation complète. |
+| Systèmes → Connexions → rechargement | Caisse secondaire laissée vide, Connexions retrouvé, bouton débloqué | Aucun logiciel réellement connecté. |
+| Connexions → Compléments → rechargement mobile → Synthèse | Note historique et outils conservés ; réglages secondaires non exigés | Profil déjà terminé ; nouvelle finalisation non rejouée. |
+| Affichage et barre | Clair/sombre, navigation mobile, repli de barre ; largeurs 390, 820 et 1366 | Viewports du navigateur ; ni clavier système, ni micro ni bascule d’application physique certifiés. |
+
+![Avant : état vide sans prochaine étape](parcours-guide-2026-09-21/decisions-avant.jpg)
+
+![Après : prochaine action et logo lisible](parcours-guide-2026-09-21/decisions-apres.jpg)
+
+### Porte encore ouverte
+
+Nouvelle inscription avec réception e-mail, enrôlement TOTP sur le même téléphone, retour depuis Authenticator, déconnexion/reconnexion et premier résultat neuf : **NOT_RUN** dans cette recette. La saisie privée et l’essai sur téléphone sont proposés au propriétaire ; aucun code ne doit être communiqué dans le chat. Google/Places n’ont pas été rejoués en parcours réel dans cette reprise. Les tests serveur ne les remplacent pas. Échecs réseau simulés couverts par tests ciblés ; panne réseau réelle dans le navigateur non provoquée.
+
+Verdict global : **PARTIALLY_VERIFIED — AWAITING_PRIVATE_MOBILE_TEST**, pas une livraison produit validée. Aucun lot clôturé, aucune promotion. La politique d’authentification et les facteurs existants sont conservés.

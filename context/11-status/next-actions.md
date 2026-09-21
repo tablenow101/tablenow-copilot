@@ -1,10 +1,10 @@
 # Parcours guidé — suite du 21 septembre 2026
 
-1. Publier le point de contrôle sur la branche Preview existante après les tests ; aucun commit final de clôture de lot.
-2. Vérifier le commit et le statut READY servis par `preview.tablenow.io`.
-3. Jouer les changements visibles avec le compte existant, conserver les captures avant/après et tester sauvegarde/reprise sans changer ses réponses métier.
-4. Laisser au propriétaire la saisie privée et l’essai du parcours neuf sur son téléphone. Distinguer résultats du navigateur redimensionné et appareil physique.
-5. Présenter preuves et limites, puis attendre la validation produit ; aucun lot 2 final, lot 3, main ou production.
+1. Laisser au propriétaire la saisie privée pour une nouvelle inscription sur `preview.tablenow.io/register`, sans partager codes ni QR.
+2. Vérifier réception réelle du mail, configuration TOTP sur un seul téléphone, changement d’application et reprise.
+3. Sur ce nouveau compte, poursuivre priorités → établissement → systèmes → connexions reportables → compléments → synthèse → premier résultat, puis déconnexion/reconnexion.
+4. Compléter Google, Places et les essais clavier/micro sur appareils physiques. Les preuves actuelles couvrent la session existante et des viewports.
+5. Présenter preuves et limites puis attendre la validation produit. Aucun lot 2 final, lot 3, main ni production.
 
 # Prochaine vérification — pilote Aujourd’hui, 19 septembre 2026
 
