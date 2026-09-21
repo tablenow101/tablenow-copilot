@@ -7,7 +7,6 @@ import {
   useEffect,
   useRef,
   useState,
-  type MutableRefObject,
   type ReactNode,
 } from "react";
 import type { OnboardingAnswers, OnboardingDraftView, OnboardingPresentationStep } from "@tablenow/contracts";
@@ -19,13 +18,11 @@ import {
   Check,
   ClipboardCheck,
   Headphones,
-  Languages,
   Mic,
   Moon,
   PencilLine,
   Search,
   ShieldCheck,
-  Sparkles,
   Square,
   Sun,
   Volume2,
@@ -33,6 +30,7 @@ import {
 } from "lucide-react";
 import { api, ApiError } from "@/lib/api";
 import { allPrioritiesSelected, priorityActivities, priorityOutcomes, toggleAllPriorities } from "@/lib/priority-selection";
+import { IntegrationConnections } from "./IntegrationConnections";
 import { BusinessSearch } from "./BusinessSearch";
 import { ConversationInput } from "./ConversationInput";
 import { onboardingCopy, labelFor, type OnboardingCopy } from "@/lib/onboarding-copy";
@@ -51,6 +49,8 @@ import {
   mergeOnboardingAnswers,
   provenanceFor,
   reconcileReservationReference,
+  editStatement,
+  reviewableStatements,
   removeStatement,
   reservationReferences,
   sectionValid,
@@ -64,6 +64,8 @@ import {
   type PrimaryFocus,
   type SectionKey,
 } from "@/lib/onboarding";
+import { readCopilotRuns, replayCopilotRequest, sendCopilotRequest, type CopilotRun } from "@/lib/copilot-request";
+import { useDictation } from "@/hooks/useDictation";
 import { useSession } from "@/hooks/useSession";
 import { LoadingScreen } from "./LoadingScreen";
 import { Brand } from "./Brand";
@@ -81,29 +83,12 @@ import {
 
 type SaveState = "idle" | "dirty" | "saving" | "saved" | "failed" | "conflict";
 type LoadState = "idle" | "loading" | "ready" | "failed";
-type VoiceState = "idle" | "requesting_permission" | "recording" | "transcribing" | "reviewing" | "confirmed" | "cancelled" | "permission_denied" | "unavailable" | "failed";
 type ConflictComparison = { local: OnboardingAnswers; localProvenance: OnboardingProvenance; remote: OnboardingDraftView };
 type UpdateMeta = {
   sourceType?: OnboardingSourceType;
   sourceReference?: string;
   confirmationStatus?: OnboardingProvenance[number]["confirmationStatus"];
 };
-
-interface SpeechRecognitionResultLike { readonly 0: { readonly transcript: string } }
-interface SpeechRecognitionEventLike { readonly results: ArrayLike<SpeechRecognitionResultLike> }
-interface SpeechRecognitionLike {
-  lang: string;
-  continuous: boolean;
-  interimResults: boolean;
-  onresult: ((event: SpeechRecognitionEventLike) => void) | null;
-  onerror: ((event: { error?: string }) => void) | null;
-  onend: (() => void) | null;
-  onstart: (() => void) | null;
-  start(): void;
-  stop(): void;
-  abort(): void;
-}
-type SpeechRecognitionConstructor = new () => SpeechRecognitionLike;
 
 const timeConsumers = [...priorityActivities, "other"] as const;
 const outcomes = priorityOutcomes;
@@ -127,8 +112,14 @@ export function OnboardingFlow({ initialRestaurantId, initialSection }: { initia
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [composer, setComposer] = useState("");
-  const [voiceState, setVoiceState] = useState<VoiceState>("idle");
-  const [voiceReview, setVoiceReview] = useState("");
+  const [chatBusy, setChatBusy] = useState(false);
+  const [replies, setReplies] = useState<Array<CopilotRun & { restaurantId: string; savedAsNote?: boolean }>>([]);
+  const [historyError, setHistoryError] = useState("");
+  const [conversationError, setConversationError] = useState("");
+  const [historyRevision, setHistoryRevision] = useState(0);
+  const chatRequest = useRef<{ body: string; key: string } | null>(null);
+  const chatInFlight = useRef(false);
+  const dictation = useDictation(text => { setComposer(previous => [previous, text].filter(Boolean).join(" ")); }, undefined, answers.interaction.locale);
   const [searchUnavailable, setSearchUnavailable] = useState(false);
   const [manualOpen, setManualOpen] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -148,13 +139,24 @@ export function OnboardingFlow({ initialRestaurantId, initialSection }: { initia
   const completingRef = useRef(false);
   const loadRequestRef = useRef(0);
   const initialNavigationUsedRef = useRef(false);
-  const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
   const saveNowRef = useRef<(target?: SectionKey) => Promise<OnboardingDraftView | null>>(async () => null);
   const headingRef = useRef<HTMLHeadingElement>(null);
 
   const locale = answers.interaction.locale;
   const copy = onboardingCopy[locale];
   copyRef.current = copy;
+
+  useEffect(() => {
+    const restaurantId = draft?.restaurantId;
+    if (!restaurantId) return;
+    let live = true;
+    void readCopilotRuns(restaurantId).then(runs => {
+      if (!live) return;
+      setReplies(previous => [...previous.filter(reply => reply.restaurantId !== restaurantId), ...runs.slice().reverse().map(run => ({ ...run, restaurantId }))]);
+      setHistoryError("");
+    }).catch(() => { if (live) setHistoryError(locale === "fr" ? "L’historique de conversation n’a pas pu être chargé. Vos échanges enregistrés sont conservés." : "Conversation history could not be loaded. Your saved messages are kept."); });
+    return () => { live = false; };
+  }, [draft?.restaurantId, historyRevision, locale]);
 
   const loadDraft = useCallback(async (restaurantId?: string) => {
     const requestId = loadRequestRef.current + 1;
@@ -297,12 +299,9 @@ export function OnboardingFlow({ initialRestaurantId, initialSection }: { initia
 
   useEffect(() => {
     headingRef.current?.focus({ preventScroll: true });
-    cancelAudio(recognitionRef, setVoiceState, true);
+    dictation.stop();
   }, [section, answers.presentationStep]);
 
-  useEffect(() => () => {
-    abortRecognition(recognitionRef);
-  }, []);
 
   const updateAnswers = useCallback((mutate: (current: OnboardingAnswers) => OnboardingAnswers, meta: UpdateMeta = {}) => {
     const current = answersRef.current;
@@ -431,7 +430,7 @@ export function OnboardingFlow({ initialRestaurantId, initialSection }: { initia
     if (restaurantId === draftRef.current?.restaurantId) return;
     const saved = await saveNow(sectionRef.current);
     if (!saved) return;
-    cancelAudio(recognitionRef, setVoiceState, true);
+    dictation.stop();
     await loadDraft(restaurantId);
   };
 
@@ -478,85 +477,45 @@ export function OnboardingFlow({ initialRestaurantId, initialSection }: { initia
     if (saved) setNotice(copy.common.authorityBlocked);
   };
 
-  const startVoice = () => {
-    if (recognitionRef.current) return;
-    const speechWindow = window as Window & { SpeechRecognition?: SpeechRecognitionConstructor; webkitSpeechRecognition?: SpeechRecognitionConstructor };
-    const Recognition = speechWindow.SpeechRecognition || speechWindow.webkitSpeechRecognition;
-    if (!Recognition) {
-      setVoiceState("unavailable");
-      return;
-    }
-    setVoiceReview("");
-    setVoiceState("requesting_permission");
-    const recognition = new Recognition();
-    let settled = false;
-    recognition.lang = locale === "en" ? "en-US" : "fr-FR";
-    recognition.continuous = false;
-    recognition.interimResults = false;
-    recognition.onstart = () => {
-      if (recognitionRef.current !== recognition) return;
-      setVoiceState("recording");
-    };
-    recognition.onresult = (event) => {
-      if (recognitionRef.current !== recognition) return;
-      settled = true;
-      const transcript = Array.from(event.results).map((result) => result[0].transcript).join(" ").trim();
-      setVoiceReview(transcript);
-      setVoiceState(transcript ? "reviewing" : "failed");
-    };
-    recognition.onerror = (event) => {
-      if (recognitionRef.current !== recognition) return;
-      settled = true;
-      abortRecognition(recognitionRef);
-      setVoiceState(event.error === "not-allowed" || event.error === "service-not-allowed" ? "permission_denied" : "failed");
-    };
-    recognition.onend = () => {
-      if (recognitionRef.current !== recognition) return;
-      recognitionRef.current = null;
-      if (!settled) setVoiceState("failed");
-    };
-    recognitionRef.current = recognition;
+  const sendConversation = async (attachmentIds: string[]) => {
+    const message = [composer, dictation.interimText].filter(Boolean).join(" ").trim();
+    if (!message || chatInFlight.current || !draftRef.current) return false;
+    dictation.cancel();
+    setComposer(message);
+    const body = JSON.stringify({ restaurantId: draftRef.current.restaurantId, message, attachmentIds, context: { surface: "onboarding", step: answersRef.current.presentationStep ?? presentationStepForSection(sectionRef.current) } });
+    const checkExisting = chatRequest.current?.body === body;
+    if (chatRequest.current?.body !== body) chatRequest.current = { body, key: safeIdempotencyKey() };
+    chatInFlight.current = true;
+    setChatBusy(true);
     try {
-      recognition.start();
-    } catch {
-      abortRecognition(recognitionRef);
-      setVoiceState("failed");
-    }
+      // Save declared answers first so the answer uses the latest restaurant context.
+      const saved = await saveNow();
+      if (!saved) return false;
+      const request = { ...JSON.parse(body), key: chatRequest.current.key };
+      const reply = await sendCopilotRequest(request, checkExisting);
+      setReplies(previous => [...previous.filter(item => item.id !== reply.runId), { id: reply.runId, restaurantId: saved.restaurantId, requestKey: request.key, leaseUntil: "", message, answer: reply.answer, mode: reply.mode, status: "succeeded", report: reply.report || null, request: { attachmentIds, context: request.context } }]);
+      setComposer(previous => previous.trim() === message ? "" : previous);
+      chatRequest.current = null;
+      return true;
+    } finally { chatInFlight.current = false; setChatBusy(false); setHistoryRevision(value => value + 1); }
   };
 
-  const stopVoice = () => {
-    if (!recognitionRef.current) return;
-    setVoiceState("transcribing");
+  const retryConversation = async (run: CopilotRun & { restaurantId: string }) => {
+    if (chatInFlight.current || !run.request) return;
+    chatInFlight.current = true; setChatBusy(true); setConversationError("");
     try {
-      recognitionRef.current.stop();
-    } catch {
-      abortRecognition(recognitionRef);
-      setVoiceState("failed");
-    }
+      await sendCopilotRequest(replayCopilotRequest(run.restaurantId, { ...run, request: run.request }), true);
+    } catch (caught) { setConversationError(caught instanceof Error ? caught.message : "La demande n’a pas pu reprendre. Son contenu est conservé."); }
+    finally { chatInFlight.current = false; setChatBusy(false); setHistoryRevision(value => value + 1); }
   };
 
-  const useVoice = () => {
-    if (!voiceReview.trim()) return;
-    const text = conversationSection(answersRef.current.presentationStep, sectionRef.current) === "final_note" ? [answersRef.current.finalNote.text, voiceReview].filter(Boolean).join("\n\n") : voiceReview;
-    if (text.length > 2000) {
-      setError(locale === "fr" ? "La note complète dépasse 2 000 caractères. Raccourcissez-la avant de l’ajouter." : "The complete note exceeds 2,000 characters. Shorten it before adding it.");
-      return;
-    }
-    if (sectionRef.current === "establishment") setManualOpen(true);
-    updateAnswers((next) => applyFreeText(next, conversationSection(answersRef.current.presentationStep, sectionRef.current), text, "user_voice"), {
-      sourceType: "user_voice",
-      sourceReference: voiceReview,
-      confirmationStatus: "suggested",
-    });
-    setVoiceReview("");
-    setVoiceState("confirmed");
-    if (sectionRef.current === "review") moveTo("final_note");
-  };
-
-  const cancelVoice = () => {
-    abortRecognition(recognitionRef);
-    setVoiceReview("");
-    setVoiceState("cancelled");
+  const keepComplement = (id: string) => {
+    const reply = replies.find(item => item.id === id && item.restaurantId === draftRef.current?.restaurantId);
+    if (!reply || reply.savedAsNote || answersRef.current.finalNote.text?.includes(reply.message)) return;
+    const text = [answersRef.current.finalNote.text, reply.message].filter(Boolean).join("\n\n");
+    if (text.length > 2000) { setError(locale === "fr" ? "La note dépasse 2 000 caractères. Raccourcissez-la dans Compléments." : "The note exceeds 2,000 characters. Shorten it in Additional details."); return; }
+    updateAnswers(next => applyFreeText(next, "final_note", text, "user_text"), { sourceType: "user_text", sourceReference: reply.message, confirmationStatus: "suggested" });
+    setReplies(previous => previous.map(item => item.id === id ? { ...item, savedAsNote: true } : item));
   };
 
   if (sessionLoading) return <LoadingScreen label={copy.common.loading} />;
@@ -585,7 +544,7 @@ export function OnboardingFlow({ initialRestaurantId, initialSection }: { initia
       {isWelcome && <span className="welcome-stage"><i />{copy.sections.establishment}</span>}
       {draft.restaurants.length > 1 && <label className="restaurant-switcher"><Building2 size={14} /><span className="sr-only">{copy.common.selectRestaurant}</span><select value={draft.restaurantId} onChange={(event) => void changeRestaurant(event.target.value)}>{draft.restaurants.map((restaurant) => <option key={restaurant.id} value={restaurant.id}>{restaurant.name}</option>)}</select></label>}
       <div className="onboarding-top-controls">
-        <label><Languages size={14} /><span className="sr-only">{copy.common.language}</span><select aria-label={copy.common.language} value={locale} onChange={(event) => updateAnswers((next) => { next.interaction.locale = event.target.value as LocaleMode; return next; })}><option value="fr">FR</option><option value="en">EN</option></select></label>
+        <label><span className="sr-only">{copy.common.language}</span><select aria-label={copy.common.language} value={locale} onChange={(event) => updateAnswers((next) => { next.interaction.locale = event.target.value as LocaleMode; return next; })}><option value="fr">FR</option><option value="en">EN</option></select></label>
         <button type="button" className="icon-button tiny" aria-label={answers.interaction.theme === "dark" ? copy.common.clearTheme : copy.common.darkTheme} title={answers.interaction.theme === "dark" ? copy.common.clearTheme : copy.common.darkTheme} onClick={() => updateAnswers((next) => { next.interaction.theme = next.interaction.theme === "dark" ? "clear" : "dark"; return next; })}>{answers.interaction.theme === "dark" ? <Sun size={14} /> : <Moon size={14} />}</button>
       </div>
       <div className="onboarding-progress-line" aria-hidden="true">{progressGroups.map((group, index) => <span key={group.key} className={index <= currentGroupIndex ? "active" : ""} />)}</div>
@@ -607,8 +566,9 @@ export function OnboardingFlow({ initialRestaurantId, initialSection }: { initia
         {visibleStep === "systems" && <>
           <Reservations answers={answers} copy={copy} locale={locale} update={updateAnswers} confirmInterpretation={() => confirmCurrentInterpretation("reservations")} />
           <PointOfSale answers={answers} copy={copy} locale={locale} update={updateAnswers} />
+          <details className="onboarding-details"><summary>{locale === "fr" ? "Vos canaux de communication (facultatif)" : "Your communication channels (optional)"}</summary><Question title={locale === "fr" ? "Comment vos clients vous contactent-ils ?" : "How do your customers contact you?"} options={["calls", "whatsapp", "emails", "instagram", "messenger", "sms", "other"]} values={answers.operations.communications.channels} update={values => updateAnswers(next => { next.operations.communications.channels = values as typeof next.operations.communications.channels; return next; })} locale={locale} optional /></details>
         </>}
-        {visibleStep === "connections" && <Connections answers={answers} locale={locale} edit={() => void goBack("reservations", "systems")} />}
+        {visibleStep === "connections" && <IntegrationConnections answers={answers} locale={locale} edit={() => void goBack("reservations", "systems")} />}
         {visibleStep === "complements" && <div className="onboarding-complements">
           <FinalNote answers={answers} copy={copy} locale={locale} update={updateAnswers} />
           <p className="inline-note">{locale === "fr" ? "Ces précisions sont facultatives. Vous pourrez les compléter ou les corriger depuis votre cockpit." : "These details are optional. You can add or edit them from your dashboard."}</p>
@@ -619,34 +579,28 @@ export function OnboardingFlow({ initialRestaurantId, initialSection }: { initia
         {visibleStep === "review" && <label className="paper-choice"><input type="checkbox" checked={answers.authority.rulesAcknowledged} onChange={event => updateAnswers(next => { next.authority.rulesAcknowledged = event.target.checked; return next; })} /><span>{copy.common.rulesAcknowledged} {copy.common.rulesHelp}</span></label>}
         {visibleStep === "review" && <Review answers={answers} copy={copy} locale={locale} role={session.membership.role} userId={session.user.id} legalVersions={draft.legalVersions} acceptTerms={acceptTerms} acceptDpa={acceptDpa} setAcceptTerms={setAcceptTerms} setAcceptDpa={setAcceptDpa} edit={moveTo} />}
 
-        <Composer locale={locale} compact={isWelcome} value={composer} setValue={setComposer} voiceState={voiceState} voiceReview={voiceReview} copy={copy} onSend={() => {
-          if (!composer.trim()) return;
-          const text = conversationSection(answersRef.current.presentationStep, sectionRef.current) === "final_note" ? [answersRef.current.finalNote.text, composer].filter(Boolean).join("\n\n") : composer;
-          if (text.length > 2000) {
-            setError(locale === "fr" ? "La note complète dépasse 2 000 caractères. Raccourcissez-la avant de l’ajouter." : "The complete note exceeds 2,000 characters. Shorten it before adding it.");
-            return;
-          }
-          if (sectionRef.current === "establishment") setManualOpen(true);
-          updateAnswers((next) => applyFreeText(next, conversationSection(answersRef.current.presentationStep, sectionRef.current), text, "user_text"), {
-            sourceType: "user_text",
-            sourceReference: composer,
-            confirmationStatus: "suggested",
-          });
-          setComposer("");
-          if (sectionRef.current === "review") moveTo("final_note");
-        }} onStart={startVoice} onStop={stopVoice} onUseVoice={useVoice} onCancelVoice={cancelVoice} />
+        {conversationError && <p className="form-error" role="alert">{conversationError}</p>}
+        {historyError && <p className="form-error" role="alert">{historyError} <button type="button" disabled={chatBusy} onClick={() => setHistoryRevision(value => value + 1)}>{copy.common.retry}</button></p>}
+        {replies.some(reply => reply.restaurantId === draft.restaurantId) && <section className="onboarding-conversation" aria-label={locale === "fr" ? "Votre conversation TableNow" : "Your TableNow conversation"}>{replies.filter(reply => reply.restaurantId === draft.restaurantId).map(reply => <article key={reply.id}>
+          <p className="onboarding-conversation-message">{reply.message}</p>
+          {reply.status === "succeeded" ? <><strong>{reply.mode === "summary" ? locale === "fr" ? "Conseil métier structuré · IA indisponible" : "Structured business guidance · AI unavailable" : "TableNow"}</strong><p>{reply.answer}</p>{reply.report && <details><summary>{locale === "fr" ? "Sources et limites" : "Sources and limitations"}</summary><ul>{reply.report.sources?.map(source => <li key={source.id}>{source.label}</li>)}{reply.report.uncertainties?.map(item => <li key={item}>{item}</li>)}</ul></details>}</> : <><p role="status">{reply.status === "running" ? locale === "fr" ? "Demande en cours de traitement" : "Request processing" : locale === "fr" ? "La demande n’a pas abouti. Son contenu est conservé." : "The request did not complete. Its content is kept."}</p>{reply.request ? <button type="button" className="secondary-button" disabled={chatBusy} onClick={() => void retryConversation(reply)}>{locale === "fr" ? "Vérifier et reprendre" : "Check and resume"}</button> : <p>{locale === "fr" ? "Les références de cette ancienne demande sont indisponibles. Rédigez une nouvelle demande avec ses documents." : "This old request’s references are unavailable. Compose a new request with its documents."}</p>}</>}
+          <button type="button" className="secondary-button" disabled={reply.savedAsNote} onClick={() => keepComplement(reply.id)}>{reply.savedAsNote ? locale === "fr" ? "Ajouté aux compléments" : "Added to details" : locale === "fr" ? "Garder mon message comme complément" : "Keep my message as additional detail"}</button>
+        </article>)}</section>}
+        <section className={`onboarding-composer${isWelcome ? " welcome-composer" : ""}`} aria-label="TableNow">
+          <ConversationInput contextKey={draft.restaurantId} value={[composer, dictation.interimText].filter(Boolean).join(" ")} onChange={value => { dictation.cancel(); setComposer(value); }} onSend={sendConversation} sending={chatBusy} onVoice={dictation.toggle} recording={dictation.listening} voiceBusy={dictation.busy} voiceNotice={dictation.notice} audioLevels={dictation.audioLevels} spectrumUnavailable={dictation.spectrumUnavailable} placeholder={copy.common.composerPlaceholder} sendLabel={copy.common.send} voiceLabel={dictation.listening || dictation.busy ? copy.common.stop : copy.common.dictate} french={locale === "fr"} />
+        </section>
 
         {conflictComparison && <ConflictView comparison={conflictComparison} copy={copy} useLocal={keepLocalConflictVersion} useRemote={useRemoteConflictVersion} />}
         {notice && <p className="form-notice" role="status">{notice}</p>}
         {error && <p className="form-error" role="alert"><AlertTriangle size={14} />{error}</p>}
-        {(!isWelcome || identityOpen) && <footer className="onboarding-actions">
+        <footer className="onboarding-actions">
           {currentIndex > 0 ? <button type="button" className="secondary-button" disabled={saveState === "saving" || busy} onClick={() => void goBack(previousSection, previousStep)}><ArrowLeft size={16} /> {copy.common.back}</button> : <span />}
-          {visibleStep !== "review"
-            ? <button type="button" className="primary-button" disabled={saveState === "saving" || busy} onClick={() => void goTo(nextSection, nextStep)}>{copy.common.continue} <ArrowRight size={17} /></button>
+          {(!isWelcome || identityOpen) && (visibleStep !== "review"
+            ? <button type="button" className="primary-button" disabled={saveState === "saving" || busy} onClick={() => void goTo(nextSection, nextStep)}>{visibleStep === "complements" ? copy.common.done : copy.common.continue} <ArrowRight size={17} /></button>
             : userCanComplete
               ? <button type="button" className="primary-button" disabled={!canFinish || busy || saveState === "saving"} onClick={() => void complete()}>{busy ? copy.common.preparing : copy.common.finish} <ArrowRight size={17} /></button>
-              : <button type="button" className="primary-button" disabled={busy || saveState === "saving"} onClick={() => void saveForAuthority()}>{copy.common.saveForReview} <ArrowRight size={17} /></button>}
-        </footer>}
+              : <button type="button" className="primary-button" disabled={busy || saveState === "saving"} onClick={() => void saveForAuthority()}>{copy.common.saveForReview} <ArrowRight size={17} /></button>)}
+        </footer>
       </section>
     </div>
     {isWelcome && <div className="welcome-bottom"><div className={`save-state save-${saveState}`} role="status" aria-live="polite">{statusText}{saveState === "failed" && <button type="button" onClick={() => void saveNow()}>{copy.common.retry}</button>}{saveState === "conflict" && <button type="button" onClick={() => void compareConflict()}>{copy.common.compare}</button>}</div><div className="welcome-progress" role="progressbar" aria-label={copy.common.brand} aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(((currentGroupIndex + 1) / progressGroups.length) * 100)}><span /></div></div>}
@@ -684,7 +638,7 @@ function Establishment({ answers, copy, update, identityOpen, openManual, confir
   return <div className="onboarding-step establishment-step"><header className="welcome-heading"><h2>{copy.common.welcome}</h2><p>{copy.common.establishmentSubtitle}</p></header>
     <BusinessSearch value={establishment.query || ""} english={answers.interaction.locale === "en"} onChange={(value) => update((next) => { next.establishment.query = value; next.establishment.identityConfirmed = false; return next; })} choose={(result) => { openManual(); update((next) => { next.establishment.identificationMode = "public_search"; next.establishment.restaurantName = result.name; next.establishment.cityCountry = result.cityCountry; next.establishment.address = result.address || "unknown"; next.establishment.phone = result.phone || "unknown"; next.establishment.identityConfirmed = false; next.establishment.sourceReferences = [{ label: result.sourceLabel || "Google Maps", value: result.sourceUrl, confirmationStatus: "suggested" }]; return next; }, { sourceType: "public_suggestion", sourceReference: result.sourceUrl, confirmationStatus: "suggested" }); }} />
     <button type="button" className="text-action welcome-manual" aria-expanded={identityOpen} onClick={() => { openManual(); update((next) => { next.establishment.identificationMode = "manual"; next.establishment.restaurantName ||= next.establishment.query || ""; next.establishment.identityConfirmed = false; return next; }); }}>{copy.common.addManually}</button>
-    {!identityOpen && <div className="welcome-promises"><span><Check size={17} />{answers.interaction.locale === "fr" ? "Une seule information" : "One piece of information"}</span><i /><span><Sparkles size={17} />{answers.interaction.locale === "fr" ? "Source publique vérifiable" : "Verifiable public source"}</span><i /><span><Check size={17} />{answers.interaction.locale === "fr" ? "Vous confirmez" : "You confirm"}</span></div>}
+    {!identityOpen && <div className="welcome-promises"><span><Check size={17} />{answers.interaction.locale === "fr" ? "Une seule information" : "One piece of information"}</span><i /><span><ClipboardCheck size={17} />{answers.interaction.locale === "fr" ? "Source publique vérifiable" : "Verifiable public source"}</span><i /><span><Check size={17} />{answers.interaction.locale === "fr" ? "Vous confirmez" : "You confirm"}</span></div>}
     {identityOpen && <div className="welcome-identity">
     <div className="form-grid two"><label><span>{copy.common.restaurantName}</span><input required value={establishment.restaurantName || ""} onChange={(event) => update((next) => { next.establishment.identificationMode = "manual"; next.establishment.restaurantName = event.target.value; next.establishment.identityConfirmed = false; return next; })} /></label><label><span>{copy.common.cityCountry}</span><input required value={establishment.cityCountry || ""} onChange={(event) => update((next) => { next.establishment.cityCountry = event.target.value; next.establishment.identityConfirmed = false; return next; })} placeholder={copy.common.cityPlaceholder} /></label></div>
     <div className="form-grid two"><label><span>{copy.common.address}</span><input value={knownInput(establishment.address)} onChange={(event) => update((next) => { next.establishment.address = event.target.value || "unknown"; next.establishment.identityConfirmed = false; return next; })} placeholder={copy.common.addressPlaceholder} /></label><label><span>{copy.common.phone}</span><input type="tel" value={knownInput(establishment.phone)} onChange={(event) => update((next) => { next.establishment.phone = event.target.value || "unknown"; next.establishment.identityConfirmed = false; return next; })} placeholder={copy.common.optional} /></label></div>
@@ -714,7 +668,7 @@ function Priorities({ answers, copy, locale, update, confirmInterpretation, bran
       return next;
     })} title={labelFor(locale, key)} />)}<button type="button" className="priority-expand" aria-expanded={expanded} aria-controls="priority-choices priority-outcomes" aria-label={locale === "fr" ? expanded ? "Réduire la liste" : "Afficher les autres enjeux" : expanded ? "Show fewer priorities" : "Show more priorities"} onClick={() => setExpanded(value => !value)}>{expanded ? "−" : "+"}</button></div>
     {answers.priorities.timeConsumers.includes("other") && <label><span>{copy.common.otherSituation}</span><textarea rows={3} value={answers.priorities.otherText || ""} onChange={(event) => update((next) => { next.priorities.otherText = event.target.value; return next; })} /></label>}
-    {!!textCandidates.length && <div className="confirm-box"><Sparkles size={17} /><span><strong>{copy.common.priorityInterpretation}</strong><small>{textCandidates.map((candidate) => labelFor(locale, candidate)).join(" · ")}</small></span><button type="button" onClick={() => { update((next) => { const previous = next.priorities.primaryFocus; const candidates = confirmPriorityText(next); if (candidates.length === 1 && previous && previous !== candidates[0]) branchNotice(); return next; }); confirmInterpretation(); }}>{copy.common.confirm}</button></div>}
+    {!!textCandidates.length && <div className="confirm-box"><ClipboardCheck size={17} /><span><strong>{copy.common.priorityInterpretation}</strong><small>{textCandidates.map((candidate) => labelFor(locale, candidate)).join(" · ")}</small></span><button type="button" onClick={() => { update((next) => { const previous = next.priorities.primaryFocus; const candidates = confirmPriorityText(next); if (candidates.length === 1 && previous && previous !== candidates[0]) branchNotice(); return next; }); confirmInterpretation(); }}>{copy.common.confirm}</button></div>}
     <div id="priority-outcomes" hidden={!expanded}><p>{copy.common.desiredOutcomes}</p><div className="choice-grid compact">{outcomes.map((key) => <ToggleCard key={key} selected={answers.priorities.outcomes.includes(key)} onClick={() => update((next) => { next.priorities.outcomes = toggle(next.priorities.outcomes, key); return next; })} title={labelFor(locale, key)} />)}</div></div>
     <p className="subtle-note" role="status">{answers.priorities.timeConsumers.length + answers.priorities.outcomes.length} {locale === "fr" ? "choix sélectionnés" : "choices selected"}</p>
     {primaryOptions.length > 1 && <label><span>{copy.common.startWith}</span><select value={answers.priorities.primaryFocus || ""} onChange={(event) => update((next) => { changeFocus(next, event.target.value as PrimaryFocus); return next; })}><option value="">{copy.common.startWith}</option>{primaryOptions.map((key) => <option key={key} value={key}>{labelFor(locale, key)}</option>)}</select></label>}
@@ -724,7 +678,7 @@ function Priorities({ answers, copy, locale, update, confirmInterpretation, bran
 function Interaction({ answers, copy, locale, update, confirmInterpretation }: StepProps & { confirmInterpretation: () => void }) {
   return <div className="onboarding-step"><StepHead copy={copy} eyebrow="interactionEyebrow" title="interactionTitle" subtitle="interactionHelp" />
     <div className="choice-grid three">{(["text", "voice", "mixed"] as const).map((mode) => <ToggleCard key={mode} selected={answers.interaction.preferredMode === mode} onClick={() => update((next) => { next.interaction.preferredMode = mode; next.interaction.preferredModeConfirmed = true; return next; })} title={labelFor(locale, mode)} icon={mode === "voice" ? <Mic /> : mode === "mixed" ? <Headphones /> : <PencilLine />} />)}</div>
-    {!answers.interaction.preferredModeConfirmed && <div className="confirm-box"><Sparkles size={17} /><span><strong>{copy.common.interactionInterpretation}</strong><small>{labelFor(locale, answers.interaction.preferredMode)}</small></span><button type="button" onClick={() => { update((next) => { next.interaction.preferredModeConfirmed = true; return next; }); confirmInterpretation(); }}>{copy.common.confirm}</button></div>}
+    {!answers.interaction.preferredModeConfirmed && <div className="confirm-box"><ClipboardCheck size={17} /><span><strong>{copy.common.interactionInterpretation}</strong><small>{labelFor(locale, answers.interaction.preferredMode)}</small></span><button type="button" onClick={() => { update((next) => { next.interaction.preferredModeConfirmed = true; return next; }); confirmInterpretation(); }}>{copy.common.confirm}</button></div>}
     <p className="subtle-note">{locale === "fr" ? "Dictez à votre rythme, relisez le texte, puis validez. TableNow ne parle pas à voix haute et n’envoie rien automatiquement." : "Dictate at your own pace, review the text, then confirm. TableNow does not speak aloud or send anything automatically."}</p>
   </div>;
 }
@@ -742,19 +696,6 @@ function PointOfSale({ answers, locale, update }: StepProps) {
   </section>;
 }
 
-function Connections({ answers, locale, edit }: { answers: OnboardingAnswers; locale: LocaleMode; edit: () => void }) {
-  const software = answers.reservations.providers.map(provider => provider === "other" ? answers.reservations.otherProvider || "Autre logiciel" : labelFor(locale, provider));
-  if (answers.reservations.methods.includes("calendar") && answers.reservations.calendarProvider) software.push(labelFor(locale, answers.reservations.calendarProvider));
-  if (answers.systems?.pointOfSale.status === "declared" && answers.systems.pointOfSale.name) software.push(answers.systems.pointOfSale.name);
-  const tools = Array.from(new Set(software));
-  return <section className="onboarding-connections" aria-labelledby="onboarding-title">
-    <h2>{locale === "fr" ? "Vos connexions, en toute clarté" : "Your connections, clearly explained"}</h2>
-    <p>{locale === "fr" ? "Vos outils sont déclarés. Cet écran ne permet pas encore de les connecter automatiquement ; aucune synchronisation n’est annoncée." : "Your tools are recorded. Automatic connection is not yet available from this screen; no synchronization is claimed."}</p>
-    {tools.length > 0 ? <ul className="onboarding-connection-list">{tools.map(tool => <li key={tool}><strong>{tool}</strong><span>{locale === "fr" ? "Déclaré · connexion non vérifiée ici" : "Declared · connection not verified here"}</span><small>{locale === "fr" ? "Continuez avec vos informations déclarées. La connexion devra être configurée puis testée avant toute synchronisation." : "Continue with the information you provided. The connection must be configured and tested before synchronization."}</small></li>)}</ul> : <p className="inline-note">{locale === "fr" ? "Aucun logiciel à connecter n’a été déclaré. Votre fonctionnement manuel reste possible dans TableNow." : "No software to connect has been declared. You can continue working manually in TableNow."}</p>}
-    <button type="button" className="text-button" onClick={edit}>{locale === "fr" ? "Corriger mes outils" : "Edit my tools"}</button>
-    <p className="inline-note">{locale === "fr" ? "Vous pouvez continuer maintenant. Votre premier plan utilisera vos réponses, sans inventer de données provenant de vos logiciels." : "You can continue now. Your first plan will use your answers without inventing data from your software."}</p>
-  </section>;
-}
 
 function Reservations({ answers, copy, locale, update, confirmInterpretation }: StepProps & { confirmInterpretation: () => void }) {
   const references = reservationReferences(answers);
@@ -769,12 +710,12 @@ function Reservations({ answers, copy, locale, update, confirmInterpretation }: 
     return next;
   });
   return <div className="onboarding-step"><StepHead copy={copy} eyebrow="reservationsEyebrow" title="reservationsTitle" />
-    <div className="choice-grid">{(["zenchef", "sevenrooms", "thefork", "other"] as const).map((provider) => <ToggleCard key={provider} selected={answers.reservations.providers.includes(provider)} onClick={() => toggleProvider(provider)} title={labelFor(locale, provider)} />)}<ToggleCard selected={!answers.reservations.providers.length && answers.reservations.methods.length > 0} onClick={() => update((next) => { setReservationProviders(next, []); setReservationMethods(next, ["none"]); return next; })} title={labelFor(locale, "no_software")} /></div>
+    <div className="choice-grid">{(["zenchef", "sevenrooms", "thefork", "opentable", "other"] as const).map((provider) => <ToggleCard key={provider} selected={answers.reservations.providers.includes(provider)} onClick={() => toggleProvider(provider)} title={labelFor(locale, provider)} />)}<ToggleCard selected={!answers.reservations.providers.length && answers.reservations.methods.length > 0} onClick={() => update((next) => { setReservationProviders(next, []); setReservationMethods(next, ["none"]); return next; })} title={labelFor(locale, "no_software")} /></div>
     {answers.reservations.providers.includes("other") && <label><span>{copy.common.otherTool}</span><input value={answers.reservations.otherProvider || ""} onChange={(event) => update((next) => { next.reservations.otherProvider = event.target.value; reconcileReservationReference(next); return next; })} /></label>}
     <details className="onboarding-details" open={!answers.reservations.providers.length}><summary>{copy.common.whereReservations}</summary><div className="choice-grid compact">{(["paper", "calendar", "messages", "none", "other"] as const).map((method) => <ToggleCard key={method} selected={answers.reservations.methods.includes(method)} onClick={() => toggleMethod(method)} title={labelFor(locale, method)} />)}</div></details>
     {answers.reservations.methods.includes("calendar") && <label><span>{copy.common.calendar}</span><select value={answers.reservations.calendarProvider || ""} onChange={(event) => update((next) => { if (event.target.value) next.reservations.calendarProvider = event.target.value as "google_calendar" | "outlook" | "other"; else delete next.reservations.calendarProvider; reconcileReservationReference(next); return next; })}><option value="">{labelFor(locale, "unknown")}</option><option value="google_calendar">Google Calendar</option><option value="outlook">Outlook</option><option value="other">{labelFor(locale, "other")}</option></select></label>}
     {answers.reservations.methods.includes("other") && <label><span>{copy.common.otherMethod}</span><input value={answers.reservations.otherMethod || ""} onChange={(event) => update((next) => { next.reservations.otherMethod = event.target.value; reconcileReservationReference(next); return next; })} /></label>}
-    {!!inferred.length && <div className="confirm-box"><Sparkles size={17} /><span><strong>{copy.common.interpretationSummary}</strong><small>{inferred.map((provider) => labelFor(locale, provider)).join(" · ")}</small></span><button type="button" onClick={() => { update((next) => { confirmReservationText(next); return next; }); confirmInterpretation(); }}>{copy.common.confirm}</button></div>}
+    {!!inferred.length && <div className="confirm-box"><ClipboardCheck size={17} /><span><strong>{copy.common.interpretationSummary}</strong><small>{inferred.map((provider) => labelFor(locale, provider)).join(" · ")}</small></span><button type="button" onClick={() => { update((next) => { confirmReservationText(next); return next; }); confirmInterpretation(); }}>{copy.common.confirm}</button></div>}
     {references.length > 1 && <label><span>{copy.common.referenceSystem}</span><select value={answers.reservations.authoritativeSystem} onChange={(event) => update((next) => { next.reservations.authoritativeSystem = event.target.value; return next; })}><option value="unknown">{copy.common.toAssign}</option>{references.map((reference) => <option key={reference} value={reference}>{labelFor(locale, reference)}</option>)}</select><small>{copy.common.referenceHelp}</small></label>}
     <div className="declared-state"><ShieldCheck size={17} /><span><strong>{copy.common.declared}</strong><small>{copy.common.notConnectedHelp}</small></span></div>
   </div>;
@@ -792,13 +733,13 @@ function Operations({ answers, copy, locale, update, pendingInterpretation, conf
     {(["profitability", "occupancy", "customer_loyalty"] as Array<PrimaryFocus | undefined>).includes(focus) && <BusinessBranch answers={answers} copy={copy} locale={locale} update={update} />}
     {(focus === "global" || focus === "other") && <GlobalBranch answers={answers} copy={copy} locale={locale} update={update} />}
     {capturedText && <p className="captured-answer"><strong>{copy.common.capturedText}</strong>{capturedText}</p>}
-    {pendingInterpretation && focus !== "supplier_orders" && <div className="confirm-box"><Sparkles size={17} /><span><strong>{copy.common.interpretationSummary}</strong><small>{capturedText}</small></span><button type="button" onClick={confirmInterpretation}>{copy.common.confirm}</button></div>}
+    {pendingInterpretation && focus !== "supplier_orders" && <div className="confirm-box"><ClipboardCheck size={17} /><span><strong>{copy.common.interpretationSummary}</strong><small>{capturedText}</small></span><button type="button" onClick={confirmInterpretation}>{copy.common.confirm}</button></div>}
   </div>;
 }
 
 function CommunicationBranch({ answers, copy, locale, update }: StepProps) {
   const branch = answers.operations.communications;
-  return <><Question title={branchQuestion(locale, "communicationChannels")} options={["calls", "whatsapp", "emails", "instagram", "sms", "other"]} values={branch.channels} update={(values) => update((next) => { next.operations.communications.channels = values as typeof branch.channels; return next; })} locale={locale} />
+  return <><Question title={branchQuestion(locale, "communicationChannels")} options={["calls", "whatsapp", "messenger", "emails", "instagram", "sms", "other"]} values={branch.channels} update={(values) => update((next) => { next.operations.communications.channels = values as typeof branch.channels; return next; })} locale={locale} />
     <Question title={branchQuestion(locale, "communicationMoment")} options={["during_service", "when_team_unavailable", "outside_hours", "other"]} values={branch.peakContext} update={(values) => update((next) => { next.operations.communications.peakContext = values as typeof branch.peakContext; return next; })} locale={locale} />
     {branch.channels.includes("calls") && <><p className="inline-note">{copy.common.keepNumber} {copy.common.noForwarding}</p><label><span>{copy.common.phoneOptional}</span><input type="tel" value={knownInput(branch.phoneNumber)} onChange={(event) => update((next) => { next.operations.communications.phoneNumber = event.target.value || "unknown"; return next; })} /></label><Question title={copy.common.overflowTriggers} options={["busy_line", "no_answer", "outside_hours"]} values={branch.overflowTriggers} update={(values) => update((next) => { next.operations.communications.overflowTriggers = values as typeof branch.overflowTriggers; return next; })} locale={locale} /></>}
     <Question title={copy.common.humanReview} options={["groups", "allergies_sensitive", "privatizations", "complaints", "other"]} values={branch.humanReviewCategories} update={(values) => update((next) => { next.operations.communications.humanReviewCategories = values as typeof branch.humanReviewCategories; return next; })} locale={locale} optional />
@@ -832,7 +773,7 @@ function SupplierBranch({ answers, copy, locale, update, confirmInterpretation }
     <div className="form-grid two"><label><span>{copy.common.supplier}</span><input value={knownInput(branch.supplierName)} onChange={(event) => update((next) => { next.operations.suppliers.supplierName = event.target.value || "unknown"; return next; })} placeholder={labelFor(locale, "unknown")} /></label><label><span>{copy.common.deliveryDate}</span><input type="date" value={knownInput(branch.deliveryDate)} onChange={(event) => update((next) => { next.operations.suppliers.deliveryDate = event.target.value || "unknown"; next.operations.suppliers.unknownFields = next.operations.suppliers.unknownFields.filter((field) => !field.startsWith("deliveryDate:")); return next; })} /></label></div>
     {knownInput(branch.deliveryDate) && <label><span>{copy.common.deliveryTimezone}</span><input value={branch.deliveryTimeZone || answers.establishment.timezone || ""} onChange={(event) => update((next) => { if (event.target.value) next.operations.suppliers.deliveryTimeZone = event.target.value; else delete next.operations.suppliers.deliveryTimeZone; return next; })} placeholder={copy.common.timezonePlaceholder} /></label>}
     {branch.unknownFields.some((field) => field.startsWith("deliveryDate:")) && <p className="inline-error"><AlertTriangle size={14} />{copy.common.absoluteDateHelp}</p>}
-    {pending && <div className="confirm-box"><Sparkles size={17} /><span><strong>{copy.common.confirmExtraction}</strong><small>{item.quantity} {item.unit} · {item.name}</small></span><button type="button" onClick={() => { update((next) => { next.operations.suppliers.unknownFields = next.operations.suppliers.unknownFields.filter((field) => field !== "proposal_pending"); return next; }); confirmInterpretation(); }}>{copy.common.confirm}</button></div>}
+    {pending && <div className="confirm-box"><ClipboardCheck size={17} /><span><strong>{copy.common.confirmExtraction}</strong><small>{item.quantity} {item.unit} · {item.name}</small></span><button type="button" onClick={() => { update((next) => { next.operations.suppliers.unknownFields = next.operations.suppliers.unknownFields.filter((field) => field !== "proposal_pending"); return next; }); confirmInterpretation(); }}>{copy.common.confirm}</button></div>}
     <p className="inline-note">{copy.common.noExternalOrder}</p>
   </>;
 }
@@ -869,15 +810,24 @@ function Authority({ answers, copy, locale, role, userId, update, pendingInterpr
     {(answers.authority.declaredJobTitle === "station_manager" || answers.authority.station) && <label><span>{copy.common.station}</span><input value={answers.authority.station || ""} onChange={(event) => update((next) => { if (event.target.value) next.authority.station = event.target.value; else delete next.authority.station; return next; })} /></label>}
     <label><span>{copy.common.validationRecipient}</span><select value={answers.authority.approvalAssigneeUserId || "unknown"} onChange={(event) => update((next) => { next.authority.approvalAssigneeUserId = event.target.value; return next; })}><option value="unknown">{copy.common.toAssign}</option>{allowed && <option value={userId}>{copy.common.me}</option>}</select></label>
     <label className="paper-choice"><input type="checkbox" checked={answers.authority.rulesAcknowledged} onChange={(event) => update((next) => { next.authority.rulesAcknowledged = event.target.checked; return next; })} /><span><ClipboardCheck size={17} /><span><strong>{copy.common.rulesAcknowledged}</strong><small>{copy.common.rulesHelp}</small></span></span></label>
-    {pendingInterpretation && <div className="confirm-box"><Sparkles size={17} /><span><strong>{copy.common.interpretationSummary}</strong><small>{answers.authority.station}</small></span><button type="button" onClick={confirmInterpretation}>{copy.common.confirm}</button></div>}
+    {pendingInterpretation && <div className="confirm-box"><ClipboardCheck size={17} /><span><strong>{copy.common.interpretationSummary}</strong><small>{answers.authority.station}</small></span><button type="button" onClick={confirmInterpretation}>{copy.common.confirm}</button></div>}
   </div>;
 }
 
 function FinalNote({ answers, copy, locale, update }: StepProps) {
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editedText, setEditedText] = useState("");
   return <div className="onboarding-step"><StepHead copy={copy} eyebrow="finalNoteEyebrow" title="finalNoteTitle" subtitle="finalNoteSubtitle" />
-    <label><span>{copy.common.note}</span><textarea rows={5} value={answers.finalNote.text || ""} maxLength={2000} onChange={(event) => update((next) => applyFreeText(next, "final_note", event.target.value, "user_text"), { sourceType: "user_text", sourceReference: event.target.value, confirmationStatus: "suggested" })} placeholder={copy.common.notePlaceholder} /></label>
+    <label><span>{copy.common.note}</span><textarea rows={3} value={answers.finalNote.text || ""} maxLength={2000} onChange={(event) => update((next) => applyFreeText(next, "final_note", event.target.value, "user_text"), { sourceType: "user_text", sourceReference: event.target.value, confirmationStatus: "suggested" })} placeholder={copy.common.notePlaceholder} /></label>
+    <p className="inline-note">{locale === "fr" ? "Ajoutez plusieurs idées, à votre rythme. Rien ne vous fait passer à l’étape suivante sans votre action." : "Add several ideas at your own pace. Only you move to the next step."}</p>
     {!!answers.finalNote.conflicts.length && <div className="inline-error" role="alert"><AlertTriangle size={15} /><span>{copy.common.whichCorrect}</span></div>}
-    {!!answers.finalNote.statements.length && <div className="statement-list"><strong>{copy.common.understood}</strong>{answers.finalNote.statements.map((statement) => <article key={statement.id} className={`statement-${statement.status}`}><span><small>{labelFor(locale, statement.kind)}</small>{statement.value}</span><div>{statement.status !== "confirmed" && statement.status !== "rejected" && <button type="button" onClick={() => update((next) => { confirmStatement(next, statement.id); return next; })}>{copy.common.confirm}</button>}<button type="button" onClick={() => update((next) => { removeStatement(next, statement.id); return next; })}>{copy.common.remove}</button></div></article>)}</div>}
+    {!!answers.finalNote.statements.length && <div className="statement-list"><strong>{copy.common.understood}</strong>{answers.finalNote.statements.map((statement) => <article key={statement.id} className={`statement-${statement.status}`}>
+      {editingId === statement.id ? <div className="statement-editor"><label>{copy.common.edit}<textarea value={editedText} maxLength={Math.max(statement.value.length, 2000 - (answers.finalNote.text || "").length + statement.value.length)} onChange={event => setEditedText(event.target.value)} /></label><div><button type="button" className="secondary-button" disabled={!editedText.trim()} onClick={() => { update(next => { editStatement(next, statement.id, editedText); return next; }, { sourceType: "user_text", sourceReference: editedText, confirmationStatus: "suggested" }); setEditingId(null); }}>{locale === "fr" ? "Enregistrer la correction" : "Save correction"}</button><button type="button" className="secondary-button" onClick={() => setEditingId(null)}>{copy.common.cancel}</button></div></div> : <><span><small>{labelFor(locale, statement.kind)} · {statement.status === "confirmed" ? locale === "fr" ? "Confirmé" : "Confirmed" : locale === "fr" ? "À confirmer" : "To confirm"}</small>{statement.value}</span><div>
+        {statement.status !== "confirmed" && statement.status !== "rejected" && <button type="button" className="secondary-button" onClick={() => update((next) => { confirmStatement(next, statement.id); return next; })}>{copy.common.confirm}</button>}
+        <button type="button" className="secondary-button" onClick={() => { setEditingId(statement.id); setEditedText(statement.value); }}><PencilLine size={14} aria-hidden="true" />{copy.common.edit}</button>
+        <button type="button" className="secondary-button" onClick={() => update((next) => { removeStatement(next, statement.id); return next; })}><X size={14} aria-hidden="true" />{locale === "fr" ? "Supprimer" : "Delete"}</button>
+      </div></>}
+    </article>)}</div>}
   </div>;
 }
 
@@ -896,8 +846,8 @@ function Review({ answers, copy, locale, role, userId, legalVersions, acceptTerm
 }) {
   const allowed = canComplete(role);
   return <div className="onboarding-step"><StepHead copy={copy} eyebrow="reviewEyebrow" title="reviewTitle" subtitle="reviewSubtitle" />
-    <div className="review-list">{reviewRows(answers, copy, locale, userId).map((row) => <article key={`${row.section}-${row.label}`}><span><strong>{row.label}</strong><small>{row.value}</small></span><button type="button" onClick={() => edit(row.section)}>{copy.common.edit}</button></article>)}</div>
-    <div className="first-result-preview"><Sparkles size={19} /><span><strong>{localizedFirstResultTitle(answers, locale)}</strong><small>{copy.common.preparedFromAnswers} {copy.common.unknownRemain}</small></span></div>
+    <div className="review-list">{reviewRows(answers, copy, locale, userId).map((row) => <article key={`${row.section}-${row.label}-${row.value}`}><span><strong>{row.label}</strong><small>{row.value}</small></span><button type="button" onClick={() => edit(row.section)}>{copy.common.edit}</button></article>)}</div>
+    <div className="first-result-preview"><ClipboardCheck size={19} /><span><strong>{localizedFirstResultTitle(answers, locale)}</strong><small>{copy.common.preparedFromAnswers} {copy.common.unknownRemain}</small></span></div>
     <label className="legal-acceptance"><input type="checkbox" checked={acceptTerms} onChange={(event) => setAcceptTerms(event.target.checked)} /><span>{copy.common.acceptTermsPrefix} <Link href="/legal/terms" target="_blank" rel="noopener noreferrer">{copy.common.terms}</Link> {legalVersions.terms}{copy.common.acceptTermsSuffix}</span></label>
     {allowed && <label className="legal-acceptance"><input type="checkbox" checked={acceptDpa} onChange={(event) => setAcceptDpa(event.target.checked)} /><span>{copy.common.acceptDpaPrefix} <Link href="/legal/dpa" target="_blank" rel="noopener noreferrer">{copy.common.dpa}</Link> {legalVersions.dpa}{copy.common.acceptDpaSuffix}</span></label>}
     {!allowed && <p className="form-error" role="alert">{copy.common.authorityBlocked}</p>}
@@ -916,13 +866,6 @@ function Question({ title, options, values, update, locale, single = false, opti
   return <fieldset className="question-block"><legend>{title}</legend><div className="choice-grid compact">{options.map((option) => <ToggleCard key={option} title={labelFor(locale, option)} selected={values.includes(option)} onClick={() => update(single ? [option] : toggle(values, option))} />)}</div>{optional && <button type="button" className="unknown-button" onClick={() => update([])}>{labelFor(locale, "unknown")}</button>}</fieldset>;
 }
 
-function Composer(props: { locale: LocaleMode; compact?: boolean; value: string; setValue: (value: string) => void; voiceState: VoiceState; voiceReview: string; copy: OnboardingCopy; onSend: () => void; onStart: () => void; onStop: () => void; onUseVoice: () => void; onCancelVoice: () => void }) {
-  return <section className={`onboarding-composer${props.compact ? " welcome-composer" : ""}`} aria-label={props.copy.common.composerPlaceholder}>
-    <ConversationInput value={props.value} onChange={props.setValue} onSend={props.onSend} onVoice={props.voiceState === "recording" ? props.onStop : props.onStart} recording={props.voiceState === "recording"} voiceBusy={["requesting_permission", "transcribing"].includes(props.voiceState)} placeholder={props.copy.common.composerPlaceholder} sendLabel={props.copy.common.send} voiceLabel={props.voiceState === "recording" ? props.copy.common.stop : props.copy.common.dictate} french={props.locale === "fr"} />
-    {props.voiceState !== "idle" && <div className="voice-review" role="status"><span>{voiceLabel(props.voiceState, props.copy)}</span>{props.voiceReview && <p>{props.voiceReview}</p>}{props.voiceState === "reviewing" && <div><button type="button" onClick={props.onUseVoice}>{props.copy.common.useVoice}</button><button type="button" onClick={props.onCancelVoice}><X size={13} /> {props.copy.common.cancel}</button></div>}</div>}
-  </section>;
-}
-
 function reviewRows(answers: OnboardingAnswers, copy: OnboardingCopy, locale: LocaleMode, userId: string) {
   const rows = [
     { section: "establishment" as const, label: copy.common.restaurantName, value: answers.establishment.restaurantName || labelFor(locale, "unknown") },
@@ -933,7 +876,7 @@ function reviewRows(answers: OnboardingAnswers, copy: OnboardingCopy, locale: Lo
     { section: "operations" as const, label: copy.common.operationEyebrow, value: operationSummary(answers, locale) },
     { section: "authority" as const, label: copy.common.validationRecipient, value: answers.authority.approvalAssigneeUserId === userId ? copy.common.me : copy.common.toAssign },
     ...answers.authority.proposedRules.filter((rule) => rule.status !== "rejected").map((rule) => ({ section: "authority" as const, label: labelFor(locale, "proposed_rule"), value: rule.label })),
-    ...answers.finalNote.statements.filter((statement) => statement.status === "confirmed").map((statement) => ({ section: "final_note" as const, label: labelFor(locale, statement.kind), value: statement.value })),
+    ...reviewableStatements(answers).map((statement) => ({ section: "final_note" as const, label: `${labelFor(locale, statement.kind)} · ${statement.status === "confirmed" ? locale === "fr" ? "Confirmé" : "Confirmed" : locale === "fr" ? "À confirmer" : "To confirm"}`, value: statement.value })),
   ];
   return rows;
 }
@@ -1008,22 +951,6 @@ function onboardingErrorMessage(caught: unknown, copy: OnboardingCopy, phase: "l
   return phase === "load" ? copy.common.loadFailed : copy.common.completeFailed;
 }
 
-function voiceLabel(state: VoiceState, copy: OnboardingCopy): string {
-  const labels: Record<VoiceState, string> = {
-    idle: copy.common.voiceIdle,
-    requesting_permission: copy.common.voicePermission,
-    recording: copy.common.voiceRecording,
-    transcribing: copy.common.voiceTranscribing,
-    reviewing: copy.common.voiceReview,
-    confirmed: copy.common.voiceConfirmed,
-    cancelled: copy.common.voiceCancelled,
-    permission_denied: copy.common.voiceDenied,
-    unavailable: copy.common.voiceUnavailable,
-    failed: copy.common.voiceFailed,
-  };
-  return labels[state];
-}
-
 function questionFor(section: SectionKey, answers: OnboardingAnswers, locale: LocaleMode): string {
   if (section === "establishment") return branchQuestion(locale, "establishmentVoice");
   if (section === "priorities") return onboardingCopy[locale].common.priorityQuestion;
@@ -1062,27 +989,6 @@ function localizedFirstResultTitle(answers: OnboardingAnswers, locale: LocaleMod
   const focus = answers.priorities.primaryFocus;
   const english: Record<string, string> = { supplier_orders: answers.operations.suppliers.items[0]?.quantity ? "Your order is prepared" : "Your order needs completion", customer_communication: "Your customer response protocol is defined", reservations: "Your reservation rules are prepared", team: "Your first briefing is prepared", profitability: "Your analysis plan is prepared", occupancy: answers.operations.business.targetServices.length ? "Your priority services are identified" : "Your occupancy plan needs detail", customer_loyalty: "Your customer follow-up is prepared", operations: "Your service preparation is ready", global: "Your service preparation is ready", other: "Your service preparation is ready" };
   return english[focus || "global"]!;
-}
-
-function cancelAudio(recognitionRef: MutableRefObject<SpeechRecognitionLike | null>, setVoiceState: (value: VoiceState) => void, resetState: boolean): void {
-  abortRecognition(recognitionRef);
-  if (resetState) setVoiceState("idle");
-}
-
-function abortRecognition(recognitionRef: MutableRefObject<SpeechRecognitionLike | null>): void {
-  const recognition = recognitionRef.current;
-  recognitionRef.current = null;
-  if (!recognition) return;
-  recognition.onstart = null;
-  recognition.onresult = null;
-  recognition.onerror = null;
-  recognition.onend = null;
-  try {
-    recognition.abort();
-  } catch {
-    // Some browser engines throw when capture already ended. All callbacks
-    // and the active reference are detached above, so cleanup remains safe.
-  }
 }
 
 function canComplete(role?: string): boolean {

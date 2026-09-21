@@ -87,7 +87,7 @@ export class PlatformRepository {
       const tasks = await transaction`
         select id, restaurant_id as "restaurantId", title, category, status,
           assignee_name as "assigneeName", due_at as "dueAt"
-        from operational_tasks where tenant_id = ${tenantId}
+        from operational_tasks where tenant_id = ${tenantId} and data_origin = 'business'
         order by status, due_at nulls last limit 100
       `;
       const shifts = await transaction`
@@ -450,7 +450,7 @@ export class PlatformRepository {
     return withTenant(this.database, actor.tenantId, async (transaction) => {
       const [task] = await transaction`
         update operational_tasks set status = ${status}
-        where id = ${id} and tenant_id = ${actor.tenantId}
+        where id = ${id} and tenant_id = ${actor.tenantId} and data_origin = 'business'
         returning id, status
       `;
       if (!task) throw new Error("NOT_FOUND");
@@ -740,7 +740,7 @@ export class PlatformRepository {
     conversationId: string;
     proposedAction: NonNullable<import("@tablenow/contracts").CopilotReply["proposedAction"]>;
     arguments: Record<string, unknown>;
-    usage: { estimatedCostEur: number; inputTokens: number; outputTokens: number };
+    usage: { estimatedCostEur: number | null; inputTokens: number | null; outputTokens: number | null };
   }, restaurantId: string) {
     return withTenant(this.database, actor.tenantId, async (transaction) => {
       const [restaurant] = await transaction<{ id: string }[]>`
@@ -756,9 +756,10 @@ export class PlatformRepository {
         on conflict (tenant_id, idempotency_key) do update set rationale = excluded.rationale
         returning id, status
       `;
+      // Daily counters aggregate reported tokens only. Unknown billing is not a zero-cost claim.
       await transaction`
         insert into agent_usage_daily (tenant_id, estimated_cost_eur, input_tokens, output_tokens)
-        values (${actor.tenantId}, ${plan.usage.estimatedCostEur}, ${plan.usage.inputTokens}, ${plan.usage.outputTokens})
+        values (${actor.tenantId}, ${plan.usage.estimatedCostEur ?? 0.01}, ${plan.usage.inputTokens ?? 0}, ${plan.usage.outputTokens ?? 0})
         on conflict (tenant_id, usage_date) do update set
           estimated_cost_eur = agent_usage_daily.estimated_cost_eur + excluded.estimated_cost_eur,
           input_tokens = agent_usage_daily.input_tokens + excluded.input_tokens,

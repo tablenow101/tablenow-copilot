@@ -125,3 +125,32 @@ describe("browser dictation session", () => {
   });
 
 });
+
+
+describe("dictation cleanup and locale", () => {
+  it("keeps the last provisional phrase when a browser fails to finish after stop", () => {
+    const { recognition, events, session, result } = setup();
+    session.start();
+    recognition.onresult?.({ resultIndex: 0, results: [result("Préparer douze couverts", false)] });
+    session.stop();
+    session.finish();
+    session.finish();
+    expect(events.onFinalText).toHaveBeenCalledExactlyOnceWith("Préparer douze couverts");
+    expect(events.onEnd).toHaveBeenCalledOnce();
+    expect(recognition.abort).toHaveBeenCalledOnce();
+  });
+  it("signals actual microphone start and applies the selected language", () => {
+    const { recognition, events } = setup();
+    const onStart = vi.fn();
+    const session = createDictationSession(recognition, { ...events, onStart }, "en-US");
+    const lateStart = recognition.onstart;
+    session.start();
+    expect(onStart).not.toHaveBeenCalled();
+    recognition.onstart?.();
+    expect(onStart).toHaveBeenCalledOnce();
+    expect(recognition.lang).toBe("en-US");
+    session.cancel();
+    lateStart?.();
+    expect(onStart).toHaveBeenCalledOnce();
+  });
+});

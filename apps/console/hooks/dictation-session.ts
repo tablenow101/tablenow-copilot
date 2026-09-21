@@ -6,6 +6,7 @@ export type Recognition = {
   onresult: ((event: { resultIndex: number; results: ArrayLike<RecognitionResult> }) => void) | null;
   onerror: ((event: { error: string }) => void) | null;
   onend: (() => void) | null;
+  onstart?: (() => void) | null;
   start(): void;
   stop(): void;
   abort(): void;
@@ -16,12 +17,13 @@ type Callbacks = {
   onInterimText: (text: string) => void;
   onError: (error: string) => void;
   onEnd: () => void;
+  onStart?: () => void;
 };
 
 // SpeechRecognition results are cumulative within a session. Only newly final
 // segments may be appended to the draft; provisional text is always replaced.
 // On stop/error the last phrase becomes an editable draft, never a sent message.
-export function createDictationSession(recognition: Recognition, callbacks: Callbacks) {
+export function createDictationSession(recognition: Recognition, callbacks: Callbacks, language = "fr-FR") {
   const finalIndexes = new Set<number>();
   let closed = false;
   let stopping = false;
@@ -40,8 +42,10 @@ export function createDictationSession(recognition: Recognition, callbacks: Call
     recognition.onresult = null;
     recognition.onerror = null;
     recognition.onend = null;
+    recognition.onstart = null;
   }
-  recognition.lang = "fr-FR";
+  recognition.lang = language;
+  recognition.onstart = () => { if (!closed) callbacks.onStart?.(); };
   recognition.continuous = true;
   recognition.interimResults = true;
   recognition.onresult = (event) => {
@@ -67,7 +71,7 @@ export function createDictationSession(recognition: Recognition, callbacks: Call
     detach();
     preserveInterim();
     callbacks.onError(event.error);
-    recognition.abort();
+    try { recognition.abort(); } catch { /* Already stopped by the browser. */ }
   };
   recognition.onend = () => {
     if (closed) return;
@@ -82,11 +86,18 @@ export function createDictationSession(recognition: Recognition, callbacks: Call
       stopping = true;
       recognition.stop();
     },
+    finish: () => {
+      if (closed) return;
+      detach();
+      preserveInterim();
+      try { recognition.abort(); } catch { /* Already stopped by the browser. */ }
+      callbacks.onEnd();
+    },
     cancel: () => {
       if (closed) return;
       detach();
       clearInterim();
-      recognition.abort();
+      try { recognition.abort(); } catch { /* Already stopped by the browser. */ }
       callbacks.onEnd();
     },
   };

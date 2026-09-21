@@ -18,7 +18,7 @@ export interface CopilotContext {
 }
 
 export interface AgentPlan extends CopilotReply {
-  usage: { model: string; inputTokens: number; outputTokens: number; estimatedCostEur: number };
+  usage: { model: string; inputTokens: number | null; outputTokens: number | null; estimatedCostEur: number | null };
   tool: string;
   arguments: Record<string, unknown>;
 }

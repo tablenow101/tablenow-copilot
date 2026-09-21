@@ -12,7 +12,7 @@ export interface OnboardingCopy {
 type CommonKey =
   | "brand" | "language" | "clearTheme" | "darkTheme" | "loading" | "loadFailed" | "retry"
   | "dirty" | "saving" | "saved" | "saveFailed" | "conflict" | "compare" | "back" | "continue"
-  | "finish" | "preparing" | "saveForReview" | "composerPlaceholder" | "send" | "dictate" | "stop"
+  | "done" | "finish" | "preparing" | "saveForReview" | "composerPlaceholder" | "send" | "dictate" | "stop"
   | "listen" | "stopReading" | "useVoice" | "cancel" | "voiceIdle" | "voicePermission" | "voiceRecording"
   | "voiceTranscribing" | "voiceReview" | "voiceConfirmed" | "voiceCancelled" | "voiceDenied" | "voiceUnavailable"
   | "voiceFailed" | "establishmentEyebrow" | "welcome" | "establishmentSubtitle" | "promise" | "restaurantQuery"
@@ -48,9 +48,9 @@ const labelsFr: Record<string, string> = {
   team_coordination: "Mieux planifier et coordonner mes équipes", service_disruptions: "Anticiper et gérer les aléas du service",
   stock_control: "Maîtriser mes achats et mes stocks", customer_loyalty: "Mieux connaître et fidéliser ma clientèle",
   text: "Par écrit", voice: "À la voix", mixed: "Les deux", zenchef: "Zenchef", sevenrooms: "SevenRooms",
-  thefork: "TheFork", no_software: "Je n'en ai pas", paper: "Manuscrit", calendar: "Dans un calendrier",
+  thefork: "TheFork", opentable: "OpenTable", no_software: "Je n'en ai pas", paper: "Manuscrit", calendar: "Dans un calendrier",
   messages: "Dans des messages", none: "Je ne les note pas encore", software: "Logiciel", google_calendar: "Google Calendar",
-  outlook: "Outlook", calls: "Appels", whatsapp: "WhatsApp", emails: "E-mails", instagram: "Instagram", sms: "SMS",
+  outlook: "Outlook", calls: "Appels", whatsapp: "WhatsApp", emails: "E-mails", instagram: "Instagram", messenger: "Messenger", sms: "SMS",
   during_service: "Pendant le service", when_team_unavailable: "Quand l'équipe ne répond pas", outside_hours: "Hors horaires",
   groups: "Groupes", allergies_sensitive: "Allergies et demandes sensibles", privatizations: "Privatisations",
   complaints: "Réclamations", taking_reservations: "Prendre les réservations", changes_cancellations: "Modifications et annulations",
@@ -73,10 +73,10 @@ const labelsEn: Record<string, string> = {
   operations: "Operations", other: "Other", global: "Overall support", profitability: "Improve the restaurant's profitability",
   occupancy: "Improve occupancy", customer_requests: "Handle customer requests better", team_coordination: "Plan and coordinate the team",
   service_disruptions: "Anticipate service disruptions", stock_control: "Control purchasing and stock", customer_loyalty: "Know and retain customers",
-  text: "In writing", voice: "By voice", mixed: "Both", zenchef: "Zenchef", sevenrooms: "SevenRooms", thefork: "TheFork",
+  text: "In writing", voice: "By voice", mixed: "Both", zenchef: "Zenchef", sevenrooms: "SevenRooms", thefork: "TheFork", opentable: "OpenTable",
   no_software: "I do not use one", paper: "In a notebook", calendar: "In a calendar", messages: "In messages",
   none: "We do not record them yet", software: "Software", google_calendar: "Google Calendar", outlook: "Outlook",
-  calls: "Calls", whatsapp: "WhatsApp", emails: "Emails", instagram: "Instagram", sms: "SMS", during_service: "During service",
+  calls: "Calls", whatsapp: "WhatsApp", emails: "Emails", instagram: "Instagram", messenger: "Messenger", sms: "SMS", during_service: "During service",
   when_team_unavailable: "When the team cannot answer", outside_hours: "Outside opening hours", groups: "Groups",
   allergies_sensitive: "Allergies and sensitive requests", privatizations: "Private events", complaints: "Complaints",
   taking_reservations: "Taking reservations", changes_cancellations: "Changes and cancellations", special_requests: "Special requests",
@@ -103,8 +103,8 @@ export const onboardingCopy: Record<LocaleMode, OnboardingCopy> = {
       brand: "Onboarding", language: "Langue", clearTheme: "Passer en clair", darkTheme: "Passer en sombre", loading: "Préparation de votre brouillon d'onboarding",
       loadFailed: "Impossible de charger votre brouillon.", retry: "Réessayer", dirty: "Modifications non enregistrées", saving: "Enregistrement…", saved: "Enregistré",
       saveFailed: "Enregistrement impossible. Vos réponses restent dans cet écran.", conflict: "Ces réponses ont été modifiées dans une autre session.", compare: "Comparer les réponses",
-      back: "Retour", continue: "Continuer", finish: "Voir mon premier résultat", preparing: "Préparation de votre plan…", saveForReview: "Enregistrer pour validation",
-      composerPlaceholder: "Écrivez ou dites-nous comment fonctionne votre établissement…", send: "Envoyer", dictate: "Dicter", stop: "Arrêter", listen: "Écouter la question", stopReading: "Arrêter la lecture",
+      back: "Retour", continue: "Continuer", done: "J’ai terminé", finish: "Voir mon premier résultat", preparing: "Préparation de votre plan…", saveForReview: "Enregistrer pour validation",
+      composerPlaceholder: "Écrivez ou parlez…", send: "Envoyer", dictate: "Dicter", stop: "Arrêter", listen: "Écouter la question", stopReading: "Arrêter la lecture",
       useVoice: "Utiliser cette réponse", cancel: "Annuler", voiceIdle: "Dicter", voicePermission: "Autorisez le micro pour dicter", voiceRecording: "Je vous écoute…", voiceTranscribing: "Transcription…",
       voiceReview: "Vérifiez votre réponse", voiceConfirmed: "Réponse utilisée", voiceCancelled: "Dictée annulée", voiceDenied: "Le micro n'est pas autorisé dans ce navigateur.",
       voiceUnavailable: "La dictée n'est pas disponible sur cet environnement.", voiceFailed: "La transcription n'a pas abouti.", establishmentEyebrow: "Établissement", welcome: "Bonjour et bienvenue, comment puis-je vous aider ?",
@@ -132,7 +132,7 @@ export const onboardingCopy: Record<LocaleMode, OnboardingCopy> = {
       authorityTitle: "Qui valide les décisions ?", authoritySubtitle: "TableNow prépare. La personne autorisée garde la décision.", serverRole: "Rôle accordé à la session", roleHelp: "Ce rôle vient du serveur. Le champ ci-dessous ne change aucun droit.",
       authorityBlocked: "Ces réglages doivent être confirmés par une personne autorisée.", jobTitle: "Votre fonction dans l'établissement", validationRecipient: "Qui doit recevoir les demandes de validation pour cette mission ?",
       me: "Moi", toAssign: "À désigner", rulesAcknowledged: "Préparer un brouillon, faire valider avant envoi", rulesHelp: "Ne pas exécuter d'action extérieure pendant la configuration.", finalNoteEyebrow: "Dernière précision",
-      finalNoteTitle: "Une dernière chose à savoir ?", finalNoteSubtitle: "Vos habitudes, vos exceptions ou une consigne importante.", note: "Note", notePlaceholder: "Exemple : le chef valide toujours les groupes et les allergies.",
+      finalNoteTitle: "Avons-nous oublié quelque chose ?", finalNoteSubtitle: "Vos habitudes, vos exceptions ou une consigne importante.", note: "Note", notePlaceholder: "Exemple : le chef valide toujours les groupes et les allergies.",
       understood: "Voici ce que j'ai compris.", remove: "Retirer", whichCorrect: "Quelle information est correcte ?", reviewEyebrow: "Votre plan", reviewTitle: "Voici votre point de départ.",
       reviewSubtitle: "Vérifiez chaque fait avant de créer le premier résultat.", edit: "Modifier", preparedFromAnswers: "Préparé à partir de vos réponses.", unknownRemain: "Les informations inconnues restent marquées à compléter.",
       acceptTermsPrefix: "J'accepte les", terms: "conditions d'utilisation", acceptTermsSuffix: ".", acceptDpaPrefix: "Je confirme être autorisé à configurer cet établissement et j'accepte l'", dpa: "accord de traitement des données", acceptDpaSuffix: ".",
@@ -151,7 +151,7 @@ export const onboardingCopy: Record<LocaleMode, OnboardingCopy> = {
     common: {
       brand: "Onboarding", language: "Language", clearTheme: "Use light mode", darkTheme: "Use dark mode", loading: "Preparing your onboarding draft", loadFailed: "Your draft could not be loaded.", retry: "Try again",
       dirty: "Unsaved changes", saving: "Saving…", saved: "Saved", saveFailed: "Saving failed. Your answers remain on this screen.", conflict: "These answers were changed in another session.", compare: "Compare answers",
-      back: "Back", continue: "Continue", finish: "See my first result", preparing: "Preparing your plan…", saveForReview: "Save for approval", composerPlaceholder: "Write or tell us how your restaurant works…", send: "Send", dictate: "Dictate",
+      back: "Back", continue: "Continue", done: "I’m done", finish: "See my first result", preparing: "Preparing your plan…", saveForReview: "Save for approval", composerPlaceholder: "Write or tell us how your restaurant works…", send: "Send", dictate: "Dictate",
       stop: "Stop", listen: "Listen to the question", stopReading: "Stop reading", useVoice: "Use this answer", cancel: "Cancel", voiceIdle: "Dictate", voicePermission: "Allow microphone access to dictate",
       voiceRecording: "I am listening…", voiceTranscribing: "Transcribing…", voiceReview: "Review your answer", voiceConfirmed: "Answer used", voiceCancelled: "Dictation cancelled", voiceDenied: "The microphone is not allowed in this browser.",
       voiceUnavailable: "Dictation is not available in this environment.", voiceFailed: "Transcription failed.", establishmentEyebrow: "Restaurant", welcome: "Welcome.", establishmentSubtitle: "Let us start with your restaurant.",

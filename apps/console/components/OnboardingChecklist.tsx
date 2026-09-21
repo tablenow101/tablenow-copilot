@@ -25,8 +25,9 @@ export function OnboardingChecklist({ restaurantId }: { restaurantId: string }) 
   const items = draft ? onboardingChecklist(draft.answers) : [];
   const pending = items.filter(item => !item.complete);
   const completed = items.filter(item => item.complete);
-  return <section className="tn-setup-checklist" aria-labelledby="setup-checklist-title">
-    <div><h2 id="setup-checklist-title">Votre configuration, à votre rythme</h2><p>Ces étapes viennent de vos réponses enregistrées. Vous pouvez déjà préparer votre service.</p></div>
+  return <details className="tn-setup-checklist">
+    <summary><span><strong>Ma configuration</strong><small>{error ? "À vérifier" : !draft ? "Chargement…" : pending.length ? `${pending.length} point${pending.length > 1 ? "s" : ""} à compléter à votre rythme` : "Informations de base renseignées"}</small></span><ChevronRight size={18} aria-hidden="true" /></summary>
+    <div className="tn-setup-checklist-content"><p>Ces étapes viennent de vos réponses. Elles peuvent être complétées après votre premier service.</p>
     {error ? <p role="alert">Votre checklist n’a pas pu être chargée. <button className="tn-link" onClick={() => setAttempt(value => value + 1)}>Réessayer</button></p>
       : !draft ? <p role="status">Lecture de vos réponses…</p>
       : <>
@@ -34,5 +35,6 @@ export function OnboardingChecklist({ restaurantId }: { restaurantId: string }) 
         {completed.length > 0 && <details><summary>{completed.length} étape{completed.length > 1 ? "s" : ""} déjà renseignée{completed.length > 1 ? "s" : ""}</summary><ul>{completed.map(item => <li key={item.id}><Link href={`/onboarding?restaurantId=${restaurantId}&section=${item.section}${item.step ? `&step=${item.step}` : ""}`}><Check size={16} /><span><strong>{item.title}</strong><small>{item.reason}</small></span><ChevronRight size={18} /></Link></li>)}</ul></details>}
         {pending.length === 0 && <p>Les informations de base sont renseignées. Ce statut ne certifie aucune connexion à un logiciel.</p>}
       </>}
-  </section>;
+    </div>
+  </details>;
 }

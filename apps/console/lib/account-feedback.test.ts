@@ -16,6 +16,13 @@ describe("account verification feedback", () => {
     await expect(accountRequest("/v1/account/continuation")).rejects.toMatchObject({ code: "ACCOUNT_NETWORK", status: 0 });
   });
 
+  it("treats truncated JSON as an uncertain response without replaying the request", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response('{"authenticated":', { status: 200, headers: { "content-type": "application/json" } }));
+    vi.stubGlobal("fetch", fetchMock);
+    await expect(accountRequest("/v1/account/verify-mfa", { method: "POST", body: JSON.stringify({ code: "000000" }) })).rejects.toMatchObject({ code: "ACCOUNT_RESPONSE_UNCERTAIN", status: 0 });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
   it("bounds waiting and never automatically retries a verification", async () => {
     vi.useFakeTimers();
     const fetchMock = vi.fn((_url: string, init: RequestInit) => new Promise((_resolve, reject) => {

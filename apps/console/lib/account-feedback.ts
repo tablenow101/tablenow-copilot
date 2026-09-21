@@ -8,6 +8,7 @@ export async function accountRequest<T>(path: string, init: RequestInit = {}): P
     return await api<T>(path, { ...init, signal: controller.signal });
   } catch (error) {
     if (controller.signal.aborted) throw new ApiError(0, "ACCOUNT_TIMEOUT", "Le serveur n’a pas confirmé le résultat à temps. Votre saisie est conservée. Réessayez lorsque la connexion est rétablie.");
+    if (error instanceof SyntaxError) throw new ApiError(0, "ACCOUNT_RESPONSE_UNCERTAIN", "La réponse du serveur est incomplète. Vérifiez l’état de votre demande avant de réessayer.");
     if (error instanceof TypeError) throw new ApiError(0, "ACCOUNT_NETWORK", "La connexion a été interrompue. Votre saisie est conservée. Vérifiez votre connexion internet, puis réessayez.");
     throw error;
   } finally {

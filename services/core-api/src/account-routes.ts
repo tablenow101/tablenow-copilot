@@ -6,6 +6,7 @@ import { getConfig } from "./environment.js";
 import { setSessionCookies } from "./auth.js";
 import { newTotpSecret, passwordHash, passwordMatches, seal, unseal, validTotpStep } from "./account-crypto.js";
 import { registerGoogleRoutes } from "./google-routes.js";
+import { registerAccountRecoveryRoutes } from "./account-recovery-routes.js";
 import type { GoogleExchange } from "./google-identity.js";
 
 type Payload = { purpose: "signup" | "reset" | "login" | "google"; googleSubject?: string; passwordHash?: string; name?: string; userId?: string; tenantId?: string; secret?: string; rememberMe?: boolean };
@@ -250,4 +251,5 @@ export async function registerAccountRoutes(app: FastifyInstance, database: Data
     reply.clearCookie("tn_auth", { path: "/" });
     return { authenticated: true, backupCodes: result.backupCodes };
   });
+  await registerAccountRecoveryRoutes(app, database);
 }

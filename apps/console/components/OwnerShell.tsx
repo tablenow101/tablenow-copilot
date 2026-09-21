@@ -47,8 +47,10 @@ import {
 } from "lucide-react";
 import { api, ApiError } from "@/lib/api";
 import { useSession } from "@/hooks/useSession";
+import { prepareCopilotRequest, replayCopilotRequest, sendCopilotRequest, type CopilotRequest } from "@/lib/copilot-request";
 import { useDictation } from "@/hooks/useDictation";
 import { ownerGreeting, summarizeToday } from "@/lib/today-overview";
+import { firstPlanPresentation, taskAssignmentLabel } from "@/lib/today-overview";
 import { TodayOverview } from "./TodayOverview";
 import { OnboardingChecklist } from "./OnboardingChecklist";
 import { scopeWorkspace } from "@/lib/workspace";
@@ -184,7 +186,7 @@ export function OwnerShell({ section }: { section: string }) {
   const [chatError, setChatError] = useState("");
   const [chatBusy, setChatBusy] = useState(false);
   const chatInFlight = useRef(false);
-  const chatRequest = useRef<{ restaurantId: string; message: string; key: string } | null>(null);
+  const chatRequest = useRef<CopilotRequest | null>(null);
   const [chatRevision, setChatRevision] = useState(0);
   const refreshNumber = useRef(0);
   const heading = useRef<HTMLHeadingElement>(null);
@@ -436,32 +438,33 @@ export function OwnerShell({ section }: { section: string }) {
       );
     }
   }
-  async function sendChat(request?: string) {
-    const submittedMessage = request ?? [message, dictation.interimText].filter(Boolean).join(" ");
-    if (chatInFlight.current || !submittedMessage.trim() || !restaurantId) return;
-    dictation.cancel();
-    setMessage(submittedMessage);
+  async function sendChat(request?: string, attachmentIds: string[] = chatRequest.current?.attachmentIds || [], replay?: CopilotRequest) {
+    const submittedMessage = replay?.message ?? request ?? [message, dictation.interimText].filter(Boolean).join(" ");
+    if (chatInFlight.current || !submittedMessage.trim() || !restaurantId) return false;
+    if (!replay) { dictation.cancel(); setMessage(submittedMessage); }
     chatInFlight.current = true;
-    if (chatRequest.current?.restaurantId !== restaurantId || chatRequest.current.message !== submittedMessage.trim()) {
-      chatRequest.current = { restaurantId, message: submittedMessage.trim(), key: crypto.randomUUID() };
-    }
+    const payload = replay || prepareCopilotRequest(chatRequest.current, { restaurantId, message: submittedMessage.trim(), attachmentIds, context: { surface: "dashboard" } }, () => crypto.randomUUID());
+    const checkExisting = Boolean(replay || chatRequest.current?.key === payload.key);
+    if (!replay) chatRequest.current = payload;
     setChatBusy(true);
     setChatError("");
     try {
-      await api("/v1/operating/chat", {
-        method: "POST",
-        body: JSON.stringify({ restaurantId, message: submittedMessage.trim(), idempotencyKey: chatRequest.current.key }),
-      });
-      chatRequest.current = null;
-      setMessage((current) => current === submittedMessage ? "" : current);
+      await sendCopilotRequest(payload, checkExisting);
+      if (!replay) {
+        chatRequest.current = null;
+        setMessage((current) => current === submittedMessage ? "" : current);
+      }
       await refresh();
       if (active !== "copilot") router.push("/copilot");
+      return true;
     } catch (caught) {
+      if (replay) throw caught;
       setChatError(
         caught instanceof Error
           ? caught.message
           : "Votre message n’a pas pu être traité. Il est conservé ici.",
       );
+      return false;
     } finally {
       chatInFlight.current = false;
       setChatBusy(false);
@@ -653,10 +656,8 @@ export function OwnerShell({ section }: { section: string }) {
               onAddTask={() => openModal({ kind: "task" })} onShowPreparation={openPreparation} />
             {scoped.restaurants[0] && <OnboardingChecklist restaurantId={scoped.restaurants[0].id} />}
             <div id="today-preparation" className="tn-today-details" tabIndex={-1} ref={preparationRef}>
-            <details className="tn-service-details">
-              <summary>
-                Le service en chiffres <ChevronRight size={16} />
-              </summary>
+            <section className="tn-service-figures" aria-label="Le service en chiffres">
+              <h2>Le service en chiffres</h2>
               <Kpis
                 workspace={scoped}
                 reservations={reservations}
@@ -664,7 +665,7 @@ export function OwnerShell({ section }: { section: string }) {
                 currentDay={currentDay}
                 tz={tz}
               />
-            </details>
+            </section>
             {phase === "before" ? (
               <div className="tn-grid">
                 <section className="tn-card">
@@ -706,7 +707,6 @@ export function OwnerShell({ section }: { section: string }) {
                     />
                   )}
                 </section>
-                <FirstPlan workspace={scoped} />
               </div>
             ) : phase === "after" ? (
               <div className="tn-grid">
@@ -765,7 +765,6 @@ export function OwnerShell({ section }: { section: string }) {
                     Préparer la suite <ArrowRight size={16} />
                   </button>
                 </section>
-                <FirstPlan workspace={scoped} />
               </div>
             ) : (
               <div className="tn-grid">
@@ -863,8 +862,7 @@ export function OwnerShell({ section }: { section: string }) {
                       Ouvrir les communications <ArrowRight size={16} />
                     </Link>
                   </section>
-                  <FirstPlan workspace={scoped} />
-                </div>
+                  </div>
               </div>
             )}
             </div>
@@ -1125,6 +1123,7 @@ export function OwnerShell({ section }: { section: string }) {
                   </small>
                 </div>
               </div>
+              <Link className="tn-secondary" href="/account/security">Codes de secours</Link>
               <button
                 className="tn-secondary"
                 onClick={() => void logout()}
@@ -1175,7 +1174,7 @@ export function OwnerShell({ section }: { section: string }) {
                 Mes priorités <ChevronRight size={15} />
               </Link>
             </div>
-            {restaurantId && <CopilotEvidence key={restaurantId} restaurantId={restaurantId} revision={chatRevision} onRetry={(text, key) => { chatRequest.current = { restaurantId, message: text, key }; prepareMessage(text); }} canDecide={["owner", "group_admin", "platform_admin"].includes(session?.membership.role || "")} />}
+            {restaurantId && <CopilotEvidence key={restaurantId} restaurantId={restaurantId} revision={chatRevision} retrying={chatBusy} onRetry={run => sendChat(undefined, [], replayCopilotRequest(restaurantId, run))} canDecide={["owner", "group_admin", "platform_admin"].includes(session?.membership.role || "")} />}
             <div className="tn-chat">
               {operating.chat.filter(
                 (entry) => entry.restaurantId === restaurantId,
@@ -1225,26 +1224,25 @@ export function OwnerShell({ section }: { section: string }) {
         )}
       </main>
       <div className={`tn-composer-dock ${composerCollapsed ? "is-collapsed" : ""}`}>
-        <button className="tn-composer-collapse" aria-label={composerCollapsed ? "Ouvrir la barre TableNow" : "Réduire la barre TableNow"} aria-expanded={!composerCollapsed} onClick={() => setComposerCollapsed(value => !value)}>
-          {composerCollapsed ? <><MessageSquareText size={17} /> Parler à TableNow <ChevronUp size={15} /></> : <ChevronDown size={15} />}
-        </button>
-        <div hidden={composerCollapsed}>
           <ConversationInput
+            contextKey={restaurantId || ""}
             value={[message, dictation.interimText].filter(Boolean).join(" ")}
             onChange={value => { dictation.cancel(); setMessage(value); }}
-            onSend={() => sendChat()}
+            onSend={attachmentIds => sendChat(undefined, attachmentIds)}
             sending={chatBusy}
             onVoice={dictation.toggle}
             recording={dictation.listening}
-            voiceBusy={false}
+            voiceBusy={dictation.busy}
+            voiceNotice={dictation.notice}
+            audioLevels={dictation.audioLevels}
+            spectrumUnavailable={dictation.spectrumUnavailable}
+            collapsed={composerCollapsed}
+            onCollapsedChange={setComposerCollapsed}
             placeholder="Écrivez ou parlez…"
             sendLabel="Envoyer mon message"
-            voiceLabel={dictation.listening ? "Arrêter la dictée" : "Dicter mon message"}
+            voiceLabel={dictation.listening || dictation.busy ? "Arrêter la dictée" : "Dicter mon message"}
           />
-          {chatError && <div className="tn-error tn-chat-error" role="alert">{chatError}<button className="tn-link" disabled={chatBusy} onClick={() => void sendChat()}>Réessayer l’envoi</button></div>}
-          {chatBusy && <div className="tn-composer-note" role="status">Votre message est en cours de traitement…</div>}
-          {dictation.notice && <div className="tn-composer-note" role="status">{dictation.notice}</div>}
-        </div>
+          {!composerCollapsed && chatError && <div className="tn-error tn-chat-error" role="alert">{chatError}<button className="tn-link" disabled={chatBusy} onClick={() => void sendChat()}>Réessayer l’envoi</button></div>}
       </div>
       {navigationOpen && <OwnerDialog title="Votre TableNow" close={() => setNavigationOpen(false)}>
         <label className="tn-drawer-restaurant">Établissement actif
@@ -1730,7 +1728,7 @@ function TaskList({
           <div>
             <strong>{task.title}</strong>
             <small>
-              {task.assigneeName || "À attribuer"} · {statusLabel(task.status)}
+              {taskAssignmentLabel(task)}
             </small>
           </div>
         </div>
@@ -1784,7 +1782,7 @@ function Kpis({
             : "—"
         }
         detail={
-          metric ? "Source : indicateurs enregistrés" : "Caisse non connectée"
+          metric ? "Montant enregistré dans TableNow" : "Aucun montant enregistré"
         }
         icon={<BarChart3 size={16} />}
       />
@@ -1843,56 +1841,22 @@ function Kpi({
 }
 function FirstPlan({ workspace }: { workspace: Workspace }) {
   const plan = workspace.firstResults[0];
-  return (
-    <section className="tn-card" id="tn-first-plan">
-      <div className="tn-card-head">
-        <h2>Votre prochain pas</h2>
-        <MessageSquareText size={20} />
-      </div>
-      {plan ? (
-        <>
-          <h3>{plan.title}</h3>
-          <p>{plan.recommendations[0]}</p>
-          <small className="tn-muted">Préparé à partir de vos réponses confirmées. Ce plan ne prouve pas qu’un logiciel est connecté.</small>
-          {(plan.recommendations.length > 1 ||
-            plan.unknownFields.length > 0) && (
-            <details className="tn-disclosure">
-              <summary>Voir le détail du plan</summary>
-              {plan.recommendations.slice(1).map((text, i) => (
-                <p key={i}>{text}</p>
-              ))}
-              {plan.unknownFields.length > 0 && (
-                <p>
-                  {plan.unknownFields.length} information(s) encore à préciser.
-                </p>
-              )}
-            </details>
-          )}
-          <Link
-            href={`/onboarding?restaurantId=${plan.restaurantId}&section=review`}
-            className="tn-link"
-          >
-            Ajuster mes priorités <ArrowRight size={16} />
-          </Link>
-        </>
-      ) : (
-        <>
-          <p>
-            Dites-nous ce qui vous prend du temps. TableNow vous aidera à
-            choisir par où commencer.
-          </p>
-          <Link
-            className="tn-secondary tn-wide"
-            href="/onboarding"
-            style={{ marginTop: 18 }}
-          >
-            Définir ma priorité <ArrowRight size={16} />
-          </Link>
-        </>
-      )}
-    </section>
-  );
+  const presentation = firstPlanPresentation(plan);
+  return <section className="tn-card" id="tn-first-plan">
+    <div className="tn-card-head"><h2>Votre point de départ</h2><MessageSquareText size={20} /></div>
+    {plan ? <>
+      <h3>{presentation.title}</h3><p>{presentation.summary}</p>
+      <small className="tn-muted">{presentation.reason}</small>
+      <details className="tn-disclosure"><summary>Voir les conseils et les informations retenues</summary>
+        {presentation.recommendations?.map((text, index) => <p key={`advice-${index}`}>{text}</p>)}
+        {plan.confirmedFacts.map((text, index) => <p key={index}>{text}</p>)}
+        {plan.unknownFields.length > 0 && <p>{plan.unknownFields.length} information(s) restent à préciser.</p>}
+      </details>
+      <Link href={`/onboarding?restaurantId=${plan.restaurantId}&section=review`} className="tn-link">Revoir mes réponses <ArrowRight size={16} /></Link>
+    </> : <><p>Dites-nous ce qui vous prend du temps pour choisir par où commencer.</p><Link className="tn-secondary tn-wide" href="/onboarding">Définir ma priorité <ArrowRight size={16} /></Link></>}
+  </section>;
 }
+
 function Decisions({
   workspace,
   decide,
@@ -1993,7 +1957,7 @@ function Decisions({
             <h2 id="decision-empty-title">{history ? "Pas encore d’arbitrage enregistré" : "Aucune décision enregistrée à arbitrer"}</h2>
             <p>{history ? "Retrouvez ici les propositions que vous avez validées, refusées ou reportées." : "Cette liste vide ne signifie pas que votre activité a été entièrement évaluée. Renseignez votre fonctionnement pour préparer la prochaine étape."}</p>
             <Link className="tn-secondary" href={`/onboarding?restaurantId=${restaurantId}&section=reservations`}>Faire le point sur mes outils <ArrowRight size={16} /></Link>
-            {workspace.firstResults.length > 0 && <Link className="tn-link" href="/dashboard#tn-first-plan">Retrouver mon premier plan <ArrowRight size={16} /></Link>}
+            {workspace.firstResults.length > 0 && <Link className="tn-link" href="/profile#tn-first-plan">Retrouver mon premier plan <ArrowRight size={16} /></Link>}
           </div>
         </section>
       )}

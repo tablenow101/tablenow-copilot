@@ -1,3 +1,7 @@
+# Livraison guidée et tous raccordements — 21 septembre 2026, en cours
+
+La consigne complète est en cours sur `product/onboarding-owner`, sans main/production. Récupération des codes de secours après réponse perdue, barre commune, compléments modifiables, conversation contextualisée et extraction TXT : tests locaux en cours de consolidation. Tous les outils déclarés disposent d’un guidage spécifique ; aucun adaptateur absent n’est déclaré connecté. Blocages établis : pas de fournisseur IA configuré en Preview, pas d’accès API partenaires logiciels. PDF/images stockés mais extraction non implémentée. [Rapport de recette](../../docs/qa/livraison-guidee-integrations-2026-09-21.md), [matrice des accès officiels](../../docs/product/livraison-guidee-integrations-2026-09-21.md). Aucun lot produit clôturé.
+
 # Reprise du parcours guidé — 21 septembre 2026
 
 Source applicative Preview `29a1bb372ce098e6c1fe2954f98a9c23fe3298e8`, déploiement `dpl_77zkhe2cuu4yghjAagvSXYQBiE87` READY. Session existante : cockpit guidé, conseil sourcé, message/réponse persistants, document stocké et reprise exacte Connexions/Compléments vérifiés. Deux défauts de reprise trouvés puis corrigés : préférence explicite et position de l’étape. Sept tests PGlite de persistance, treize tests ciblés de navigation, typechecks et build passent. Nouvelle inscription/TOTP sur téléphone physique restent non vérifiés. Aucun lot clôturé. Main inchangée.

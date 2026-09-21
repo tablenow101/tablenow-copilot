@@ -203,7 +203,7 @@ export function confirmStatement(answers: OnboardingAnswers, statementId: string
   if (!selected) return;
   for (const statement of answers.finalNote.statements) {
     if (statement.id === statementId) statement.status = "confirmed";
-    else if (statement.fieldPath === selected.fieldPath && statement.value !== selected.value && statement.status !== "rejected") statement.status = "rejected";
+    else if (answers.finalNote.conflicts.some(conflict => conflict === `${statement.id}:${selected.id}` || conflict === `${selected.id}:${statement.id}`)) statement.status = "rejected";
   }
   if (selected.kind === "proposed_rule") {
     answers.authority.proposedRules = [
@@ -215,7 +215,28 @@ export function confirmStatement(answers: OnboardingAnswers, statementId: string
   answers.finalNote.conflicts = statementConflicts(answers.finalNote.statements);
 }
 
+export function reviewableStatements(answers: OnboardingAnswers) {
+  return answers.finalNote.statements.filter(statement => statement.status !== "rejected");
+}
+
+export function editStatement(answers: OnboardingAnswers, statementId: string, value: string): void {
+  const selected = answers.finalNote.statements.find(statement => statement.id === statementId);
+  const trimmed = value.trim();
+  if (!selected || !trimmed || trimmed === selected.value) return;
+  const parsed = statementsFrom(trimmed, "user_text")[0];
+  if (!parsed) return;
+  const text = answers.finalNote.text || "";
+  answers.finalNote.text = text.includes(selected.value) ? text.replace(selected.value, trimmed) : [text, trimmed].filter(Boolean).join("\n\n");
+  Object.assign(selected, { kind: parsed.kind, fieldPath: parsed.fieldPath, value: trimmed, source: "user_text", status: "proposed" });
+  answers.authority.proposedRules = answers.authority.proposedRules.filter(rule => rule.id !== statementId);
+  answers.finalNote.confirmedStatementIds = answers.finalNote.confirmedStatementIds.filter(id => id !== statementId);
+  answers.finalNote.conflicts = statementConflicts(answers.finalNote.statements);
+}
+
 export function removeStatement(answers: OnboardingAnswers, statementId: string): void {
+  const selected = answers.finalNote.statements.find(statement => statement.id === statementId);
+  if (!selected) return;
+  answers.finalNote.text = (answers.finalNote.text || "").replace(selected.value, "").replace(/\n{3,}/g, "\n\n").trim();
   answers.finalNote.statements = answers.finalNote.statements.filter((statement) => statement.id !== statementId);
   answers.authority.proposedRules = answers.authority.proposedRules.filter((rule) => rule.id !== statementId);
   answers.finalNote.confirmedStatementIds = answers.finalNote.confirmedStatementIds.filter((id) => id !== statementId);

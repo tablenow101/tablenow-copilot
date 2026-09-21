@@ -63,7 +63,7 @@ export const invitePilotSchema = z.object({
 
 export const operatingSetupSchema = z.object({
   reservationMode: z.enum(["tablenow", "software", "calendar", "paper", "hybrid"]),
-  providers: z.array(z.enum(["zenchef", "sevenrooms", "thefork", "google_calendar", "outlook_calendar", "other"])).max(8),
+  providers: z.array(z.enum(["zenchef", "sevenrooms", "thefork", "opentable", "google_calendar", "outlook_calendar", "other"])).max(8),
   otherProvider: z.string().trim().max(120).optional(),
   keepPaperWorkflow: z.boolean().default(false),
 }).superRefine((setup, context) => {
@@ -166,7 +166,7 @@ export const onboardingAnswersSchema = z.object({
     theme: z.enum(["dark", "clear"]).default("dark"),
   }).strict().default({ preferredMode: "mixed", preferredModeConfirmed: false, spokenReplies: false, locale: "fr", theme: "dark" }),
   reservations: z.object({
-    providers: z.array(z.enum(["zenchef", "sevenrooms", "thefork", "other"])).max(6).default([]),
+    providers: z.array(z.enum(["zenchef", "sevenrooms", "thefork", "opentable", "other"])).max(6).default([]),
     otherProvider: optionalText(120),
     methods: z.array(z.enum(["software", "paper", "calendar", "messages", "none", "other"])).max(6).default([]),
     calendarProvider: z.enum(["google_calendar", "outlook", "other"]).optional(),
@@ -176,7 +176,7 @@ export const onboardingAnswersSchema = z.object({
   }).strict().default({ providers: [], methods: [], authoritativeSystem: "unknown", connectionStatus: "declared" }),
   operations: z.object({
     communications: z.object({
-      channels: z.array(z.enum(["calls", "whatsapp", "emails", "instagram", "sms", "other"])).max(8).default([]),
+      channels: z.array(z.enum(["calls", "whatsapp", "emails", "instagram", "messenger", "sms", "other"])).max(8).default([]),
       peakContext: z.array(z.enum(["during_service", "when_team_unavailable", "outside_hours", "other"])).max(6).default([]),
       phoneNumber: unknownableText(40),
       overflowTriggers: z.array(z.enum(["busy_line", "no_answer", "outside_hours"])).max(6).default([]),

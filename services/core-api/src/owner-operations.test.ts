@@ -58,6 +58,9 @@ describe("owner workflows on embedded PostgreSQL", () => {
     const downloaded = await app.inject({ method: "GET", url: `/v1/onboarding-attachments/${id}`, headers });
     expect(downloaded.body).toBe("Informations du restaurant");
     expect(downloaded.headers["content-disposition"]).toContain("attachment");
+    const extracted = await app.inject({ method: "GET", url: `/v1/onboarding-attachments/${id}/extraction`, headers });
+    expect(extracted.json().extraction).toMatchObject({ status: "extracted", text: "Informations du restaurant", truncated: false });
+    expect(extracted.headers["cache-control"]).toContain("no-store");
     expect((await app.inject({ method: "POST", url: "/v1/onboarding-attachments", headers, payload: { ...payload, mimeType: "image/png" } })).statusCode).toBe(400);
     expect((await app.inject({ method: "POST", url: "/v1/onboarding-attachments", headers, payload: { ...payload, name: "../private.txt" } })).statusCode).toBe(422);
     await database`update memberships set role='viewer' where user_id=${fixture.userId} and tenant_id=${fixture.tenantId}`;
@@ -65,6 +68,42 @@ describe("owner workflows on embedded PostgreSQL", () => {
     finally { await database`update memberships set role='owner' where user_id=${fixture.userId} and tenant_id=${fixture.tenantId}`; }
     expect((await app.inject({ method: "DELETE", url: `/v1/onboarding-attachments/${id}`, headers })).statusCode).toBe(204);
     expect((await app.inject({ method: "GET", url: `/v1/onboarding-attachments/${id}`, headers })).statusCode).toBe(404);
+  });
+  it("excludes only explicitly marked acceptance documents without deleting them or classifying by name", async () => {
+    const payload = { name: "recette-du-chef.txt", mimeType: "text/plain", base64: Buffer.from("Informations privées conservées").toString("base64") };
+    const business = await app.inject({ method: "POST", url: "/v1/onboarding-attachments", headers, payload });
+    const acceptance = await app.inject({ method: "POST", url: "/v1/onboarding-attachments", headers, payload });
+    expect(business.statusCode).toBe(201);
+    expect(acceptance.statusCode).toBe(201);
+    const businessId = business.json().id, acceptanceId = acceptance.json().id;
+    expect((await database`select data_origin from onboarding_attachments where id=${businessId}`)[0]!.data_origin).toBe("business");
+    const [original] = await database`select encrypted_content from onboarding_attachments where id=${acceptanceId}`;
+    // Classification is explicit fixture setup, never inferred from a file name.
+    await database`update onboarding_attachments set data_origin='acceptance_test' where id=${acceptanceId}`;
+    const listing = await app.inject({ method: "GET", url: "/v1/onboarding-attachments", headers });
+    expect(listing.json().files.map((file: { id: string }) => file.id)).toContain(businessId);
+    expect(listing.json().files.map((file: { id: string }) => file.id)).not.toContain(acceptanceId);
+    expect((await app.inject({ method: "GET", url: `/v1/onboarding-attachments/${businessId}`, headers })).body).toBe("Informations privées conservées");
+    expect((await app.inject({ method: "GET", url: `/v1/onboarding-attachments/${acceptanceId}`, headers })).statusCode).toBe(404);
+    expect((await app.inject({ method: "GET", url: `/v1/onboarding-attachments/${acceptanceId}/extraction`, headers })).statusCode).toBe(404);
+    const selected = await app.inject({ method: "POST", url: "/v1/operating/chat", headers, payload: { restaurantId: fixture.restaurantId, message: "Analyse ce document", attachmentIds: [acceptanceId] } });
+    expect(selected.statusCode).toBe(404);
+    expect(selected.json().error.code).toBe("COPILOT_ATTACHMENT_UNAVAILABLE");
+    expect((await app.inject({ method: "DELETE", url: `/v1/onboarding-attachments/${acceptanceId}`, headers })).statusCode).toBe(204);
+    expect((await database`select data_origin,encrypted_content from onboarding_attachments where id=${acceptanceId}`)[0]).toEqual({ data_origin: "acceptance_test", encrypted_content: original!.encrypted_content });
+    expect((await app.inject({ method: "POST", url: "/v1/onboarding-attachments", headers, payload: { ...payload, data_origin: "acceptance_test" } })).statusCode).toBe(422);
+  });
+  it("keeps PDF storage separate from an unavailable PDF analysis", async () => {
+    const upload = await app.inject({ method: "POST", url: "/v1/onboarding-attachments", headers, payload: { name: "document.pdf", mimeType: "application/pdf", base64: Buffer.from("%PDF-1.7\nSynthetic file, not a real readable PDF").toString("base64") } });
+    expect(upload.statusCode, upload.body).toBe(201);
+    const id = upload.json().id;
+    const extraction = await app.inject({ method: "GET", url: `/v1/onboarding-attachments/${id}/extraction`, headers });
+    expect(extraction.json().extraction.status).toBe("unsupported");
+    expect(extraction.json().extraction.text).toBeUndefined();
+    expect((await app.inject({ method: "GET", url: `/v1/onboarding-attachments/${id}/extraction` })).statusCode).toBe(401);
+    const chat = await app.inject({ method: "POST", url: "/v1/operating/chat", headers, payload: { restaurantId: fixture.restaurantId, message: "Analyse mon PDF", attachmentIds: [id] } });
+    expect(chat.statusCode).toBe(422);
+    expect(chat.json().error.code).toBe("COPILOT_ATTACHMENT_UNREADABLE");
   });
   it("protects every new mutation and read with an authenticated session", async () => {
     for (const url of ["/v1/operating", "/v1/workspace"])
@@ -87,6 +126,7 @@ describe("owner workflows on embedded PostgreSQL", () => {
       expect(list.statusCode).toBe(200);
       expect(list.json().files.some((item: { id: string }) => item.id === file!.id)).toBe(false);
       expect((await app.inject({ method: "GET", url: `/v1/onboarding-attachments/${file!.id}`, headers })).statusCode).toBe(404);
+      expect((await app.inject({ method: "GET", url: `/v1/onboarding-attachments/${file!.id}/extraction`, headers })).statusCode).toBe(404);
       expect((await app.inject({ method: "DELETE", url: `/v1/onboarding-attachments/${file!.id}`, headers })).statusCode).toBe(204);
       expect(await database`select id from onboarding_attachments where id=${file!.id}`).toHaveLength(1);
     } finally {

@@ -17,7 +17,7 @@ describe("saved-answer setup checklist", () => {
     answers.reservations.otherProvider = "Mon outil";
     const before = JSON.stringify(answers);
     const items = onboardingChecklist(answers);
-    expect(items.filter(item => item.id.startsWith("reservation-") && item.id !== "reservation-inventory").map(item => [item.title, item.complete])).toEqual([["Zenchef : connexion à préparer", false], ["Mon outil : connexion à préparer", false]]);
+    expect(items.filter(item => item.id.startsWith("reservation-") && item.id !== "reservation-inventory").map(item => [item.title, item.complete])).toEqual([["Zenchef : voir comment le raccorder", false], ["Mon outil : voir comment le raccorder", false]]);
     expect(onboardingChecklist(answers)).toEqual(items);
     expect(JSON.stringify(answers)).toBe(before);
   });

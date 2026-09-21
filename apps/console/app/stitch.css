@@ -1679,7 +1679,7 @@
 .tn-owner .tn-menu-toggle { display: none; }
 .tn-owner .tn-owner-theme { margin-left: auto; }
 .tn-owner .tn-restaurant select { max-width: 190px; }
-.tn-owner .tn-composer-dock { position: static; transform: none; flex-shrink: 0; width: min(760px, calc(100% - 32px)); margin: 0 auto max(12px, env(safe-area-inset-bottom)); padding: 0 7px 7px; background: var(--tn-owner-bar); border: 0; border-radius: 28px; box-shadow: inset 0 1px 0 #91a7e444, 0 5px 24px #0002; max-height: 42dvh; overflow-y: auto; }
+.tn-owner .tn-composer-dock { position: static; transform: none; flex-shrink: 0; width: min(760px, calc(100% - 32px)); margin: 0 auto max(12px, env(safe-area-inset-bottom)); padding: 0 7px 7px; background: var(--tn-owner-bar); border: 0; border-radius: 28px; box-shadow: inset 0 1px 0 #91a7e444, 0 5px 24px #0002; max-height: calc(var(--tn-viewport-height, 100dvh) * .42); overflow-y: auto; }
 .tn-owner .tn-composer-dock.is-collapsed { width: fit-content; padding: 0 12px; }
 .tn-owner .tn-composer-collapse { display: flex; align-items: center; justify-content: center; gap: 9px; min-height: 24px; width: 100%; border: 0; background: transparent; color: var(--tn-muted); padding: 3px; border-radius: 20px; font-size: 12px; }
 .tn-owner .is-collapsed .tn-composer-collapse { min-height: 44px; }
@@ -1824,3 +1824,25 @@
 .tn-owner .tn-setup-checklist li svg { flex-shrink: 0; }
 .tn-owner .tn-setup-checklist summary { font-size: 12px; cursor: pointer; color: var(--tn-muted); padding: 10px 0; }
 @media (max-width: 767px) { .tn-owner .tn-setup-checklist { grid-template-columns: minmax(0, 1fr); gap: 14px; } .tn-owner .tn-setup-checklist > div { grid-row: auto; } }
+
+/* Compact dashboard guidance, with one next action and visible recorded figures. */
+.tn-owner .tn-setup-checklist { display: block; margin: 12px 0 20px; padding: 0; }
+.tn-owner .tn-setup-checklist > summary { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 56px; padding: 10px 4px; color: var(--tn-text); }
+.tn-owner .tn-setup-checklist > summary strong { display: block; font-size: 14px; font-weight: 550; }
+.tn-owner .tn-setup-checklist > summary small { display: block; margin-top: 3px; font-size: 12px; color: var(--tn-muted); }
+.tn-owner .tn-setup-checklist > summary::marker { content: ""; }
+.tn-owner .tn-setup-checklist[open] > summary > svg { transform: rotate(90deg); }
+.tn-owner .tn-setup-checklist-content { padding: 0 4px 14px; }
+.tn-owner .tn-setup-checklist-content > p { margin-bottom: 12px; }
+.tn-owner .tn-service-figures { margin-bottom: 20px; }
+.tn-owner .tn-service-figures > h2 { margin: 0 0 10px; font-size: 14px; font-weight: 550; }
+.tn-owner .tn-service-figures .tn-kpis { gap: 12px; margin-bottom: 0; }
+.tn-owner .tn-service-figures .tn-kpi { padding: 12px 14px; }
+.tn-owner .tn-service-figures .tn-kpi > strong { font-size: 26px; margin: 6px 0; }
+.tn-owner .tn-service-figures .tn-kpi > small { font-size: 11px; }
+.tn-owner .tn-today-details > .tn-grid:has(> .tn-card:only-child) { grid-template-columns: minmax(0, 1fr); }
+.tn-owner .tn-today-advice { margin-bottom: 12px; }
+/* The dock owns its flex row. Keep the final scroll item clear of its edge. */
+.tn-owner .tn-main { padding-bottom: max(32px, env(safe-area-inset-bottom)); scroll-padding-bottom: max(32px, env(safe-area-inset-bottom)); }
+.tn-owner .tn-main > :last-child { margin-bottom: 8px; }
+@media (max-width: 767px) { .tn-owner .tn-service-figures .tn-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; } .tn-owner .tn-service-figures .tn-kpi { min-width: 0; padding: 10px 12px; } .tn-owner .tn-service-figures .tn-kpi > strong { font-size: 23px; } }

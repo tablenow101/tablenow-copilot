@@ -402,6 +402,9 @@ export async function buildApp(dependencies: AppDependencies = {}): Promise<Fast
     // SQL/provider errors may contain bound personal data or credentials.
     const safeErrorCode = error instanceof Error && errorMap[error.message] ? error.message : "REQUEST_FAILED";
     request.log.warn({ code: safeErrorCode, requestId: request.id }, "request failed");
+    if (error && typeof error === "object" && "statusCode" in error && error.statusCode === 429) {
+      return reply.code(429).send({ error: { code: "RATE_LIMITED", message: "Trop de tentatives rapprochées. Patientez avant de réessayer." } });
+    }
     if (error instanceof OnboardingIncompleteError) {
       return reply.code(422).send({ error: { code: error.message, message: "Complétez les informations essentielles avant de terminer.", details: error.fieldErrors } });
     }
@@ -424,6 +427,9 @@ const eventParams = z.object({ eventId: z.string().regex(/^\d+$/) });
 const onboardingQuery = z.object({ restaurantId: z.uuid().optional() }).strict();
 
 const errorMap: Record<string, { status: number; message: string }> = {
+  COPILOT_AI_NOT_CONFIGURED: { status: 503, message: "La conversation IA n’est pas configurée. Votre message est conservé." },
+  COPILOT_ATTACHMENT_UNAVAILABLE: { status: 404, message: "Un document sélectionné n’est plus disponible pour ce compte. Retirez-le ou choisissez-le à nouveau." },
+  COPILOT_ATTACHMENT_UNREADABLE: { status: 422, message: "Un document sélectionné ne peut pas être analysé dans ce format. Consultez son état avant l’envoi." },
   COPILOT_KEY_CONFLICT: {status:409,message:"Cette demande a changé. Envoyez-la comme une nouvelle demande."},
   COPILOT_RUNNING: {status:409,message:"Votre demande est déjà en cours. Réessayez après sa fin."},
   COPILOT_ATTEMPTS_EXHAUSTED: {status:409,message:"Cette demande a échoué après trois tentatives. Vérifiez les informations avant une nouvelle demande."},

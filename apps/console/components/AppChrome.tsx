@@ -21,7 +21,6 @@ import {
   RefreshCw,
   Settings2,
   ShieldCheck,
-  Sparkles,
   Users,
   X,
 } from "lucide-react";
@@ -136,7 +135,7 @@ export function AppChrome({
           })}
         </nav>
         <div className="sidebar-divider" />
-        <Link href="/copilot" className={`copilot-nav ${active === "copilot" ? "active" : ""}`}><Sparkles size={17} /><span>TableNow OS</span><i>AI</i></Link>
+        <Link href="/copilot" className={`copilot-nav ${active === "copilot" ? "active" : ""}`}><MessageSquareText size={17} /><span>TableNow OS</span><i>AI</i></Link>
         <div className="sidebar-spacer" />
         {session.membership.role === "platform_admin" && <Link href="/admin/pilots" className={active === "admin" ? "utility-active" : ""}><Settings2 size={16} /> Pilotes privés</Link>}
         <Link href="/privacy" className={active === "privacy" ? "utility-active" : ""}><ShieldCheck size={16} /> Confidentialité</Link>
@@ -170,10 +169,10 @@ export function AppChrome({
 
       <nav className="mobile-nav" aria-label="Navigation mobile">
         {nav.slice(0, 3).map((item) => { const Icon = item.icon; return <Link key={item.key} href={item.href} className={active === item.key ? "active" : ""} aria-current={active === item.key ? "page" : undefined}><Icon size={19} /><span>{item.label.split(" ")[0]}</span></Link>; })}
-        <Link href="/copilot" className={active === "copilot" ? "active" : ""} aria-current={active === "copilot" ? "page" : undefined}><Sparkles size={19} /><span>OS</span></Link>
+        <Link href="/copilot" className={active === "copilot" ? "active" : ""} aria-current={active === "copilot" ? "page" : undefined}><MessageSquareText size={19} /><span>OS</span></Link>
         <button ref={moreButtonRef} className={nav.slice(3).some((item) => item.key === active) ? "active" : ""} onClick={() => setMoreOpen(true)} aria-label="Ouvrir toute la navigation" aria-expanded={moreOpen} aria-controls="mobile-menu"><Menu size={19} /><span>Tout</span></button>
       </nav>
-      {moreOpen && <><button className="mobile-sheet-backdrop" onClick={() => setMoreOpen(false)} aria-label="Fermer la navigation" /><section ref={mobileSheetRef} id="mobile-menu" className="mobile-sheet" aria-modal="true" role="dialog" aria-labelledby="mobile-menu-title"><header><div><span>Navigation</span><h2 id="mobile-menu-title">Tout TableNow</h2></div><button className="icon-button" onClick={() => setMoreOpen(false)} aria-label="Fermer"><X size={18} /></button></header><nav>{nav.map((item) => { const Icon = item.icon; return <Link key={item.key} href={item.href} className={active === item.key ? "active" : ""} aria-current={active === item.key ? "page" : undefined} onClick={() => setMoreOpen(false)}><Icon size={18} /><span>{item.label}</span><ChevronDown size={14} /></Link>; })}<Link href="/copilot" className={active === "copilot" ? "active" : ""} aria-current={active === "copilot" ? "page" : undefined} onClick={() => setMoreOpen(false)}><Sparkles size={18} /><span>TableNow OS</span><ChevronDown size={14} /></Link></nav><footer><Link href="/privacy" onClick={() => setMoreOpen(false)}><ShieldCheck size={17} /> Confidentialité</Link>{session.membership.role === "platform_admin" && <Link href="/admin/pilots" onClick={() => setMoreOpen(false)}><Settings2 size={17} /> Pilotes privés</Link>}<button onClick={() => void logout()}><LogOut size={17} /> Déconnexion</button></footer></section></>}
+      {moreOpen && <><button className="mobile-sheet-backdrop" onClick={() => setMoreOpen(false)} aria-label="Fermer la navigation" /><section ref={mobileSheetRef} id="mobile-menu" className="mobile-sheet" aria-modal="true" role="dialog" aria-labelledby="mobile-menu-title"><header><div><span>Navigation</span><h2 id="mobile-menu-title">Tout TableNow</h2></div><button className="icon-button" onClick={() => setMoreOpen(false)} aria-label="Fermer"><X size={18} /></button></header><nav>{nav.map((item) => { const Icon = item.icon; return <Link key={item.key} href={item.href} className={active === item.key ? "active" : ""} aria-current={active === item.key ? "page" : undefined} onClick={() => setMoreOpen(false)}><Icon size={18} /><span>{item.label}</span><ChevronDown size={14} /></Link>; })}<Link href="/copilot" className={active === "copilot" ? "active" : ""} aria-current={active === "copilot" ? "page" : undefined} onClick={() => setMoreOpen(false)}><MessageSquareText size={18} /><span>TableNow OS</span><ChevronDown size={14} /></Link></nav><footer><Link href="/privacy" onClick={() => setMoreOpen(false)}><ShieldCheck size={17} /> Confidentialité</Link>{session.membership.role === "platform_admin" && <Link href="/admin/pilots" onClick={() => setMoreOpen(false)}><Settings2 size={17} /> Pilotes privés</Link>}<button onClick={() => void logout()}><LogOut size={17} /> Déconnexion</button></footer></section></>}
     </div>
   );
 }

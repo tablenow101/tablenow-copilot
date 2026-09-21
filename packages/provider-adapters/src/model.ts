@@ -7,9 +7,9 @@ export interface ModelPrompt {
 export interface ModelResult {
   text: string;
   model: string;
-  inputTokens: number;
-  outputTokens: number;
-  estimatedCostEur: number;
+  inputTokens: number | null;
+  outputTokens: number | null;
+  estimatedCostEur: number | null;
 }
 
 export interface ModelProvider {
@@ -33,7 +33,7 @@ export class OpenAICompatibleProvider implements ModelProvider {
         temperature: 0.2,
         messages: [
           { role: "system", content: prompt.system },
-          { role: "user", content: `${prompt.message}\n\nContexte vérifié:\n${JSON.stringify(prompt.context)}` },
+          { role: "user", content: `${prompt.message}\n\nContexte structuré (respecter la provenance et les limites de chaque section):\n${JSON.stringify(prompt.context)}` },
         ],
       }),
       signal: AbortSignal.timeout(30_000),
@@ -44,12 +44,15 @@ export class OpenAICompatibleProvider implements ModelProvider {
       usage?: { prompt_tokens?: number; completion_tokens?: number };
       model?: string;
     };
+    const text = body.choices?.[0]?.message?.content;
+    if (typeof text !== "string" || !text.trim()) throw new Error("MODEL_PROVIDER_EMPTY_RESPONSE");
+    const measuredTokens = (value: unknown): number | null => typeof value === "number" && Number.isInteger(value) && value >= 0 ? value : null;
     return {
-      text: body.choices?.[0]?.message?.content?.trim() || "Je n'ai pas pu produire une réponse exploitable.",
+      text: text.trim(),
       model: body.model || this.options.model,
-      inputTokens: body.usage?.prompt_tokens || 0,
-      outputTokens: body.usage?.completion_tokens || 0,
-      estimatedCostEur: 0,
+      inputTokens: measuredTokens(body.usage?.prompt_tokens),
+      outputTokens: measuredTokens(body.usage?.completion_tokens),
+      estimatedCostEur: null,
     };
   }
 }

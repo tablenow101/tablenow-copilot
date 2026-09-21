@@ -28,6 +28,7 @@ export function AccountFlow({ mode: requestedMode }: { mode: Mode }) {
   const [qr, setQr] = useState("");
   const [backupCodes, setBackupCodes] = useState<string[]>([]);
   const [backupSaved, setBackupSaved] = useState(false);
+  const [backupRecoveryNeeded, setBackupRecoveryNeeded] = useState(false);
   const [useBackup, setUseBackup] = useState(false);
   const [busy, setBusy] = useState(true);
   const [initializing, setInitializing] = useState(true);
@@ -125,7 +126,8 @@ export function AccountFlow({ mode: requestedMode }: { mode: Mode }) {
       const progress = await readAccountProgress(mode);
       if (progress.kind === "session") {
         setSecret(""); setQr(""); setCode(""); setChallengeExpiresAt(""); setStage("complete");
-        setError(stage === "enroll" ? "Votre connexion est confirmée, mais la réponse contenant vos codes de secours a été perdue. Conservez l’accès à votre application d’authentification ; contactez TableNow si vous avez besoin d’aide." : "Votre connexion est confirmée. Vous pouvez continuer.");
+        setBackupRecoveryNeeded(stage === "enroll");
+        setError(stage === "enroll" ? "Votre connexion est confirmée, mais la réponse contenant vos codes de secours a été perdue. Vous pouvez les remplacer avec un nouveau code de votre application d’authentification." : "Votre connexion est confirmée. Vous pouvez continuer.");
       } else if (progress.kind === "challenge") {
         if (progress.challenge.stage !== stage) setCode("");
         resumeChallenge(progress.challenge);
@@ -219,6 +221,7 @@ export function AccountFlow({ mode: requestedMode }: { mode: Mode }) {
       {stage === "enroll" && <p id="code-help">{googleFlow ? "Votre compte Google est vérifié." : "Votre e-mail est vérifié."} Ajoutez maintenant TableNow à votre application d’authentification. Le code vient de cette application : aucun e-mail n’est envoyé à cette étape.</p>}
       {stage === "mfa" && <p id="code-help">{googleFlow ? "Votre compte Google est vérifié. " : mode === "reset" ? "Votre e-mail est vérifié. " : ""}{useBackup ? "Saisissez l’un des codes de secours conservés lors de votre inscription. Chaque code ne fonctionne qu’une fois." : "Ouvrez Google Authenticator, ou l’application utilisée pour TableNow, et saisissez son code actuel. Aucun e-mail n’a été envoyé à cette étape."}</p>}
       {challengeExpiresAt && ["email", "enroll", "mfa"].includes(stage) && <p className={challengeExpired ? "tn-error" : undefined} role={challengeExpired ? "alert" : "status"}>{challengeExpired ? "Cette vérification a expiré. Relancez votre connexion pour continuer." : `Cette vérification expire dans ${Math.max(1, Math.ceil(challengeSeconds / 60))} min.`}</p>}
+      {stage === "complete" && backupRecoveryNeeded && <Link href="/account/security" className="tn-secondary">Récupérer des codes de secours</Link>}
       {stage === "backup" && <p>Conservez ces codes dans votre gestionnaire de mots de passe. Ils permettent de vous connecter si votre application d’authentification est indisponible.</p>}
       <form onSubmit={submit}>
         {stage === "credentials" && <>

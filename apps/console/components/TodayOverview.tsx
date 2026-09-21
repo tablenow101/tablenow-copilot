@@ -3,14 +3,17 @@
 import Link from "next/link";
 import { ArrowRight, ArrowUpRight, ChevronRight, ClipboardList, ListChecks } from "lucide-react";
 import type { Workspace } from "@/lib/types";
-import { summarizeToday } from "@/lib/today-overview";
+import { firstPlanPresentation, summarizeToday } from "@/lib/today-overview";
 
 export function TodayOverview({ workspace, timeZone, phase, busy, onPrepare, onAddTask, onShowPreparation }: {
   workspace: Workspace; timeZone: string; phase: string; busy: boolean;
   onPrepare: () => void; onAddTask: () => void; onShowPreparation: () => void;
 }) {
   const data = summarizeToday(workspace.reservations, workspace.tasks, timeZone);
-  const decision = workspace.decisions.find(item => item.status === "open");
+  const rank: Record<string, number> = { critical: 0, high: 1, medium: 2, low: 3 };
+  const decision = workspace.decisions.filter(item => item.status === "open").sort((left, right) => (rank[left.priority] ?? 4) - (rank[right.priority] ?? 4))[0];
+  const plan = workspace.firstResults[0];
+  const next = firstPlanPresentation(plan);
   const progress = data.preparation;
   return <div className="tn-today-overview">
     <section className="tn-today-hero" aria-label="Réservations enregistrées aujourd’hui"
@@ -35,13 +38,14 @@ export function TodayOverview({ workspace, timeZone, phase, busy, onPrepare, onA
     <div className="tn-today-next">
       <section className="tn-today-priority">
         <div className="tn-today-kicker"><span />{decision ? "À VOTRE DÉCISION" : "VOTRE PROCHAIN PAS"}</div>
-        <h2>{decision?.title || "Trois points à partager avant le service."}</h2>
-        {!decision && <div className="tn-today-advice">
-          <p>Les changements du jour, les points à surveiller et la personne à solliciter en cas de besoin : partagez-les avec votre équipe avant l’ouverture.</p>
-          <span className="tn-advice-basis">Conseil métier général · à adapter à votre organisation</span>
-          <details><summary>Pourquoi ce conseil ?</summary><p>Il peut aider à limiter les malentendus. Son effet n’a pas été mesuré pour votre restaurant ; aucune donnée connectée n’est nécessaire pour le préparer.</p><p>Base : pratique professionnelle du briefing. Confiance limitée à ce conseil général, sans diagnostic de votre activité. Vous décidez des points à retenir avant tout envoi.</p><p>Source : <a href="https://www.lightspeedhq.fr/blog/20-conseils-rapides-pour-optimiser-la-productivite-de-votre-restaurant/" target="_blank" rel="noreferrer">Guide Lightspeed, conseil 10</a>, publié le 12 avril 2022, consulté le 21 septembre 2026.</p></details>
+        <h2>{decision?.title || next.title}</h2>
+        {decision ? <p className="tn-today-advice">{decision.description}</p> : <div className="tn-today-advice">
+          <p>{next.summary}</p>
+          <span className="tn-advice-basis">{next.reason}</span>
+          {next.briefing && <details><summary>Pourquoi ce conseil ?</summary><p>Conseil métier général : partager ces repères peut limiter les malentendus. Son effet n’a pas été mesuré pour votre restaurant. Vous décidez des points à retenir ; rien n’est envoyé automatiquement.</p><p>Source : <a href="https://www.lightspeedhq.fr/blog/20-conseils-rapides-pour-optimiser-la-productivite-de-votre-restaurant/" target="_blank" rel="noreferrer">Guide Lightspeed, conseil 10</a>, publié le 12 avril 2022, consulté le 21 septembre 2026.</p></details>}
         </div>}
-        {decision ? <Link className="tn-primary" href="/decisions">Examiner la décision <ArrowRight size={18} /></Link> : <button className="tn-primary" disabled={busy} onClick={onPrepare}>{busy ? "Préparation en cours…" : phase === "after" ? "Préparer le prochain service" : "Préparer le briefing"}<ArrowRight size={18} /></button>}
+        {decision ? <Link className="tn-primary" href="/decisions">Examiner la décision <ArrowRight size={18} /></Link> : next.href ? <Link className="tn-primary" href={next.href}>{next.action}<ArrowRight size={18} /></Link> : <button className="tn-primary" disabled={busy} onClick={onPrepare}>{busy ? "Préparation en cours…" : phase === "after" ? "Préparer le prochain service" : next.action}<ArrowRight size={18} /></button>}
+
       </section>
       <section className="tn-today-preparation">
         {progress ? <>

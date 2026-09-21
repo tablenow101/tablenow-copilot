@@ -154,7 +154,7 @@ describe("final onboarding server rules", () => {
     const result = buildOnboardingFirstResult(validAnswers("team", "en"));
     expect(result.title).toBe("Your first briefing is prepared");
     expect(result.confirmedFacts[0]).toContain("Confirmed restaurant");
-    expect(result.recommendations.join(" ")).toContain("No employee name or schedule was invented");
+    expect(result.recommendations.join(" ")).toContain("Add the people involved and their working hours with your team");
   });
 
   it("OB-26 requires a time zone for known delivery and service instants", () => {

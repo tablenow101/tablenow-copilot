@@ -8,44 +8,47 @@ const cssPath = new URL("./app/globals.css", import.meta.url);
 const nextConfigPath = new URL("./next.config.ts", import.meta.url);
 
 describe("onboarding frontend boundaries", () => {
-  it("keeps written responses only and permits a reviewed final note from the summary", async () => {
+  it("keeps conversation and navigation separate on every onboarding step", async () => {
     const component = await readFile(componentPath, "utf8");
     expect(component).not.toMatch(/speechSynthesis|SpeechSynthesisUtterance|toggleReading/);
-    expect(component).not.toContain('section !== "review" && <Composer');
-    expect(component.match(/applyFreeText\(next, conversationSection\(answersRef.current.presentationStep, sectionRef.current\)/g)).toHaveLength(2);
+    expect(component).toContain('onSend={sendConversation}');
+    expect(component).toContain('surface: "onboarding"');
+    expect(component).toContain('keepComplement(reply.id)');
+    expect(component).not.toContain('if (sectionRef.current === "review") moveTo("final_note")');
     expect(conversationSection("review", "review")).toBe("final_note");
     expect(conversationSection("complements", "operations")).toBe("final_note");
     expect(conversationSection("systems", "interaction")).toBe("reservations");
-    expect(component.match(/if \(sectionRef.current === "review"\) moveTo\("final_note"\)/g)).toHaveLength(2);
   });
 
-  it("guards microphone start synchronously and rejects unsupported attachment types before upload", async () => {
+  it("uses the same guarded dictation controller as the cockpit and rejects unsupported file types", async () => {
     const component = await readFile(componentPath, "utf8");
+    const owner = await readFile(new URL("./components/OwnerShell.tsx", import.meta.url), "utf8");
     const composer = await readFile(new URL("./components/ConversationInput.tsx", import.meta.url), "utf8");
-    expect(component).toContain("if (recognitionRef.current) return;");
+    const hook = await readFile(new URL("./hooks/useDictation.ts", import.meta.url), "utf8");
+    expect(component).toContain("useDictation(");
+    expect(owner).toContain("useDictation(");
+    expect(hook).toContain("if (ref.current) { stop(); return; }");
     expect(composer).toContain("busy || mutationRef.current");
     expect(composer).toContain("].includes(file.type)");
     expect(composer).not.toContain('file.type || "text/plain"');
   });
 
-  it("ignores stale recognition events and contains errors from browser abort cleanup", async () => {
-    const component = await readFile(componentPath, "utf8");
-    expect(component.match(/if \(recognitionRef.current !== recognition\) return;/g)).toHaveLength(4);
-    expect(component).toMatch(/try \{\s+recognition.abort\(\);\s+\} catch/);
-    expect(component.indexOf("recognition.onend = null;")).toBeLessThan(component.indexOf("recognition.abort();"));
-  });
-
-  it("OB-08, OB-09 and OB-10 keep the real browser voice lifecycle explicit", async () => {
-    const [component, nextConfig] = await Promise.all([readFile(componentPath, "utf8"), readFile(nextConfigPath, "utf8")]);
-    for (const state of ["requesting_permission", "recording", "transcribing", "reviewing", "confirmed", "cancelled", "permission_denied", "unavailable", "failed"]) {
-      expect(component).toContain(`"${state}"`);
-    }
-    expect(component).toContain("new Recognition()");
-    expect(component).toContain("recognition.onstart");
-    expect(component).toContain("abortRecognition(recognitionRef)");
-    expect(component).not.toContain("mockTranscript");
+  it("OB-08, OB-09 and OB-10 keep microphone scope local and the shared lifecycle bounded", async () => {
+    const [hook, nextConfig] = await Promise.all([readFile(new URL("./hooks/useDictation.ts", import.meta.url), "utf8"), readFile(nextConfigPath, "utf8")]);
+    expect(hook).toContain('if (ref.current !== session) return;');
+    expect(hook).toContain('session.finish()');
+    expect(hook).toContain('startAudioSpectrum(');
+    expect(hook).not.toContain("mockTranscript");
     expect(nextConfig).toContain("microphone=(self)");
     expect(nextConfig).not.toContain("microphone=*");
+  });
+
+  it("keeps Back visible before a restaurant identity has been selected", async () => {
+    const component = await readFile(componentPath, "utf8");
+    expect(component).not.toContain('{(!isWelcome || identityOpen) && <footer');
+    const footer = component.slice(component.indexOf('<footer className="onboarding-actions">'), component.indexOf('</footer>', component.indexOf('<footer className="onboarding-actions">')));
+    expect(footer).toContain('goBack(previousSection, previousStep)');
+    expect(footer.indexOf('goBack(')).toBeLessThan(footer.indexOf('(!isWelcome || identityOpen)'));
   });
 
   it("OB-13, OB-14 and OB-15 expose failed/conflict states without polling or browser persistence", async () => {

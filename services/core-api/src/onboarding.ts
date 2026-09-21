@@ -315,8 +315,8 @@ export function buildOnboardingFirstResult(storedAnswers: OnboardingAnswers): On
       `${t("Difficulté", "Difficulty")}: ${labels(team.friction, locale) || t("à préciser", "to define")}`,
       `${t("Postes concernés", "Stations concerned")}: ${labels(team.stations, locale) || t("à préciser", "to define")}`,
     ]), [
-      t("Ouvrir le briefing et l'assigner à une personne réelle avant le service.", "Open the briefing and assign it to a real person before service."),
-      t("Aucun nom de salarié ni planning n'a été inventé.", "No employee name or schedule was invented."),
+      t("Relire le briefing et choisir qui le partagera avant le service.", "Review the briefing and choose who will share it before service."),
+      t("Complétez les personnes concernées et les horaires avec votre équipe.", "Add the people involved and their working hours with your team."),
     ], missing([
       [t("difficulté d'organisation", "organization difficulty"), team.friction.length ? "known" : null],
       [t("postes", "stations"), team.stations.length ? "known" : null],
