@@ -21,6 +21,22 @@ export function presentationStepForSection(section: SectionKey): OnboardingPrese
 export function presentationSection(step: OnboardingPresentationStep): SectionKey {
   return onboardingProgressGroups.find(group => group.key === step)!.target;
 }
+export function requestedPresentationStep(section: SectionKey, requestedStep: string | null): OnboardingPresentationStep {
+  const step = onboardingPresentationSteps.find(value => value === requestedStep);
+  return step && (presentationSection(step) === section || presentationStepForSection(section) === step)
+    ? step : presentationStepForSection(section);
+}
+export function savedOnboardingUrl(currentUrl: string, saved: {
+  restaurantId: string;
+  currentSection: SectionKey;
+  answers: { presentationStep?: OnboardingPresentationStep | undefined };
+}): string {
+  const url = new URL(currentUrl);
+  url.searchParams.set("restaurantId", saved.restaurantId);
+  url.searchParams.set("section", saved.currentSection);
+  url.searchParams.set("step", saved.answers.presentationStep ?? presentationStepForSection(saved.currentSection));
+  return `${url.pathname}${url.search}${url.hash}`;
+}
 export function adjacentPresentationStep(step: OnboardingPresentationStep, direction: -1 | 1): OnboardingPresentationStep {
   const index = onboardingPresentationSteps.indexOf(step);
   return onboardingPresentationSteps[Math.max(0, Math.min(onboardingPresentationSteps.length - 1, index + direction))]!;

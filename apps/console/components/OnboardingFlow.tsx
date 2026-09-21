@@ -69,6 +69,8 @@ import { LoadingScreen } from "./LoadingScreen";
 import { Brand } from "./Brand";
 import {
   adjacentPresentationStep,
+  requestedPresentationStep,
+  savedOnboardingUrl,
   conversationSection,
   presentationStepForSection,
   presentationSection,
@@ -174,8 +176,7 @@ export function OnboardingFlow({ initialRestaurantId, initialSection }: { initia
         && (loaded.status === "completed" || sectionOrder.indexOf(requestedSection) <= sectionOrder.indexOf(loaded.currentSection));
       const nextSection = canOpenRequested ? requestedSection : loaded.currentSection;
       const requestedStep = new URLSearchParams(window.location.search).get("step");
-      if (canOpenRequested) loadedAnswers.presentationStep = requestedStep === "connections" && nextSection === "reservations"
-        ? "connections" : presentationStepForSection(nextSection);
+      if (canOpenRequested) loadedAnswers.presentationStep = requestedPresentationStep(nextSection, requestedStep);
       else loadedAnswers.presentationStep ??= presentationStepForSection(nextSection);
       initialNavigationUsedRef.current = true;
       draftRef.current = loaded;
@@ -211,7 +212,16 @@ export function OnboardingFlow({ initialRestaurantId, initialSection }: { initia
     const currentDraft = draftRef.current;
     if (!currentDraft) return null;
     const shouldSave = dirtyRef.current || target !== currentDraft.currentSection || (presentationStep !== undefined && presentationStep !== currentDraft.answers.presentationStep);
-    if (!shouldSave) return currentDraft;
+    if (!shouldSave) {
+      // A stale explicit link can show Systems while Connections is already saved.
+      // Apply only the requested, already-confirmed step; never replace local answers.
+      if (presentationStep) {
+        answersRef.current = { ...answersRef.current, presentationStep };
+        setAnswers(answersRef.current);
+        syncSavedOnboardingAddress(currentDraft);
+      }
+      return currentDraft;
+    }
     if (savingRef.current) return null;
 
     const capturedVersion = changeVersionRef.current;
@@ -252,6 +262,7 @@ export function OnboardingFlow({ initialRestaurantId, initialSection }: { initia
         setSaveState("dirty");
         window.setTimeout(() => { void saveNowRef.current(); }, 0);
       }
+      syncSavedOnboardingAddress(saved);
       return saved;
     } catch (caught) {
       if (caught instanceof ApiError && caught.status === 409) {
@@ -642,6 +653,14 @@ export function OnboardingFlow({ initialRestaurantId, initialSection }: { initia
     </div>
     <h1 id="onboarding-title" ref={headingRef} className="sr-only focus-heading" tabIndex={-1}>{copy.steps[visibleStep]}</h1>
   </main>;
+}
+
+function syncSavedOnboardingAddress(saved: OnboardingDraftView): void {
+  const next = savedOnboardingUrl(window.location.href, saved);
+  if (`${window.location.pathname}${window.location.search}${window.location.hash}` !== next) {
+    // Next preserves its internal history state; this does not reload server components.
+    window.history.replaceState(null, "", next);
+  }
 }
 
 function LoadFailure({ message, retry, copy }: { message: string; retry: () => void; copy: OnboardingCopy }) {

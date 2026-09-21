@@ -90,3 +90,11 @@ La relecture PGlite reproduit trois défauts : choix vocal explicite perdu, pré
 ## Premiers essais déployés
 
 Sur `3436270`, session existante : cockpit, conseil général avec source et limites, checklist issue des réponses (Zenchef déclaré, connexion non vérifiée, caisse à préciser). Préparer le briefing remplit la barre sans envoyer ; clic explicite sur la flèche produit une réponse, conservée après rechargement. Limite produit visible : synthèse déterministe, IA non configurée ; cela ne valide pas un Advisor conversationnel complet. Essais neuf/physique restent à effectuer.
+
+### Défaut de position reproduit dans le navigateur
+
+Sur Preview, ouvrir Systèmes depuis Décisions → Continuer → Connexions → recharger ramenait à Systèmes ; Continuer pouvait ensuite rester sans effet car la base avait déjà enregistré Connexions. Les réponses métier étaient conservées. Correctif : synchroniser l’adresse avec la section et le groupe uniquement après sauvegarde réussie ; appliquer aussi le groupe déjà persisté quand aucune écriture n’est nécessaire. Aucun rechargement de page ni migration. Treize tests ciblés storyboard/boundary et typecheck passent. La reproduction réelle sera rejouée après déploiement.
+
+### Documents et affichage vérifiés
+
+Un fichier texte fictif `document-recette-tablenow.txt` a été ajouté sur Preview : explication stockage privé/sans analyse avant le sélecteur, transfert, confirmation « Document enregistré. Aucune analyse effectuée. », puis document retrouvé après navigation. Il reste dans le compte de recette, aucun fichier existant supprimé. Barre repliée/réouverte et navigation mobile vérifiées. Largeurs navigateur 390 et 820 px sans débordement ; ce ne sont pas des appareils physiques.

@@ -1,3 +1,5 @@
+- 2026-09-21 — Reprise exacte : conserver l’adresse de l’étape après confirmation serveur, y compris si elle était déjà enregistrée. Correction issue d’un échec reproduit en Preview ; aucun changement de parcours métier.
+
 - 2026-09-21 — Correctif de conservation : la confirmation d’une préférence vient du choix explicite, jamais du franchissement d’une ancienne section ou de la finalisation. Deux appels corrigés, trois régressions reproduites puis vérifiées ; aucun nouveau choix produit ni migration.
 
 # Journal des décisions
