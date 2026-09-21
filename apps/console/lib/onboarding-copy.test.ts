@@ -16,4 +16,9 @@ describe("onboarding language catalogs", () => {
     expect(fr).toEqual(new Set(["Établissement", "Priorités", "Réservations", "Fonctionnement", "Validation", "Votre plan"]));
     expect(en).toEqual(new Set(["Restaurant", "Priorities", "Reservations", "Operations", "Approval", "Your plan"]));
   });
+  it("names the six visible stages without exposing storage keys", () => {
+    expect(Object.values(onboardingCopy.fr.steps)).toEqual(["Priorités", "Établissement", "Systèmes", "Connexions", "Compléments", "Synthèse"]);
+    expect(Object.keys(onboardingCopy.en.steps)).toEqual(Object.keys(onboardingCopy.fr.steps));
+  });
+
 });

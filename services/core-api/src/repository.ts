@@ -219,13 +219,27 @@ export class PlatformRepository {
       const answers = normalizeOnboardingAnswers(input.answers);
       await validateApprovalAssignee(transaction, actor.tenantId, answers);
       const previousAnswers = normalizeOnboardingAnswers(onboardingAnswersSchema.parse(current.answers));
-      const answersChanged = !isDeepStrictEqual(previousAnswers, answers);
+      const { presentationStep: previousStep, ...previousBusinessAnswers } = previousAnswers;
+      const { presentationStep, ...businessAnswers } = answers;
+      const answersChanged = !isDeepStrictEqual(previousBusinessAnswers, businessAnswers);
       const provenance = trustedOnboardingProvenance(input.provenance, current.provenance, actor.userId);
       if (!answersChanged && current.status === "completed") {
-        return onboardingDraftView(current, restaurants, answers.interaction);
+        if (previousStep === presentationStep) return onboardingDraftView(current, restaurants, answers.interaction);
+        // Navigation is persisted, but does not change the certified answer revision or its result.
+        const [navigated] = await transaction<OnboardingDraftRow[]>`
+          update onboarding_drafts set answers = ${transaction.json(answers as JSONValue)}, current_section = ${input.currentSection}
+          where id = ${current.id} and tenant_id = ${actor.tenantId}
+          returning id, tenant_id, restaurant_id, schema_version, revision, status, current_section, confirmed_sections, answers,
+            provenance, first_result_id, completed_at, updated_at
+        `;
+        if (!navigated) throw new Error("NOT_FOUND");
+        return onboardingDraftView(navigated, restaurants, answers.interaction);
       }
       const movesForward = onboardingSectionOrder.indexOf(input.currentSection) > onboardingSectionOrder.indexOf(current.current_section);
-      if (movesForward && current.current_section !== "final_note" && hasUnconfirmedOnboardingProvenance(provenance, current.current_section)) {
+      const sectionsToConfirm: OnboardingDraftRow["current_section"][] = input.currentSection === "review" && ["operations", "authority", "final_note"].includes(current.current_section)
+        ? ["interaction", "operations", "authority"]
+        : current.current_section === "final_note" || (current.current_section === "interaction" && input.currentSection === "reservations") ? [] : [current.current_section];
+      if (movesForward && sectionsToConfirm.some(section => hasUnconfirmedOnboardingProvenance(provenance, section))) {
         throw new OnboardingIncompleteError({ provenance: ["Confirmez ou corrigez les informations interprétées avant de continuer."] });
       }
       const confirmedSections = updateConfirmedSections(current.current_section, input.currentSection, current.confirmed_sections, answers, answersChanged);

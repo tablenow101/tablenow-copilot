@@ -115,4 +115,15 @@ describe("public contracts", () => {
     expect(shiftCreateSchema.safeParse({ restaurantId, teamMemberName: "Alex Martin", roleTitle: "Chef de rang", startsAt: "2026-08-30T18:00:00.000Z", endsAt: "2026-08-31T00:00:00.000Z" }).success).toBe(true);
     expect(shiftCreateSchema.safeParse({ restaurantId, teamMemberName: "Alex Martin", roleTitle: "Chef de rang", startsAt: "2026-08-30T18:00:00.000Z", endsAt: "2026-08-30T17:00:00.000Z" }).success).toBe(false);
   });
+  it("preserves deferred presentation and POS metadata with historical hidden answers", () => {
+    const answers = onboardingAnswersSchema.parse({
+      presentationStep: "connections",
+      systems: { pointOfSale: { status: "declared", name: "Caisse Test" } },
+      operations: { reservations: { confirmationRuleStatus: "no", confirmationRuleText: "Règle précédente" } },
+    });
+    expect(answers.presentationStep).toBe("connections");
+    expect(answers.systems?.pointOfSale).toEqual({ status: "declared", name: "Caisse Test" });
+    expect(answers.operations.reservations.confirmationRuleText).toBe("Règle précédente");
+  });
+
 });

@@ -10,7 +10,7 @@ import {
   type MutableRefObject,
   type ReactNode,
 } from "react";
-import type { OnboardingAnswers, OnboardingDraftView } from "@tablenow/contracts";
+import type { OnboardingAnswers, OnboardingDraftView, OnboardingPresentationStep } from "@tablenow/contracts";
 import {
   AlertTriangle,
   ArrowLeft,
@@ -68,10 +68,13 @@ import { useSession } from "@/hooks/useSession";
 import { LoadingScreen } from "./LoadingScreen";
 import { Brand } from "./Brand";
 import {
-  nextOnboardingSection,
+  adjacentPresentationStep,
+  conversationSection,
+  presentationStepForSection,
+  presentationSection,
   onboardingProgressGroups as progressGroups,
   onboardingStoryboard as sectionOrder,
-  previousOnboardingSection,
+
 } from "@/lib/onboarding-storyboard";
 
 type SaveState = "idle" | "dirty" | "saving" | "saved" | "failed" | "conflict";
@@ -170,6 +173,10 @@ export function OnboardingFlow({ initialRestaurantId, initialSection }: { initia
       const canOpenRequested = requestedSection
         && (loaded.status === "completed" || sectionOrder.indexOf(requestedSection) <= sectionOrder.indexOf(loaded.currentSection));
       const nextSection = canOpenRequested ? requestedSection : loaded.currentSection;
+      const requestedStep = new URLSearchParams(window.location.search).get("step");
+      if (canOpenRequested) loadedAnswers.presentationStep = requestedStep === "connections" && nextSection === "reservations"
+        ? "connections" : presentationStepForSection(nextSection);
+      else loadedAnswers.presentationStep ??= presentationStepForSection(nextSection);
       initialNavigationUsedRef.current = true;
       draftRef.current = loaded;
       answersRef.current = loadedAnswers;
@@ -200,15 +207,16 @@ export function OnboardingFlow({ initialRestaurantId, initialSection }: { initia
     if (session) void loadDraft(initialRestaurantId);
   }, [initialRestaurantId, loadDraft, session]);
 
-  const saveNow = useCallback(async (target = sectionRef.current): Promise<OnboardingDraftView | null> => {
+  const saveNow = useCallback(async (target = sectionRef.current, presentationStep?: OnboardingPresentationStep): Promise<OnboardingDraftView | null> => {
     const currentDraft = draftRef.current;
     if (!currentDraft) return null;
-    const shouldSave = dirtyRef.current || target !== currentDraft.currentSection;
+    const shouldSave = dirtyRef.current || target !== currentDraft.currentSection || (presentationStep !== undefined && presentationStep !== currentDraft.answers.presentationStep);
     if (!shouldSave) return currentDraft;
     if (savingRef.current) return null;
 
     const capturedVersion = changeVersionRef.current;
     const capturedAnswers = structuredClone(answersRef.current);
+    if (presentationStep) capturedAnswers.presentationStep = presentationStep;
     const capturedProvenance = provenanceFor(capturedAnswers, provenanceRef.current);
     savingRef.current = true;
     setSaveState("saving");
@@ -236,6 +244,11 @@ export function OnboardingFlow({ initialRestaurantId, initialSection }: { initia
         setProvenance(saved.provenance);
         setSaveState("saved");
       } else {
+        // Keep edits made during the request while applying only the confirmed navigation.
+        if (presentationStep) {
+          answersRef.current = { ...answersRef.current, presentationStep: saved.answers.presentationStep };
+          setAnswers(answersRef.current);
+        }
         setSaveState("dirty");
         window.setTimeout(() => { void saveNowRef.current(); }, 0);
       }
@@ -274,7 +287,7 @@ export function OnboardingFlow({ initialRestaurantId, initialSection }: { initia
   useEffect(() => {
     headingRef.current?.focus({ preventScroll: true });
     cancelAudio(recognitionRef, setVoiceState, true);
-  }, [section]);
+  }, [section, answers.presentationStep]);
 
   useEffect(() => () => {
     abortRecognition(recognitionRef);
@@ -308,14 +321,15 @@ export function OnboardingFlow({ initialRestaurantId, initialSection }: { initia
     setNotice("");
   }, []);
 
-  const moveTo = (target: SectionKey) => {
+  const moveTo = (target: SectionKey, step = presentationStepForSection(target)) => {
+    updateAnswers(next => { next.presentationStep = step; return next; });
     sectionRef.current = target;
     setSection(target);
     window.scrollTo({ top: 0, behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" });
   };
 
-  const confirmCurrentInterpretation = () => {
-    const confirmed = confirmProvenanceForSection(provenanceRef.current, sectionRef.current);
+  const confirmCurrentInterpretation = (target = sectionRef.current) => {
+    const confirmed = confirmProvenanceForSection(provenanceRef.current, target);
     if (confirmed.every((entry, index) => entry === provenanceRef.current[index])) return;
     provenanceRef.current = confirmed;
     changeVersionRef.current += 1;
@@ -325,22 +339,33 @@ export function OnboardingFlow({ initialRestaurantId, initialSection }: { initia
     setError("");
   };
 
-  const goTo = async (target: SectionKey) => {
-    if (!sectionValid(sectionRef.current, answersRef.current)) {
-      setError(validationMessage(sectionRef.current, copyRef.current));
+  const goTo = async (target: SectionKey, step = presentationStepForSection(target)) => {
+    const validationSection = answersRef.current.presentationStep === "systems" || answersRef.current.presentationStep === "connections" ? "reservations" : answersRef.current.presentationStep === "complements" ? "operations" : sectionRef.current;
+    if (!sectionValid(validationSection, answersRef.current)) {
+      setError(validationMessage(validationSection, copyRef.current));
       return;
     }
-    if (hasPendingProvenance(provenanceRef.current, sectionRef.current)) {
+    const sectionsToConfirm: SectionKey[] = answersRef.current.presentationStep === "complements"
+      ? ["interaction", "operations", "authority", "final_note"] : [validationSection];
+    if (sectionsToConfirm.some(candidate => hasPendingProvenance(provenanceRef.current, candidate))) {
       setError(copyRef.current.common.validationInterpretation);
       return;
     }
-    const saved = await saveNow(target);
-    if (saved) moveTo(target);
+    const saved = await saveNow(target, step);
+    if (saved) {
+      sectionRef.current = target;
+      setSection(target);
+      window.scrollTo({ top: 0, behavior: "auto" });
+    }
   };
 
-  const goBack = async (target: SectionKey) => {
-    const saved = await saveNow(target);
-    if (saved) moveTo(target);
+  const goBack = async (target: SectionKey, step = presentationStepForSection(target)) => {
+    const saved = await saveNow(target, step);
+    if (saved) {
+      sectionRef.current = target;
+      setSection(target);
+      window.scrollTo({ top: 0, behavior: "auto" });
+    }
   };
 
   const compareConflict = async () => {
@@ -501,13 +526,13 @@ export function OnboardingFlow({ initialRestaurantId, initialSection }: { initia
 
   const useVoice = () => {
     if (!voiceReview.trim()) return;
-    const text = sectionRef.current === "review" ? [answersRef.current.finalNote.text, voiceReview].filter(Boolean).join("\n\n") : voiceReview;
+    const text = conversationSection(answersRef.current.presentationStep, sectionRef.current) === "final_note" ? [answersRef.current.finalNote.text, voiceReview].filter(Boolean).join("\n\n") : voiceReview;
     if (text.length > 2000) {
       setError(locale === "fr" ? "La note complète dépasse 2 000 caractères. Raccourcissez-la avant de l’ajouter." : "The complete note exceeds 2,000 characters. Shorten it before adding it.");
       return;
     }
     if (sectionRef.current === "establishment") setManualOpen(true);
-    updateAnswers((next) => applyFreeText(next, sectionRef.current === "review" ? "final_note" : sectionRef.current, text, "user_voice"), {
+    updateAnswers((next) => applyFreeText(next, conversationSection(answersRef.current.presentationStep, sectionRef.current), text, "user_voice"), {
       sourceType: "user_voice",
       sourceReference: voiceReview,
       confirmationStatus: "suggested",
@@ -528,15 +553,18 @@ export function OnboardingFlow({ initialRestaurantId, initialSection }: { initia
   if (loadState === "failed") return <LoadFailure message={error || copy.common.loadFailed} retry={() => void loadDraft(draftRef.current?.restaurantId || initialRestaurantId)} copy={copy} />;
   if (loadState !== "ready" || !draft) return <LoadingScreen label={copy.common.loading} />;
 
-  const currentIndex = sectionOrder.indexOf(section);
-  const nextSection = nextOnboardingSection(section);
-  const previousSection = previousOnboardingSection(section);
-  const currentGroupIndex = Math.max(0, progressGroups.findIndex((group) => group.sections.includes(section)));
+  const visibleStep = answers.presentationStep ?? presentationStepForSection(section);
+  const currentGroupIndex = progressGroups.findIndex(group => group.key === visibleStep);
+  const currentIndex = currentGroupIndex;
+  const nextStep = adjacentPresentationStep(visibleStep, 1);
+  const previousStep = adjacentPresentationStep(visibleStep, -1);
+  const nextSection = presentationSection(nextStep);
+  const previousSection = presentationSection(previousStep);
   const userCanComplete = canComplete(session.membership.role);
-  const canFinish = userCanComplete && acceptTerms && acceptDpa;
+  const canFinish = userCanComplete && acceptTerms && acceptDpa && answers.authority.rulesAcknowledged;
   const statusText = saveStatusText(saveState, copy);
 
-  const isWelcome = section === "establishment";
+  const isWelcome = visibleStep === "establishment";
   const identityOpen = manualOpen || !!answers.establishment.cityCountry || answers.establishment.identityConfirmed;
 
   return <main className={`onboarding-layout final-onboarding theme-${answers.interaction.theme}${isWelcome ? " welcome-onboarding" : ""}`} dir={copy.direction} lang={locale}>
@@ -555,32 +583,40 @@ export function OnboardingFlow({ initialRestaurantId, initialSection }: { initia
     <div className="onboarding-shell">
       {!isWelcome && <aside className="onboarding-rail" aria-label={copy.common.brand}>
         {progressGroups.map((group, index) => {
-          const label = copy.sections[group.target];
-          return <button key={group.key} type="button" className={index === currentGroupIndex ? "active" : index < currentGroupIndex ? "done" : ""} onClick={() => index < currentGroupIndex && void goBack(group.target)} disabled={index >= currentGroupIndex} aria-current={index === currentGroupIndex ? "step" : undefined}>{index < currentGroupIndex ? <Check size={13} /> : <span />}{label}</button>;
+          const label = copy.steps[group.key];
+          return <button key={group.key} type="button" className={index === currentGroupIndex ? "active" : index < currentGroupIndex ? "done" : ""} onClick={() => index < currentGroupIndex && void goBack(group.target, group.key)} disabled={index >= currentGroupIndex} aria-current={index === currentGroupIndex ? "step" : undefined}>{index < currentGroupIndex ? <Check size={13} /> : <span />}{label}</button>;
         })}
         <div className={`save-state save-${saveState}`} role="status" aria-live="polite">{statusText}{saveState === "failed" && <button type="button" onClick={() => void saveNow()}>{copy.common.retry}</button>}{saveState === "conflict" && <button type="button" onClick={() => void compareConflict()}>{copy.common.compare}</button>}</div>
       </aside>}
 
       <section className="onboarding-panel" aria-labelledby="onboarding-title">
         {draft.restaurants.length > 1 && <p className="inline-note restaurant-draft-note"><Building2 size={14} />{copy.common.restaurantChangeWarning}</p>}
-        {section === "establishment" && <Establishment answers={answers} copy={copy} locale={locale} update={updateAnswers} identityOpen={identityOpen} openManual={() => setManualOpen(true)} confirmInterpretation={confirmCurrentInterpretation} searchUnavailable={searchUnavailable} search={() => setSearchUnavailable(true)} />}
-        {section === "priorities" && <Priorities answers={answers} copy={copy} locale={locale} update={updateAnswers} confirmInterpretation={confirmCurrentInterpretation} branchNotice={() => setNotice(copy.common.branchReset)} />}
-        {section === "interaction" && <Interaction answers={answers} copy={copy} locale={locale} update={updateAnswers} confirmInterpretation={confirmCurrentInterpretation} />}
-        {section === "reservations" && <Reservations answers={answers} copy={copy} locale={locale} update={updateAnswers} confirmInterpretation={confirmCurrentInterpretation} />}
-        {section === "operations" && <Operations answers={answers} copy={copy} locale={locale} update={updateAnswers} pendingInterpretation={hasPendingProvenance(provenance, "operations")} confirmInterpretation={confirmCurrentInterpretation} />}
-        {section === "authority" && <Authority answers={answers} copy={copy} locale={locale} role={session.membership.role} userId={session.user.id} update={updateAnswers} pendingInterpretation={hasPendingProvenance(provenance, "authority")} confirmInterpretation={confirmCurrentInterpretation} />}
-        {section === "final_note" && <FinalNote answers={answers} copy={copy} locale={locale} update={updateAnswers} />}
-        {section === "review" && <Review answers={answers} copy={copy} locale={locale} role={session.membership.role} userId={session.user.id} legalVersions={draft.legalVersions} acceptTerms={acceptTerms} acceptDpa={acceptDpa} setAcceptTerms={setAcceptTerms} setAcceptDpa={setAcceptDpa} edit={moveTo} />}
+        {visibleStep === "establishment" && <Establishment answers={answers} copy={copy} locale={locale} update={updateAnswers} identityOpen={identityOpen} openManual={() => setManualOpen(true)} confirmInterpretation={() => confirmCurrentInterpretation()} searchUnavailable={searchUnavailable} search={() => setSearchUnavailable(true)} />}
+        {visibleStep === "priorities" && <Priorities answers={answers} copy={copy} locale={locale} update={updateAnswers} confirmInterpretation={() => confirmCurrentInterpretation()} branchNotice={() => setNotice(copy.common.branchReset)} />}
+        {visibleStep === "systems" && <>
+          <Reservations answers={answers} copy={copy} locale={locale} update={updateAnswers} confirmInterpretation={() => confirmCurrentInterpretation("reservations")} />
+          <PointOfSale answers={answers} copy={copy} locale={locale} update={updateAnswers} />
+        </>}
+        {visibleStep === "connections" && <Connections answers={answers} locale={locale} edit={() => void goBack("reservations", "systems")} />}
+        {visibleStep === "complements" && <div className="onboarding-complements">
+          <FinalNote answers={answers} copy={copy} locale={locale} update={updateAnswers} />
+          <p className="inline-note">{locale === "fr" ? "Ces précisions sont facultatives. Vous pourrez les compléter ou les corriger depuis votre cockpit." : "These details are optional. You can add or edit them from your dashboard."}</p>
+          <details className="onboarding-details"><summary>{locale === "fr" ? "Préciser votre fonctionnement" : "Your working practices"}</summary><Operations answers={answers} copy={copy} locale={locale} update={updateAnswers} pendingInterpretation={hasPendingProvenance(provenance, "operations")} confirmInterpretation={() => confirmCurrentInterpretation("operations")} /></details>
+          <details className="onboarding-details"><summary>{locale === "fr" ? "Vos préférences : texte et voix" : "Your text and voice preferences"}</summary><Interaction answers={answers} copy={copy} locale={locale} update={updateAnswers} confirmInterpretation={() => confirmCurrentInterpretation("interaction")} /></details>
+          <details className="onboarding-details"><summary>{locale === "fr" ? "Responsabilités et validations" : "Responsibilities and approvals"}</summary><Authority answers={answers} copy={copy} locale={locale} role={session.membership.role} userId={session.user.id} update={updateAnswers} pendingInterpretation={hasPendingProvenance(provenance, "authority")} confirmInterpretation={() => confirmCurrentInterpretation("authority")} /></details>
+        </div>}
+        {visibleStep === "review" && <label className="paper-choice"><input type="checkbox" checked={answers.authority.rulesAcknowledged} onChange={event => updateAnswers(next => { next.authority.rulesAcknowledged = event.target.checked; return next; })} /><span>{copy.common.rulesAcknowledged} {copy.common.rulesHelp}</span></label>}
+        {visibleStep === "review" && <Review answers={answers} copy={copy} locale={locale} role={session.membership.role} userId={session.user.id} legalVersions={draft.legalVersions} acceptTerms={acceptTerms} acceptDpa={acceptDpa} setAcceptTerms={setAcceptTerms} setAcceptDpa={setAcceptDpa} edit={moveTo} />}
 
         <Composer locale={locale} compact={isWelcome} value={composer} setValue={setComposer} voiceState={voiceState} voiceReview={voiceReview} copy={copy} onSend={() => {
           if (!composer.trim()) return;
-          const text = sectionRef.current === "review" ? [answersRef.current.finalNote.text, composer].filter(Boolean).join("\n\n") : composer;
+          const text = conversationSection(answersRef.current.presentationStep, sectionRef.current) === "final_note" ? [answersRef.current.finalNote.text, composer].filter(Boolean).join("\n\n") : composer;
           if (text.length > 2000) {
             setError(locale === "fr" ? "La note complète dépasse 2 000 caractères. Raccourcissez-la avant de l’ajouter." : "The complete note exceeds 2,000 characters. Shorten it before adding it.");
             return;
           }
           if (sectionRef.current === "establishment") setManualOpen(true);
-          updateAnswers((next) => applyFreeText(next, sectionRef.current === "review" ? "final_note" : sectionRef.current, text, "user_text"), {
+          updateAnswers((next) => applyFreeText(next, conversationSection(answersRef.current.presentationStep, sectionRef.current), text, "user_text"), {
             sourceType: "user_text",
             sourceReference: composer,
             confirmationStatus: "suggested",
@@ -593,18 +629,18 @@ export function OnboardingFlow({ initialRestaurantId, initialSection }: { initia
         {notice && <p className="form-notice" role="status">{notice}</p>}
         {error && <p className="form-error" role="alert"><AlertTriangle size={14} />{error}</p>}
         {(!isWelcome || identityOpen) && <footer className="onboarding-actions">
-          {currentIndex > 0 ? <button type="button" className="secondary-button" disabled={saveState === "saving" || busy} onClick={() => void goBack(previousSection)}><ArrowLeft size={16} /> {copy.common.back}</button> : <span />}
-          {section !== "review"
-            ? <button type="button" className="primary-button" disabled={saveState === "saving" || busy} onClick={() => void goTo(nextSection)}>{copy.common.continue} <ArrowRight size={17} /></button>
+          {currentIndex > 0 ? <button type="button" className="secondary-button" disabled={saveState === "saving" || busy} onClick={() => void goBack(previousSection, previousStep)}><ArrowLeft size={16} /> {copy.common.back}</button> : <span />}
+          {visibleStep !== "review"
+            ? <button type="button" className="primary-button" disabled={saveState === "saving" || busy} onClick={() => void goTo(nextSection, nextStep)}>{copy.common.continue} <ArrowRight size={17} /></button>
             : userCanComplete
               ? <button type="button" className="primary-button" disabled={!canFinish || busy || saveState === "saving"} onClick={() => void complete()}>{busy ? copy.common.preparing : copy.common.finish} <ArrowRight size={17} /></button>
               : <button type="button" className="primary-button" disabled={busy || saveState === "saving"} onClick={() => void saveForAuthority()}>{copy.common.saveForReview} <ArrowRight size={17} /></button>}
         </footer>}
       </section>
     </div>
-    {isWelcome && <div className="welcome-bottom"><div className={`save-state save-${saveState}`} role="status" aria-live="polite">{statusText}{saveState === "failed" && <button type="button" onClick={() => void saveNow()}>{copy.common.retry}</button>}{saveState === "conflict" && <button type="button" onClick={() => void compareConflict()}>{copy.common.compare}</button>}</div><div className="welcome-progress" role="progressbar" aria-label={copy.common.brand} aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(100 / sectionOrder.length)}><span /></div></div>}
+    {isWelcome && <div className="welcome-bottom"><div className={`save-state save-${saveState}`} role="status" aria-live="polite">{statusText}{saveState === "failed" && <button type="button" onClick={() => void saveNow()}>{copy.common.retry}</button>}{saveState === "conflict" && <button type="button" onClick={() => void compareConflict()}>{copy.common.compare}</button>}</div><div className="welcome-progress" role="progressbar" aria-label={copy.common.brand} aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(((currentGroupIndex + 1) / progressGroups.length) * 100)}><span /></div></div>}
     </div>
-    <h1 ref={headingRef} className="sr-only focus-heading" tabIndex={-1}>{copy.sections[section]}</h1>
+    <h1 id="onboarding-title" ref={headingRef} className="sr-only focus-heading" tabIndex={-1}>{copy.steps[visibleStep]}</h1>
   </main>;
 }
 
@@ -626,7 +662,7 @@ function ConflictView({ comparison, copy, useLocal, useRemote }: { comparison: C
 
 function Establishment({ answers, copy, update, identityOpen, openManual, confirmInterpretation, searchUnavailable, search }: StepProps & { identityOpen: boolean; openManual: () => void; confirmInterpretation: () => void; searchUnavailable: boolean; search: () => void }) {
   const establishment = answers.establishment;
-  return <div className="onboarding-step establishment-step"><header className="welcome-heading"><h2 id="onboarding-title">{copy.common.welcome}</h2><p>{copy.common.establishmentSubtitle}</p></header>
+  return <div className="onboarding-step establishment-step"><header className="welcome-heading"><h2>{copy.common.welcome}</h2><p>{copy.common.establishmentSubtitle}</p></header>
     <BusinessSearch value={establishment.query || ""} english={answers.interaction.locale === "en"} onChange={(value) => update((next) => { next.establishment.query = value; next.establishment.identityConfirmed = false; return next; })} choose={(result) => { openManual(); update((next) => { next.establishment.identificationMode = "public_search"; next.establishment.restaurantName = result.name; next.establishment.cityCountry = result.cityCountry; next.establishment.address = result.address || "unknown"; next.establishment.phone = result.phone || "unknown"; next.establishment.identityConfirmed = false; next.establishment.sourceReferences = [{ label: result.sourceLabel || "Google Maps", value: result.sourceUrl, confirmationStatus: "suggested" }]; return next; }, { sourceType: "public_suggestion", sourceReference: result.sourceUrl, confirmationStatus: "suggested" }); }} />
     <button type="button" className="text-action welcome-manual" aria-expanded={identityOpen} onClick={() => { openManual(); update((next) => { next.establishment.identificationMode = "manual"; next.establishment.restaurantName ||= next.establishment.query || ""; next.establishment.identityConfirmed = false; return next; }); }}>{copy.common.addManually}</button>
     {!identityOpen && <div className="welcome-promises"><span><Check size={17} />{answers.interaction.locale === "fr" ? "Une seule information" : "One piece of information"}</span><i /><span><Sparkles size={17} />{answers.interaction.locale === "fr" ? "Source publique vérifiable" : "Verifiable public source"}</span><i /><span><Check size={17} />{answers.interaction.locale === "fr" ? "Vous confirmez" : "You confirm"}</span></div>}
@@ -674,9 +710,36 @@ function Interaction({ answers, copy, locale, update, confirmInterpretation }: S
   </div>;
 }
 
+function PointOfSale({ answers, locale, update }: StepProps) {
+  const pointOfSale = answers.systems?.pointOfSale;
+  return <section className="onboarding-pos" aria-labelledby="pos-title">
+    <h3 id="pos-title">{locale === "fr" ? "Et pour votre caisse ?" : "What about your point of sale?"}</h3>
+    <div className="choice-grid compact">{(["declared", "none", "unknown"] as const).map(status => <ToggleCard key={status}
+      selected={pointOfSale?.status === status}
+      onClick={() => update(next => { next.systems = { ...next.systems, pointOfSale: { ...next.systems?.pointOfSale, status } }; return next; })}
+      title={locale === "fr" ? ({ declared: "J’utilise un logiciel", none: "Aucun logiciel", unknown: "À préciser plus tard" })[status] : ({ declared: "I use software", none: "No software", unknown: "Decide later" })[status]} />)}</div>
+    {pointOfSale?.status === "declared" && <label><span>{locale === "fr" ? "Nom de votre logiciel de caisse" : "Point-of-sale software name"}</span><input maxLength={120} value={pointOfSale.name || ""} onChange={event => update(next => { next.systems = { pointOfSale: { status: "declared", name: event.target.value } }; return next; })} /></label>}
+    <p className="inline-note">{locale === "fr" ? "Déclarer un logiciel ne le connecte pas. Vous pourrez compléter cette information plus tard." : "Declaring software does not connect it. You can complete this information later."}</p>
+  </section>;
+}
+
+function Connections({ answers, locale, edit }: { answers: OnboardingAnswers; locale: LocaleMode; edit: () => void }) {
+  const software = answers.reservations.providers.map(provider => provider === "other" ? answers.reservations.otherProvider || "Autre logiciel" : labelFor(locale, provider));
+  if (answers.reservations.methods.includes("calendar") && answers.reservations.calendarProvider) software.push(labelFor(locale, answers.reservations.calendarProvider));
+  if (answers.systems?.pointOfSale.status === "declared" && answers.systems.pointOfSale.name) software.push(answers.systems.pointOfSale.name);
+  const tools = Array.from(new Set(software));
+  return <section className="onboarding-connections" aria-labelledby="onboarding-title">
+    <h2>{locale === "fr" ? "Vos connexions, en toute clarté" : "Your connections, clearly explained"}</h2>
+    <p>{locale === "fr" ? "Vos outils sont déclarés. Cet écran ne permet pas encore de les connecter automatiquement ; aucune synchronisation n’est annoncée." : "Your tools are recorded. Automatic connection is not yet available from this screen; no synchronization is claimed."}</p>
+    {tools.length > 0 ? <ul className="onboarding-connection-list">{tools.map(tool => <li key={tool}><strong>{tool}</strong><span>{locale === "fr" ? "Déclaré · connexion non vérifiée ici" : "Declared · connection not verified here"}</span><small>{locale === "fr" ? "Continuez avec vos informations déclarées. La connexion devra être configurée puis testée avant toute synchronisation." : "Continue with the information you provided. The connection must be configured and tested before synchronization."}</small></li>)}</ul> : <p className="inline-note">{locale === "fr" ? "Aucun logiciel à connecter n’a été déclaré. Votre fonctionnement manuel reste possible dans TableNow." : "No software to connect has been declared. You can continue working manually in TableNow."}</p>}
+    <button type="button" className="text-button" onClick={edit}>{locale === "fr" ? "Corriger mes outils" : "Edit my tools"}</button>
+    <p className="inline-note">{locale === "fr" ? "Vous pouvez continuer maintenant. Votre premier plan utilisera vos réponses, sans inventer de données provenant de vos logiciels." : "You can continue now. Your first plan will use your answers without inventing data from your software."}</p>
+  </section>;
+}
+
 function Reservations({ answers, copy, locale, update, confirmInterpretation }: StepProps & { confirmInterpretation: () => void }) {
   const references = reservationReferences(answers);
-  const inferred = inferReservationProviders(answers.reservations.otherMethod || "");
+  const inferred = inferReservationProviders(answers.reservations.methods.includes("other") ? answers.reservations.otherMethod || "" : "");
   const toggleProvider = (provider: OnboardingAnswers["reservations"]["providers"][number]) => update((next) => {
     setReservationProviders(next, toggle(next.reservations.providers, provider));
     return next;
@@ -716,7 +779,7 @@ function Operations({ answers, copy, locale, update, pendingInterpretation, conf
 
 function CommunicationBranch({ answers, copy, locale, update }: StepProps) {
   const branch = answers.operations.communications;
-  return <><Question title={branchQuestion(locale, "communicationChannels")} options={["calls", "whatsapp", "emails", "instagram", "sms", "other"]} values={branch.channels} update={(values) => update((next) => { next.operations.communications.channels = values as typeof branch.channels; if (!values.includes("calls")) { delete next.operations.communications.phoneNumber; next.operations.communications.overflowTriggers = []; } return next; })} locale={locale} />
+  return <><Question title={branchQuestion(locale, "communicationChannels")} options={["calls", "whatsapp", "emails", "instagram", "sms", "other"]} values={branch.channels} update={(values) => update((next) => { next.operations.communications.channels = values as typeof branch.channels; return next; })} locale={locale} />
     <Question title={branchQuestion(locale, "communicationMoment")} options={["during_service", "when_team_unavailable", "outside_hours", "other"]} values={branch.peakContext} update={(values) => update((next) => { next.operations.communications.peakContext = values as typeof branch.peakContext; return next; })} locale={locale} />
     {branch.channels.includes("calls") && <><p className="inline-note">{copy.common.keepNumber} {copy.common.noForwarding}</p><label><span>{copy.common.phoneOptional}</span><input type="tel" value={knownInput(branch.phoneNumber)} onChange={(event) => update((next) => { next.operations.communications.phoneNumber = event.target.value || "unknown"; return next; })} /></label><Question title={copy.common.overflowTriggers} options={["busy_line", "no_answer", "outside_hours"]} values={branch.overflowTriggers} update={(values) => update((next) => { next.operations.communications.overflowTriggers = values as typeof branch.overflowTriggers; return next; })} locale={locale} /></>}
     <Question title={copy.common.humanReview} options={["groups", "allergies_sensitive", "privatizations", "complaints", "other"]} values={branch.humanReviewCategories} update={(values) => update((next) => { next.operations.communications.humanReviewCategories = values as typeof branch.humanReviewCategories; return next; })} locale={locale} optional />
@@ -725,9 +788,9 @@ function CommunicationBranch({ answers, copy, locale, update }: StepProps) {
 
 function ReservationBranch({ answers, copy, locale, update }: StepProps) {
   const branch = answers.operations.reservations;
-  return <><Question title={branchQuestion(locale, "reservationFriction")} options={["taking_reservations", "changes_cancellations", "groups", "special_requests", "no_shows", "other"]} values={branch.friction} update={(values) => update((next) => { next.operations.reservations.friction = values as typeof branch.friction; if (!values.includes("groups")) delete next.operations.reservations.groupApprovalThreshold; if (!values.includes("no_shows")) { delete next.operations.reservations.confirmationRuleStatus; delete next.operations.reservations.confirmationRuleText; } return next; })} locale={locale} />
+  return <><Question title={branchQuestion(locale, "reservationFriction")} options={["taking_reservations", "changes_cancellations", "groups", "special_requests", "no_shows", "other"]} values={branch.friction} update={(values) => update((next) => { next.operations.reservations.friction = values as typeof branch.friction; return next; })} locale={locale} />
     {branch.friction.includes("groups") && <label><span>{copy.common.groupThreshold}</span><div className="input-with-unknown"><input type="number" min="1" max="100" value={typeof branch.groupApprovalThreshold === "number" ? branch.groupApprovalThreshold : ""} onChange={(event) => update((next) => { next.operations.reservations.groupApprovalThreshold = event.target.value ? Number(event.target.value) : "unknown"; return next; })} /><button type="button" onClick={() => update((next) => { next.operations.reservations.groupApprovalThreshold = "unknown"; return next; })}>{copy.common.defineLater}</button></div></label>}
-    {branch.friction.includes("no_shows") && <><Question single title={copy.common.confirmationRule} options={["yes", "no", "to_define"]} values={branch.confirmationRuleStatus ? [branch.confirmationRuleStatus] : []} update={(values) => update((next) => { next.operations.reservations.confirmationRuleStatus = values[0] as typeof branch.confirmationRuleStatus; if (values[0] !== "yes") delete next.operations.reservations.confirmationRuleText; return next; })} locale={locale} />{branch.confirmationRuleStatus === "yes" && <label><span>{copy.common.confirmationRuleDetails}</span><textarea rows={3} value={branch.confirmationRuleText || ""} onChange={(event) => update((next) => { next.operations.reservations.confirmationRuleText = event.target.value; return next; })} /></label>}</>}
+    {branch.friction.includes("no_shows") && <><Question single title={copy.common.confirmationRule} options={["yes", "no", "to_define"]} values={branch.confirmationRuleStatus ? [branch.confirmationRuleStatus] : []} update={(values) => update((next) => { next.operations.reservations.confirmationRuleStatus = values[0] as typeof branch.confirmationRuleStatus; return next; })} locale={locale} />{branch.confirmationRuleStatus === "yes" && <label><span>{copy.common.confirmationRuleDetails}</span><textarea rows={3} value={branch.confirmationRuleText || ""} onChange={(event) => update((next) => { next.operations.reservations.confirmationRuleText = event.target.value; return next; })} /></label>}</>}
   </>;
 }
 
@@ -759,7 +822,7 @@ function ServiceBranch({ answers, copy, locale, update }: StepProps) {
   const branch = answers.operations.service;
   return <><Question single title={branchQuestion(locale, "servicePhase")} options={["before_service", "during_service", "after_service", "other"]} values={branch.phase ? [branch.phase] : []} update={(values) => update((next) => { next.operations.service.phase = values[0] as typeof branch.phase; return next; })} locale={locale} />
     <Question title={branchQuestion(locale, "serviceCheck")} options={["mise_en_place", "coordination", "special_requests", "closing", "other"]} values={branch.checks} update={(values) => update((next) => { next.operations.service.checks = values as typeof branch.checks; return next; })} locale={locale} />
-    <Question single title={copy.common.scheduleStatus} options={["known", "unknown", "no_fixed_schedule"]} values={branch.scheduleStatus ? [branch.scheduleStatus] : []} update={(values) => update((next) => { next.operations.service.scheduleStatus = values[0] as typeof branch.scheduleStatus; if (values[0] !== "known") { next.operations.service.nextServiceAt = values[0] === "no_fixed_schedule" ? "not_applicable" : "unknown"; delete next.operations.service.timezone; } return next; })} locale={locale} optional />
+    <Question single title={copy.common.scheduleStatus} options={["known", "unknown", "no_fixed_schedule"]} values={branch.scheduleStatus ? [branch.scheduleStatus] : []} update={(values) => update((next) => { next.operations.service.scheduleStatus = values[0] as typeof branch.scheduleStatus; return next; })} locale={locale} optional />
     {branch.scheduleStatus === "known" && <div className="form-grid two"><label><span>{copy.common.nextService}</span><input value={knownInput(branch.nextServiceAt)} onChange={(event) => update((next) => { next.operations.service.nextServiceAt = event.target.value || "unknown"; return next; })} placeholder="2026-09-11T19:00:00+02:00" /></label><label><span>{copy.common.serviceTimezone}</span><input value={branch.timezone || answers.establishment.timezone || ""} onChange={(event) => update((next) => { if (event.target.value) next.operations.service.timezone = event.target.value; else delete next.operations.service.timezone; return next; })} placeholder={copy.common.timezonePlaceholder} /></label></div>}
   </>;
 }
@@ -823,7 +886,7 @@ function Review({ answers, copy, locale, role, userId, legalVersions, acceptTerm
 }
 
 function StepHead({ copy, eyebrow, title, subtitle, promise }: { copy: OnboardingCopy; eyebrow: keyof OnboardingCopy["common"]; title: keyof OnboardingCopy["common"]; subtitle?: keyof OnboardingCopy["common"]; promise?: keyof OnboardingCopy["common"] }) {
-  return <header className="form-section final-step-head"><span className="form-section-number">{copy.common[eyebrow]}</span><div><h2 id="onboarding-title">{copy.common[title]}</h2>{subtitle && <p>{copy.common[subtitle]}</p>}{promise && <small>{copy.common[promise]}</small>}</div></header>;
+  return <header className="form-section final-step-head"><span className="form-section-number">{copy.common[eyebrow]}</span><div><h2>{copy.common[title]}</h2>{subtitle && <p>{copy.common[subtitle]}</p>}{promise && <small>{copy.common[promise]}</small>}</div></header>;
 }
 
 function ToggleCard({ title, selected, onClick, icon, disabled = false }: { title: string; selected: boolean; onClick: () => void; icon?: ReactNode; disabled?: boolean }) {
@@ -846,6 +909,7 @@ function reviewRows(answers: OnboardingAnswers, copy: OnboardingCopy, locale: Lo
     { section: "establishment" as const, label: copy.common.restaurantName, value: answers.establishment.restaurantName || labelFor(locale, "unknown") },
     { section: "establishment" as const, label: copy.common.cityCountry, value: answers.establishment.cityCountry || labelFor(locale, "unknown") },
     { section: "priorities" as const, label: copy.common.priorityEyebrow, value: labelFor(locale, answers.priorities.primaryFocus || "unknown") },
+    ...(answers.systems?.pointOfSale ? [{ section: "reservations" as const, label: locale === "fr" ? "Caisse" : "Point of sale", value: answers.systems.pointOfSale.status === "declared" ? `${answers.systems.pointOfSale.name || labelFor(locale, "unknown")} · ${copy.common.declared}` : answers.systems.pointOfSale.status === "none" ? (locale === "fr" ? "Aucun logiciel déclaré" : "No software declared") : labelFor(locale, "unknown") }] : []),
     { section: "reservations" as const, label: copy.common.reservationsEyebrow, value: `${reservationReferences(answers).map((value) => labelFor(locale, value)).join(", ") || labelFor(locale, "unknown")} · ${copy.common.declared}` },
     { section: "operations" as const, label: copy.common.operationEyebrow, value: operationSummary(answers, locale) },
     { section: "authority" as const, label: copy.common.validationRecipient, value: answers.authority.approvalAssigneeUserId === userId ? copy.common.me : copy.common.toAssign },

@@ -1,8 +1,10 @@
+import type { OnboardingPresentationStep } from "@tablenow/contracts";
 import type { LocaleMode, SectionKey } from "./onboarding";
 
 export interface OnboardingCopy {
   direction: "ltr";
   sections: Record<SectionKey, string>;
+  steps: Record<OnboardingPresentationStep, string>;
   common: Record<CommonKey, string>;
   labels: Record<string, string>;
 }
@@ -94,6 +96,7 @@ const labelsEn: Record<string, string> = {
 export const onboardingCopy: Record<LocaleMode, OnboardingCopy> = {
   fr: {
     direction: "ltr",
+    steps: { priorities: "Priorités", establishment: "Établissement", systems: "Systèmes", connections: "Connexions", complements: "Compléments", review: "Synthèse" },
     sections: { establishment: "Établissement", priorities: "Priorités", interaction: "Priorités", reservations: "Réservations", operations: "Fonctionnement", authority: "Validation", final_note: "Validation", review: "Votre plan" },
     labels: labelsFr,
     common: {
@@ -135,13 +138,14 @@ export const onboardingCopy: Record<LocaleMode, OnboardingCopy> = {
       acceptTermsPrefix: "J'accepte les", terms: "conditions d'utilisation", acceptTermsSuffix: ".", acceptDpaPrefix: "Je confirme être autorisé à configurer cet établissement et j'accepte l'", dpa: "accord de traitement des données", acceptDpaSuffix: ".",
       completeFailed: "Votre plan n'a pas pu être enregistré. Vos réponses sont conservées.", validationEstablishment: "Confirmez le nom de l'établissement et sa ville pour continuer.", validationReservations: "Indiquez votre solution ou votre méthode de réservation.",
       validationPriority: "Confirmez une priorité de départ.", validationGeneric: "Complétez les informations nécessaires pour continuer.", validationInterpretation: "Confirmez ou corrigez les informations interprétées avant de continuer.",
-      interpretationSummary: "Voici ce que j'ai compris. Confirmez ou corrigez.", capturedText: "Précision saisie", station: "Poste ou zone concernée", branchReset: "Les réponses incompatibles de la branche précédente ont été retirées.",
+      interpretationSummary: "Voici ce que j'ai compris. Confirmez ou corrigez.", capturedText: "Précision saisie", station: "Poste ou zone concernée", branchReset: "Votre priorité a changé. Vos réponses précédentes sont conservées.",
       multiRestaurant: "Je gère plusieurs établissements", selectRestaurant: "Établissement à configurer", restaurantChangeWarning: "Le brouillon de l'établissement choisi est chargé séparément.", conflictTitle: "Comparer les réponses",
       changedField: "Champ modifié", thisScreen: "Cet écran", serverVersion: "Version enregistrée", keepMine: "Conserver mes réponses", useServer: "Utiliser la version enregistrée", noConflictDifferences: "Aucune différence visible.", statusDraft: "Brouillon", statusAwaiting: "En attente de validation", statusCompleted: "Terminé",
     },
   },
   en: {
     direction: "ltr",
+    steps: { priorities: "Priorities", establishment: "Restaurant", systems: "Systems", connections: "Connections", complements: "Additional details", review: "Summary" },
     sections: { establishment: "Restaurant", priorities: "Priorities", interaction: "Priorities", reservations: "Reservations", operations: "Operations", authority: "Approval", final_note: "Approval", review: "Your plan" },
     labels: labelsEn,
     common: {
@@ -174,7 +178,7 @@ export const onboardingCopy: Record<LocaleMode, OnboardingCopy> = {
       acceptTermsSuffix: ".", acceptDpaPrefix: "I confirm I am authorized to configure this restaurant and accept the", dpa: "data processing agreement", acceptDpaSuffix: ".", completeFailed: "Your plan could not be saved. Your answers are preserved.",
       validationEstablishment: "Confirm the restaurant name and city to continue.", validationReservations: "Provide your reservation tool or method.", validationPriority: "Confirm a starting priority.", validationGeneric: "Complete the required information to continue.",
       validationInterpretation: "Confirm or correct the interpreted information before continuing.", interpretationSummary: "Here is what I understood. Confirm or correct it.", capturedText: "Captured detail", station: "Station or area concerned",
-      branchReset: "Incompatible answers from the previous branch were removed.", multiRestaurant: "I manage several restaurants", selectRestaurant: "Restaurant to configure", restaurantChangeWarning: "The selected restaurant has a separate draft.", conflictTitle: "Compare answers",
+      branchReset: "Your priority has changed. Your previous answers are preserved.", multiRestaurant: "I manage several restaurants", selectRestaurant: "Restaurant to configure", restaurantChangeWarning: "The selected restaurant has a separate draft.", conflictTitle: "Compare answers",
       changedField: "Changed field", thisScreen: "This screen", serverVersion: "Saved version", keepMine: "Keep my answers", useServer: "Use saved version", noConflictDifferences: "No visible difference.", statusDraft: "Draft", statusAwaiting: "Awaiting approval", statusCompleted: "Completed",
     },
   },

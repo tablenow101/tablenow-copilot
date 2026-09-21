@@ -1,3 +1,13 @@
+# Porte de recette du 21 septembre 2026
+
+- Dépôt restauré sans perte : le blocage des 60 fichiers absents est levé.
+- Corrections locales du parcours guidé préparées et compilées ; recette de la nouvelle Preview en cours.
+- Parcours complet d’un nouveau compte, saisie TOTP et changement d’application sur un téléphone physique : non exécutés dans cette reprise. La saisie privée reste au propriétaire ; aucun contournement du MFA.
+- Connecteurs externes non activés dans l’onboarding ; déclaration distincte de connexion. Documents stockés, analyse non disponible.
+- Validation produit et promotion restent bloquées jusqu’aux preuves complètes et à l’accord explicite. Aucun lot clôturé.
+
+Les éléments suivants sont des états historiques à lire avec leur date.
+
 # Porte du pilote Aujourd’hui — 19 septembre 2026
 
 La direction visuelle est approuvée ; le code local passe les contrôles techniques. La recette ciblée Preview est exécutée ; la recette globale et la validation produit restent ouvertes. Le chat est une synthèse métier sans modèle IA configuré ; les documents ne sont pas analysés automatiquement. Micro et appareils physiques ne sont pas certifiés. Les blocs ci-dessous sont historiques et ne constituent pas un diagnostic actualisé du pilote. [État vérifiable](../../docs/qa/pilote-aujourdhui-2026-09-19.md).

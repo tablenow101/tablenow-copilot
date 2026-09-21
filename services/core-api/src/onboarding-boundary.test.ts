@@ -67,7 +67,7 @@ describe("onboarding server boundaries", () => {
   it("OB-20 invalidates a prior result only when answers actually change", async () => {
     const repository = await readFile(repositoryPath, "utf8");
     const save = method(repository, "public async saveOnboardingDraft", "public async completeOnboardingDraft");
-    expect(save).toContain("isDeepStrictEqual(previousAnswers, answers)");
+    expect(save).toContain("isDeepStrictEqual(previousBusinessAnswers, businessAnswers)");
     expect(save).toContain("if (answersChanged && current.first_result_id)");
     expect(save).toContain("case when ${answersChanged} then null else first_result_id end");
   });

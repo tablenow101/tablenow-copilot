@@ -97,6 +97,14 @@ describe("Google authentication", () => {
   it("creates no account or session until the new Google owner proves TOTP; respects transient cookies", async () => {
     const flow = await google("new-sub", "google-new@tablenow.test", "0");
     expect(flow.next.stage).toBe("enroll");
+    const resumed = await get("/v1/account/continuation", flow.cookie);
+    const reload = await get("/v1/account/continuation", flow.cookie);
+    expect(resumed.json()).toEqual({ ...flow.next, purpose: "google", rememberMe: false, expiresInSeconds: expect.any(Number) });
+    expect(reload.json().secret === flow.next.secret).toBe(true);
+    expect(reload.json().expiresAt).toBe(flow.next.expiresAt);
+    expect(reload.json().expiresInSeconds).toBeLessThanOrEqual(resumed.json().expiresInSeconds);
+    expect(reload.cookies).toHaveLength(0);
+    expect(send).not.toHaveBeenCalled();
     expect(new Date(flow.next.expiresAt).getTime()).toBeGreaterThan(Date.now());
     expect(flow.next.expiresInSeconds).toBeGreaterThan(0);
     expect(await database`select id from users`).toHaveLength(0);
@@ -130,6 +138,10 @@ describe("Google authentication", () => {
     expect(new Date(flow.next.expiresAt).getTime()).toBeGreaterThan(Date.now());
     expect(flow.next.expiresInSeconds).toBeGreaterThan(0);
     expect(flow.next.secret).toBeUndefined();
+    const resumed = await get("/v1/account/continuation", flow.cookie);
+    expect(resumed.json()).toEqual({ ...flow.next, purpose: "google", rememberMe: true, expiresInSeconds: expect.any(Number) });
+    expect(resumed.json().secret).toBeUndefined();
+    expect(resumed.cookies).toHaveLength(0);
     expect(await database`select subject from google_identities where subject='existing-sub'`).toHaveLength(0);
     const r = await post("/v1/account/verify-mfa", { code: totpAt(totp, Math.floor(Date.now()/30000)) }, flow.cookie);
     expect(r.statusCode, r.body).toBe(200);
@@ -147,6 +159,7 @@ describe("Google authentication", () => {
     const expiredContinuation = await get("/v1/account/google-continuation", again.cookie);
     expect(expiredContinuation.statusCode).toBe(410);
     expect(expiredContinuation.json().error.code).toBe("ACCOUNT_CHALLENGE_EXPIRED");
+    expect((await get("/v1/account/continuation", again.cookie)).json().error.code).toBe("ACCOUNT_CHALLENGE_EXPIRED");
     const expired = await post("/v1/account/verify-mfa", { code: "000000" }, again.cookie);
     expect(expired.statusCode).toBe(410);
     expect(expired.json().error.code).toBe("ACCOUNT_CHALLENGE_EXPIRED");

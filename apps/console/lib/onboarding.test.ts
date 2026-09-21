@@ -49,14 +49,16 @@ describe("final onboarding client rules", () => {
     expect(sectionValid("reservations", proposed)).toBe(true);
   });
 
-  it("OB-06 retains priority choices and removes only the incompatible operation branch", () => {
+  it("OB-06 preserves earlier answers when changing priority and returning", () => {
     const answers = emptyOnboardingAnswers();
     answers.priorities.timeConsumers = ["supplier_orders", "team"];
     setPrimaryFocus(answers, "supplier_orders");
     answers.operations.suppliers.items = [{ name: "Tomates", quantity: 12, unit: "kg" }];
     expect(setPrimaryFocus(answers, "team")).toBe(true);
     expect(answers.priorities.timeConsumers).toEqual(["supplier_orders", "team"]);
-    expect(answers.operations.suppliers.items).toEqual([]);
+    expect(answers.operations.suppliers.items).toEqual([{ name: "Tomates", quantity: 12, unit: "kg" }]);
+    setPrimaryFocus(answers, "supplier_orders");
+    expect(answers.operations.suppliers.items).toEqual([{ name: "Tomates", quantity: 12, unit: "kg" }]);
   });
 
   it("OB-07 extracts several priority proposals without selecting one silently", () => {
@@ -141,4 +143,14 @@ describe("final onboarding client rules", () => {
     expect(inferReservationProviders("Nous utilisons Zenchef et Seven Rooms")).toEqual(["zenchef", "sevenrooms"]);
     expect(statementsFrom("Livraison vendredi", "user_text")[0]?.value).toBe("Livraison vendredi");
   });
+  it("keeps inactive reservation details without blocking the active method", () => {
+    const answers = emptyOnboardingAnswers();
+    answers.reservations.methods = ["other"];
+    answers.reservations.otherMethod = "Nous utilisons Zenchef";
+    setReservationMethods(answers, ["paper"]);
+    expect(answers.reservations.otherMethod).toBe("Nous utilisons Zenchef");
+    expect(sectionValid("reservations", answers)).toBe(true);
+    expect(reservationReferences(answers)).toEqual(["paper"]);
+  });
+
 });

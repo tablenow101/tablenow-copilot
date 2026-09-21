@@ -58,6 +58,11 @@ export function initialOnboardingAnswers(input: {
 }
 
 export function normalizeOnboardingAnswers(input: OnboardingAnswers): OnboardingAnswers {
+  // Stored answers are lossless. Selection only changes the active projection.
+  return structuredClone(onboardingAnswersSchema.parse(input));
+}
+
+function activeOnboardingAnswers(input: OnboardingAnswers): OnboardingAnswers {
   const answers = structuredClone(onboardingAnswersSchema.parse(input));
   const defaults = onboardingAnswersSchema.parse({}).operations;
   const focus = answers.priorities.primaryFocus;
@@ -99,6 +104,10 @@ export function normalizeOnboardingAnswers(input: OnboardingAnswers): Onboarding
   if (references.length === 1) answers.reservations.authoritativeSystem = references[0]!;
   else if (!references.includes(answers.reservations.authoritativeSystem)) answers.reservations.authoritativeSystem = "unknown";
 
+  if (answers.operations.service.scheduleStatus && answers.operations.service.scheduleStatus !== "known") {
+    answers.operations.service.nextServiceAt = answers.operations.service.scheduleStatus === "no_fixed_schedule" ? "not_applicable" : "unknown";
+    delete answers.operations.service.timezone;
+  }
   const confirmedIds = new Set(answers.finalNote.statements.filter((statement) => statement.status === "confirmed").map((statement) => statement.id));
   answers.finalNote.confirmedStatementIds = answers.finalNote.confirmedStatementIds.filter((id) => confirmedIds.has(id));
   return onboardingAnswersSchema.parse(answers);
@@ -114,7 +123,9 @@ export function updateConfirmedSections(
   const storedIndex = onboardingSectionOrder.indexOf(storedSection);
   const targetIndex = onboardingSectionOrder.indexOf(targetSection);
   if (storedIndex < 0 || targetIndex < 0) throw new Error("ONBOARDING_INVALID_TRANSITION");
-  if (targetIndex > storedIndex + 1) throw new Error("ONBOARDING_INVALID_TRANSITION");
+  const groupedTransition = (storedSection === "establishment" && targetSection === "reservations")
+    || (["operations", "authority"].includes(storedSection) && targetSection === "review");
+  if (targetIndex > storedIndex + 1 && !groupedTransition) throw new Error("ONBOARDING_INVALID_TRANSITION");
   if (targetIndex < storedIndex) {
     return answersChanged
       ? confirmedSections.filter((section) => onboardingSectionOrder.indexOf(section) < targetIndex)
@@ -125,9 +136,14 @@ export function updateConfirmedSections(
       ? confirmedSections.filter((section) => onboardingSectionOrder.indexOf(section) < storedIndex)
       : confirmedSections;
   }
-  validateOnboardingSection(storedSection, answers);
   const retained = confirmedSections.filter((section) => onboardingSectionOrder.indexOf(section) <= storedIndex);
-  if (storedSection !== "review" && !retained.includes(storedSection)) retained.push(storedSection);
+  for (const passed of onboardingSectionOrder.slice(storedIndex, targetIndex)) {
+    // Authority remains explicitly required at final completion, never inferred from navigation.
+    if (passed === "authority" && !answers.authority.rulesAcknowledged) continue;
+    validateOnboardingSection(passed, answers);
+    if (passed === "review" || (passed === "interaction" && !answers.interaction.preferredModeConfirmed)) continue;
+    if (!retained.includes(passed)) retained.push(passed);
+  }
   return retained;
 }
 
@@ -142,13 +158,14 @@ export function validateOnboardingCompletion(
   if (!["platform_admin", "owner", "group_admin"].includes(role)) throw new Error("ONBOARDING_AUTHORITY_REQUIRED");
   const answers = normalizeOnboardingAnswers(input);
   if (currentSection !== "review") throw new Error("ONBOARDING_INVALID_TRANSITION");
-  const requiredSections = onboardingSectionOrder.filter((section): section is ConfirmableSection => section !== "review");
+  const requiredSections: ConfirmableSection[] = ["priorities", "establishment", "reservations"];
   if (requiredSections.some((section) => !confirmedSections.includes(section))) throw new Error("ONBOARDING_INVALID_TRANSITION");
-  for (const section of requiredSections) validateOnboardingSection(section, answers);
+  for (const section of [...requiredSections, "operations", "authority"] as const) validateOnboardingSection(section, answers);
   return answers;
 }
 
-export function validateOnboardingSection(section: OnboardingSection, answers: OnboardingAnswers): void {
+export function validateOnboardingSection(section: OnboardingSection, storedAnswers: OnboardingAnswers): void {
+  const answers = activeOnboardingAnswers(storedAnswers);
   const errors: Record<string, string[]> = {};
   const requireField = (path: string, condition: boolean, message: string) => {
     if (!condition) errors[path] = [message];
@@ -164,8 +181,9 @@ export function validateOnboardingSection(section: OnboardingSection, answers: O
       requireField("answers.priorities.timeConsumers", Boolean(answers.priorities.timeConsumers.length || answers.priorities.otherText), "Choisissez ou décrivez une priorité ciblée.");
     }
   } else if (section === "interaction") {
-    requireField("answers.interaction.preferredMode", answers.interaction.preferredModeConfirmed, "Confirmez votre préférence d'interaction.");
+    // Optional preference: passing through never confirms it on the owner's behalf.
   } else if (section === "reservations") {
+    requireField("answers.systems.pointOfSale.name", answers.systems?.pointOfSale.status !== "declared" || Boolean(answers.systems.pointOfSale.name?.trim()), "Précisez le nom de votre logiciel de caisse ou choisissez À préciser.");
     requireField("answers.reservations.methods", Boolean(answers.reservations.methods.length || answers.reservations.providers.length), "Déclarez la méthode de réservation actuelle.");
     if (answers.reservations.providers.includes("other")) {
       requireField("answers.reservations.otherProvider", Boolean(answers.reservations.otherProvider), "Précisez l'autre outil déclaré.");
@@ -185,7 +203,6 @@ export function validateOnboardingSection(section: OnboardingSection, answers: O
   } else if (section === "operations") {
     validateOperations(answers, requireField);
   } else if (section === "authority") {
-    requireField("answers.authority.declaredJobTitle", Boolean(answers.authority.declaredJobTitle), "Précisez votre fonction déclarative.");
     requireField("answers.authority.rulesAcknowledged", answers.authority.rulesAcknowledged, "Confirmez le cadre de validation avant toute action extérieure.");
   }
   if (Object.keys(errors).length) throw new OnboardingIncompleteError(errors);
@@ -202,36 +219,22 @@ function inferredReservationProviders(text: string): OnboardingAnswers["reservat
 
 function validateOperations(answers: OnboardingAnswers, requireField: (path: string, condition: boolean, message: string) => void): void {
   const focus = answers.priorities.primaryFocus;
-  if (focus === "customer_communication") {
-    requireField("answers.operations.communications.channels", answers.operations.communications.channels.length > 0, "Choisissez au moins un canal.");
-    requireField("answers.operations.communications.peakContext", answers.operations.communications.peakContext.length > 0, "Précisez le moment où le renfort est utile.");
-  } else if (focus === "reservations") {
-    requireField("answers.operations.reservations.friction", answers.operations.reservations.friction.length > 0, "Choisissez le principal ralentissement.");
-  } else if (focus === "team") {
-    requireField("answers.operations.team.friction", answers.operations.team.friction.length > 0, "Précisez le problème d'organisation.");
-    requireField("answers.operations.team.stations", answers.operations.team.stations.length > 0, "Précisez les postes concernés.");
-  } else if (focus === "supplier_orders") {
-    requireField("answers.operations.suppliers.intent", Boolean(answers.operations.suppliers.intent), "Choisissez la situation fournisseur à traiter.");
+  if (focus === "supplier_orders") {
     requireField("answers.operations.suppliers.unknownFields", !answers.operations.suppliers.unknownFields.includes("proposal_pending"), "Confirmez les informations extraites.");
     const deliveryDate = answers.operations.suppliers.deliveryDate;
     if (deliveryDate && !["unknown", "not_applicable"].includes(deliveryDate)) {
       requireField("answers.operations.suppliers.deliveryTimeZone", Boolean(answers.operations.suppliers.deliveryTimeZone), "Confirmez le fuseau de la livraison.");
     }
   } else if (focus === "operations") {
-    requireField("answers.operations.service.phase", Boolean(answers.operations.service.phase), "Choisissez le moment du service.");
-    requireField("answers.operations.service.checks", answers.operations.service.checks.length > 0, "Choisissez le premier point à vérifier.");
     const nextServiceAt = answers.operations.service.nextServiceAt;
     if (nextServiceAt && !["unknown", "not_applicable"].includes(nextServiceAt)) {
       requireField("answers.operations.service.timezone", Boolean(answers.operations.service.timezone), "Confirmez le fuseau du prochain service.");
     }
-  } else if (focus === "profitability" || focus === "customer_loyalty") {
-    requireField("answers.operations.business.focus", Boolean(answers.operations.business.focus), "Choisissez le premier sujet à traiter.");
-  } else if (focus === "global" || focus === "other") {
-    requireField("answers.operations.global.startingMoment", Boolean(answers.operations.global.startingMoment || answers.operations.global.confirmedSummary), "Choisissez un moment ou confirmez votre situation.");
   }
 }
 
-export function buildOnboardingFirstResult(answers: OnboardingAnswers): OnboardingFirstResultDraft {
+export function buildOnboardingFirstResult(storedAnswers: OnboardingAnswers): OnboardingFirstResultDraft {
+  const answers = activeOnboardingAnswers(storedAnswers);
   const focus = answers.priorities.primaryFocus || "global";
   const locale = answers.interaction.locale;
   const t = (fr: string, en: string) => locale === "en" ? en : fr;

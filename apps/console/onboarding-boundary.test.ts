@@ -1,6 +1,6 @@
 import { readFile } from "node:fs/promises";
 import { describe, expect, it } from "vitest";
-import { onboardingProgressGroups } from "./lib/onboarding-storyboard";
+import { conversationSection, onboardingProgressGroups } from "./lib/onboarding-storyboard";
 
 const componentPath = new URL("./components/OnboardingFlow.tsx", import.meta.url);
 const shellPath = new URL("./components/ProductShell.tsx", import.meta.url);
@@ -12,7 +12,10 @@ describe("onboarding frontend boundaries", () => {
     const component = await readFile(componentPath, "utf8");
     expect(component).not.toMatch(/speechSynthesis|SpeechSynthesisUtterance|toggleReading/);
     expect(component).not.toContain('section !== "review" && <Composer');
-    expect(component.match(/sectionRef.current === "review" \? "final_note" : sectionRef.current/g)).toHaveLength(2);
+    expect(component.match(/applyFreeText\(next, conversationSection\(answersRef.current.presentationStep, sectionRef.current\)/g)).toHaveLength(2);
+    expect(conversationSection("review", "review")).toBe("final_note");
+    expect(conversationSection("complements", "operations")).toBe("final_note");
+    expect(conversationSection("systems", "interaction")).toBe("reservations");
     expect(component.match(/if \(sectionRef.current === "review"\) moveTo\("final_note"\)/g)).toHaveLength(2);
   });
 
@@ -68,10 +71,11 @@ describe("onboarding frontend boundaries", () => {
       "priorities",
       "establishment",
       "reservations",
+      "reservations",
       "operations",
-      "authority",
       "review",
     ]);
+    expect(onboardingProgressGroups.map(group => group.key)).toEqual(["priorities", "establishment", "systems", "connections", "complements", "review"]);
     expect(css).toContain("grid-template-columns: repeat(6, 1fr)");
     expect(css).toContain("grid-template-columns: repeat(3, minmax(0, 1fr))");
     expect(css).toContain(".final-onboarding.theme-clear");

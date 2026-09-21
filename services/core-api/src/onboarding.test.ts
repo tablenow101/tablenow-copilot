@@ -63,7 +63,7 @@ describe("final onboarding server rules", () => {
 
   it("OB-01 rejects skipped sections and accepts a fully confirmed owner flow", () => {
     const answers = validAnswers();
-    expect(() => updateConfirmedSections("establishment", "reservations", [], answers)).toThrow("ONBOARDING_INVALID_TRANSITION");
+    expect(() => updateConfirmedSections("priorities", "review", [], answers)).toThrow("ONBOARDING_INVALID_TRANSITION");
     expect(validateOnboardingCompletion("owner", userId, answers, "review", confirmableSections)).toEqual(answers);
   });
 
@@ -97,14 +97,16 @@ describe("final onboarding server rules", () => {
     expect(() => validateOnboardingSection("reservations", unconfirmedVoice)).toThrowError(/ONBOARDING_INCOMPLETE/);
   });
 
-  it("OB-06 removes hidden branch answers when the primary focus changes", () => {
+  it("OB-06 preserves hidden answers while the result uses the active priority", () => {
     const answers = validAnswers("supplier_orders");
     answers.operations.suppliers.items = [{ name: "Tomates", quantity: 12, unit: "kg" }];
     answers.priorities.primaryFocus = "team";
     answers.operations.team.friction = ["planning"];
     answers.operations.team.stations = ["kitchen"];
     const normalized = normalizeOnboardingAnswers(answers);
-    expect(normalized.operations.suppliers.items).toEqual([]);
+    expect(normalized.operations.suppliers.items).toEqual([{ name: "Tomates", quantity: 12, unit: "kg" }]);
+    expect(buildOnboardingFirstResult(normalized).kind).toBe("team");
+    expect(JSON.stringify(buildOnboardingFirstResult(normalized))).not.toContain("Tomates");
     expect(normalized.operations.team.stations).toEqual(["kitchen"]);
   });
 
@@ -175,4 +177,50 @@ describe("final onboarding server rules", () => {
     first.operations.global.confirmedSummary = "Premier scénario";
     expect(second.operations.global.confirmedSummary).toBeUndefined();
   });
+  it.each(["new", "partial", "completed"] as const)("preserves the %s profile through presentation upgrade and serialization", profile => {
+    const answers = profile === "new" ? initialOnboardingAnswers({ tenantName: "Maison", restaurantName: "Maison", address: null, phone: null, timezone: "Europe/Paris" }) : validAnswers("team");
+    if (profile !== "new") {
+      answers.operations.suppliers.items = [{ name: "Tomates historiques", quantity: 12, unit: "kg" }];
+      answers.reservations.otherMethod = "Ancienne méthode";
+      answers.operations.reservations.confirmationRuleText = "Ancienne règle";
+    }
+    const before = structuredClone(answers);
+    answers.presentationStep = profile === "completed" ? "review" : "connections";
+    answers.systems = { pointOfSale: { status: "declared", name: "Caisse du restaurant" } };
+    const restored = normalizeOnboardingAnswers(JSON.parse(JSON.stringify(answers)));
+    expect(restored).toEqual(answers);
+    const { presentationStep, systems, ...historical } = restored;
+    expect(historical).toEqual(before);
+    expect(presentationStep).toBe(profile === "completed" ? "review" : "connections");
+    expect(systems?.pointOfSale.name).toBe("Caisse du restaurant");
+  });
+
+  it("groups optional screens without inventing confirmation and retains final authority", () => {
+    const answers = validAnswers();
+    answers.interaction.preferredModeConfirmed = false;
+    answers.operations.global = {};
+    delete answers.authority.declaredJobTitle;
+    answers.authority.rulesAcknowledged = false;
+    let confirmed = updateConfirmedSections("priorities", "establishment", [], answers);
+    confirmed = updateConfirmedSections("establishment", "reservations", confirmed, answers);
+    expect(confirmed).not.toContain("interaction");
+    confirmed = updateConfirmedSections("reservations", "operations", confirmed, answers);
+    confirmed = updateConfirmedSections("operations", "review", confirmed, answers);
+    expect(confirmed).not.toContain("authority");
+    expect(() => validateOnboardingCompletion("owner", userId, answers, "review", confirmed)).toThrow("ONBOARDING_INCOMPLETE");
+    answers.authority.rulesAcknowledged = true;
+    expect(validateOnboardingCompletion("owner", userId, answers, "review", confirmed)).toEqual(answers);
+  });
+
+  it("requires a declared POS name, while absent and deferred POS remain valid", () => {
+    const answers = validAnswers();
+    answers.systems = { pointOfSale: { status: "declared" } };
+    expect(() => validateOnboardingSection("reservations", answers)).toThrow("ONBOARDING_INCOMPLETE");
+    answers.systems.pointOfSale.status = "unknown";
+    expect(() => validateOnboardingSection("reservations", answers)).not.toThrow();
+    answers.systems.pointOfSale.status = "none";
+    expect(() => validateOnboardingSection("reservations", answers)).not.toThrow();
+    expect(answers.reservations.connectionStatus).toBe("declared");
+  });
+
 });

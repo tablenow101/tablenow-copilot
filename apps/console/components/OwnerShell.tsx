@@ -50,6 +50,7 @@ import { useSession } from "@/hooks/useSession";
 import { useDictation } from "@/hooks/useDictation";
 import { ownerGreeting, summarizeToday } from "@/lib/today-overview";
 import { TodayOverview } from "./TodayOverview";
+import { OnboardingChecklist } from "./OnboardingChecklist";
 import { scopeWorkspace } from "@/lib/workspace";
 import {
   addLocalHours,
@@ -194,10 +195,12 @@ export function OwnerShell({ section }: { section: string }) {
     const version = ++refreshNumber.current;
     setRefreshing(true);
     setError("");
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 25_000);
     try {
       const [next, state] = await Promise.all([
-        api<Workspace>("/v1/workspace"),
-        api<OperatingState>("/v1/operating"),
+        api<Workspace>("/v1/workspace", { signal: controller.signal }),
+        api<OperatingState>("/v1/operating", { signal: controller.signal }),
       ]);
       if (version !== refreshNumber.current) return;
       setWorkspace(next);
@@ -212,11 +215,13 @@ export function OwnerShell({ section }: { section: string }) {
         router.replace("/login");
       else
         setError(
-          caught instanceof Error
-            ? caught.message
-            : "Impossible de charger votre établissement.",
+          controller.signal.aborted
+            ? "Les données n’ont pas pu être chargées à temps. Vérifiez votre connexion puis réessayez."
+            : "Les données de votre établissement sont momentanément indisponibles. Réessayez.",
         );
     } finally {
+      clearTimeout(timeout);
+      controller.abort();
       if (version === refreshNumber.current) setRefreshing(false);
     }
   }, [router]);
@@ -646,6 +651,7 @@ export function OwnerShell({ section }: { section: string }) {
             <TodayOverview workspace={scoped} timeZone={tz} phase={phase} busy={chatBusy}
               onPrepare={() => prepareMessage(phase === "after" ? "Prépare le prochain service à partir de nos données enregistrées. Distingue faits, informations manquantes et recommandations." : "Prépare un briefing pour notre service à partir des réservations, postes, tâches et décisions enregistrés. Distingue les données connues et les points à confirmer.")}
               onAddTask={() => openModal({ kind: "task" })} onShowPreparation={openPreparation} />
+            {scoped.restaurants[0] && <OnboardingChecklist restaurantId={scoped.restaurants[0].id} />}
             <div id="today-preparation" className="tn-today-details" tabIndex={-1} ref={preparationRef}>
             <details className="tn-service-details">
               <summary>
@@ -866,7 +872,7 @@ export function OwnerShell({ section }: { section: string }) {
         )}
         {active === "decisions" && (
           <Decisions
-            decisions={scoped.decisions}
+            workspace={scoped}
             decide={(item, status) =>
               openModal({ kind: "decision", item, status })
             }
@@ -1838,7 +1844,7 @@ function Kpi({
 function FirstPlan({ workspace }: { workspace: Workspace }) {
   const plan = workspace.firstResults[0];
   return (
-    <section className="tn-card">
+    <section className="tn-card" id="tn-first-plan">
       <div className="tn-card-head">
         <h2>Votre prochain pas</h2>
         <MessageSquareText size={20} />
@@ -1847,6 +1853,7 @@ function FirstPlan({ workspace }: { workspace: Workspace }) {
         <>
           <h3>{plan.title}</h3>
           <p>{plan.recommendations[0]}</p>
+          <small className="tn-muted">Préparé à partir de vos réponses confirmées. Ce plan ne prouve pas qu’un logiciel est connecté.</small>
           {(plan.recommendations.length > 1 ||
             plan.unknownFields.length > 0) && (
             <details className="tn-disclosure">
@@ -1887,12 +1894,14 @@ function FirstPlan({ workspace }: { workspace: Workspace }) {
   );
 }
 function Decisions({
-  decisions,
+  workspace,
   decide,
 }: {
-  decisions: Decision[];
+  workspace: Workspace;
   decide: (item: Decision, status: "approved" | "rejected" | "snoozed") => void;
 }) {
+  const decisions = workspace.decisions;
+  const restaurantId = workspace.restaurants[0]?.id || "";
   const [history, setHistory] = useState(false);
   const items = decisions.filter((d) =>
     history ? d.status !== "open" : d.status === "open",
@@ -1978,18 +1987,15 @@ function Decisions({
           </article>
         ))
       ) : (
-        <Empty
-          title={
-            history
-              ? "Pas encore de décision enregistrée"
-              : "Tout est clair pour le moment."
-          }
-          text={
-            history
-              ? "Vos arbitrages apparaîtront ici après validation."
-              : "Les demandes nécessitant votre arbitrage apparaîtront ici."
-          }
-        />
+        <section className="tn-decision-empty" aria-labelledby="decision-empty-title">
+          <ListChecks size={22} aria-hidden="true" />
+          <div>
+            <h2 id="decision-empty-title">{history ? "Pas encore d’arbitrage enregistré" : "Aucune décision enregistrée à arbitrer"}</h2>
+            <p>{history ? "Retrouvez ici les propositions que vous avez validées, refusées ou reportées." : "Cette liste vide ne signifie pas que votre activité a été entièrement évaluée. Renseignez votre fonctionnement pour préparer la prochaine étape."}</p>
+            <Link className="tn-secondary" href={`/onboarding?restaurantId=${restaurantId}&section=reservations`}>Faire le point sur mes outils <ArrowRight size={16} /></Link>
+            {workspace.firstResults.length > 0 && <Link className="tn-link" href="/dashboard#tn-first-plan">Retrouver mon premier plan <ArrowRight size={16} /></Link>}
+          </div>
+        </section>
       )}
     </>
   );

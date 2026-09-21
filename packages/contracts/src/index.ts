@@ -93,6 +93,8 @@ export const onboardingSectionOrder = [
   "final_note",
   "review",
 ] as const;
+export const onboardingPresentationSteps = ["priorities", "establishment", "systems", "connections", "complements", "review"] as const;
+export type OnboardingPresentationStep = (typeof onboardingPresentationSteps)[number];
 export const onboardingSectionSchema = z.enum(onboardingSectionOrder);
 export type OnboardingSection = z.infer<typeof onboardingSectionSchema>;
 
@@ -125,6 +127,14 @@ const unknownableDate = z.union([isoDate, z.literal("unknown"), z.literal("not_a
 const unknownableInstant = z.union([isoInstant, z.literal("unknown"), z.literal("not_applicable")]).optional();
 
 export const onboardingAnswersSchema = z.object({
+  // Presentation metadata never replaces or reinterprets historical answers.
+  presentationStep: z.enum(onboardingPresentationSteps).optional(),
+  systems: z.object({
+    pointOfSale: z.object({
+      status: z.enum(["declared", "none", "unknown"]),
+      name: optionalText(120),
+    }).strict(),
+  }).strict().optional(),
   establishment: z.object({
     query: optionalText(240),
     identificationMode: z.enum(["public_search", "manual"]).optional(),
@@ -275,9 +285,8 @@ export const onboardingAnswersSchema = z.object({
   if (authoritativeSystem !== "unknown" && !declaredSystems.has(authoritativeSystem)) {
     context.addIssue({ code: "custom", path: ["reservations", "authoritativeSystem"], message: "La source de référence doit être l'une des méthodes déclarées." });
   }
-  if (answers.operations.reservations.confirmationRuleStatus !== "yes" && answers.operations.reservations.confirmationRuleText) {
-    context.addIssue({ code: "custom", path: ["operations", "reservations", "confirmationRuleText"], message: "Une règle détaillée exige une réponse Oui." });
-  }
+  // A hidden historical rule is retained. The active projection excludes it
+  // unless its current status is yes; storing it does not activate the rule.
   const confirmedIds = new Set(answers.finalNote.statements.filter((statement) => statement.status === "confirmed").map((statement) => statement.id));
   if (answers.finalNote.confirmedStatementIds.some((id) => !confirmedIds.has(id))) {
     context.addIssue({ code: "custom", path: ["finalNote", "confirmedStatementIds"], message: "Seule la version actuelle d'une proposition confirmée peut être référencée." });

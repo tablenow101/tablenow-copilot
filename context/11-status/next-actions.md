@@ -1,3 +1,11 @@
+# Parcours guidé — suite du 21 septembre 2026
+
+1. Publier le point de contrôle sur la branche Preview existante après les tests ; aucun commit final de clôture de lot.
+2. Vérifier le commit et le statut READY servis par `preview.tablenow.io`.
+3. Jouer les changements visibles avec le compte existant, conserver les captures avant/après et tester sauvegarde/reprise sans changer ses réponses métier.
+4. Laisser au propriétaire la saisie privée et l’essai du parcours neuf sur son téléphone. Distinguer résultats du navigateur redimensionné et appareil physique.
+5. Présenter preuves et limites, puis attendre la validation produit ; aucun lot 2 final, lot 3, main ou production.
+
 # Prochaine vérification — pilote Aujourd’hui, 19 septembre 2026
 
 Terminer la vérification déployée des deux finitions de barre sur `product/onboarding-owner`. Le parcours ciblé cockpit, message persistant, action et document est vérifié ; restent la recette globale, le micro réel et le service IA non configuré. Présenter les preuves et limites au propriétaire avant toute clôture du lot. Aucun passage vers main ni vers la production.

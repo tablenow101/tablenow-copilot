@@ -57,7 +57,7 @@ export function mergeOnboardingAnswers(input: OnboardingAnswers): OnboardingAnsw
 export function setPrimaryFocus(answers: OnboardingAnswers, focus: PrimaryFocus): boolean {
   const changedBranch = answers.priorities.primaryFocus !== undefined && answers.priorities.primaryFocus !== focus;
   answers.priorities.primaryFocus = focus;
-  if (changedBranch) answers.operations = defaultOperations();
+  // Switching the visible priority must not erase previously declared answers.
   return changedBranch;
 }
 
@@ -78,8 +78,7 @@ export function setReservationMethods(
 ): void {
   answers.reservations.methods = methods.includes("none") ? ["none"] : methods;
   if (answers.reservations.methods.includes("none")) answers.reservations.providers = [];
-  if (!answers.reservations.methods.includes("calendar")) delete answers.reservations.calendarProvider;
-  if (!answers.reservations.methods.includes("other")) delete answers.reservations.otherMethod;
+  // Keep historical details so restoring a method restores its answers.
   reconcileReservationReference(answers);
 }
 
@@ -243,20 +242,21 @@ export function statementsFrom(text: string, source: StatementSource): Onboardin
 export function sectionValid(section: SectionKey, answers: OnboardingAnswers): boolean {
   if (section === "establishment") return Boolean(answers.establishment.restaurantName?.trim() && answers.establishment.cityCountry?.trim() && answers.establishment.identityConfirmed);
   if (section === "priorities") return Boolean(answers.priorities.primaryFocus) && (answers.priorities.scope === "global" || Boolean(answers.priorities.timeConsumers.length || answers.priorities.otherText?.trim()));
-  if (section === "interaction") return answers.interaction.preferredModeConfirmed;
+  if (section === "interaction") return true; // Preference can be completed later.
   if (section === "reservations") {
     const references = reservationReferences(answers);
-    const pendingProviders = inferReservationProviders(answers.reservations.otherMethod || "")
+    const pendingProviders = inferReservationProviders(answers.reservations.methods.includes("other") ? answers.reservations.otherMethod || "" : "")
       .filter((provider) => !answers.reservations.providers.includes(provider));
-    return Boolean(answers.reservations.methods.length || answers.reservations.providers.length)
+    return (answers.systems?.pointOfSale.status !== "declared" || Boolean(answers.systems.pointOfSale.name?.trim()))
+      && Boolean(answers.reservations.methods.length || answers.reservations.providers.length)
       && (!answers.reservations.providers.includes("other") || Boolean(answers.reservations.otherProvider?.trim()))
       && (!answers.reservations.methods.includes("other") || Boolean(answers.reservations.otherMethod?.trim()))
       && (!answers.reservations.methods.includes("calendar") || Boolean(answers.reservations.calendarProvider))
       && pendingProviders.length === 0
       && (references.length <= 1 || answers.reservations.authoritativeSystem !== "unknown");
   }
-  if (section === "operations") return operationValid(answers);
-  if (section === "authority") return Boolean(answers.authority.declaredJobTitle && answers.authority.rulesAcknowledged);
+  if (section === "operations") return true; // Optional details remain editable in Complements.
+  if (section === "authority") return answers.authority.rulesAcknowledged;
   return true;
 }
 
