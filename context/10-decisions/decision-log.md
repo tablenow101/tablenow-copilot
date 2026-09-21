@@ -1,3 +1,5 @@
+- 2026-09-21 — Correctif de conservation : la confirmation d’une préférence vient du choix explicite, jamais du franchissement d’une ancienne section ou de la finalisation. Deux appels corrigés, trois régressions reproduites puis vérifiées ; aucun nouveau choix produit ni migration.
+
 # Journal des décisions
 
 - 2026-09-21 — Le propriétaire autorise une correction du parcours réel en Preview : création, TOTP expliqué sur un seul téléphone sans affaiblir la politique, configuration canonique et première valeur utile. États vides honnêtes, checklist issue des réponses, connaissances générales distinguées des données du restaurant, fichiers stockés distingués d'une analyse non disponible. Préserver fonctions et réponses ; aucune promotion. Mémoire canonique 98 version 6, relue. Rapport : `docs/qa/parcours-guide-2026-09-21.md`.

@@ -1,6 +1,6 @@
 # Parcours guidé — reprise du 21 septembre 2026
 
-Statut : en cours, non livré. Branche `product/onboarding-owner`, base `543c47fd2451eaca7716c3c3e33e0e579511e7c4`. Référence distante de `main` : `665ca205111c7937b1e7507137e0af2b3c161c54`. Aucune promotion autorisée. Le 21 septembre, Vercel confirme que `preview.tablenow.io` sert exactement cette base, déploiement `dpl_ALSusSfUDgSrxCo3X9B9h7UXeHrL`, READY. Ce statut ne certifie pas le parcours.
+Statut : corrections déployées, recette partielle ; aucun lot clôturé. Branche `product/onboarding-owner`, base `543c47fd2451eaca7716c3c3e33e0e579511e7c4`. Référence distante de `main` : `665ca205111c7937b1e7507137e0af2b3c161c54`. Aucune promotion autorisée. Le 21 septembre, Vercel confirme que `preview.tablenow.io` sert exactement cette base, déploiement `dpl_ALSusSfUDgSrxCo3X9B9h7UXeHrL`, READY. Ce statut ne certifie pas le parcours.
 
 ## Restauration ciblée vérifiée
 
@@ -32,7 +32,7 @@ Le contrôle Git initial trouvait 60 fichiers suivis absents. Aucun checkout par
 - TOTP et bascule vers une application sur un téléphone physique : `NOT_RUN`.
 - Authentification Google/e-mail et protections : tests HTTP/PGlite réussis ; nouveau parcours réel déployé encore `NOT_RUN`.
 - Présentation 8 → 6 sans migration SQL : implémentée et testée localement ; conservation vérifiée sur trois profils.
-- Déploiement des corrections : non effectué.
+- Premier déploiement des corrections : `3436270e56d145283245275138725dc8f59ae44c`, `dpl_5GW4j4sXwTu7VbWSZLB3NoYygQKa`, READY sur Preview. Correctif de préférence en préparation.
 
 Aucune clôture de lot ni certification produit ne découle de ce rapport. Les décisions de configuration progressive ont été enregistrées et relues dans la mémoire canonique : enregistrement 99, version 7 du design system, succédant à 98.
 
@@ -82,3 +82,11 @@ Le conseil général de briefing reprend une pratique d’un [guide professionne
 - Les quatre tests de persistance repository incluent en plus le refus de propositions non confirmées lors du passage groupé vers la synthèse.
 - La continuation en lecture possède un budget de 30 lectures/15 min ; les limites de soumission des codes, les cinq essais par défi, le verrouillage du compte et l’anti-rejeu restent inchangés.
 - Limite résiduelle connue : si la réponse du premier MFA est perdue après création de la session, les codes de secours à usage unique ne peuvent pas être réaffichés. L’interface confirme la connexion, indique cette perte et n’invente pas leur récupération. L’application TOTP reste active.
+
+## Correctif de reprise des préférences
+
+La relecture PGlite reproduit trois défauts : choix vocal explicite perdu, préférence reportée confirmée sans choix, préférence utilisateur antérieure écrasée à la finalisation. Cause : la sauvegarde dépendait du franchissement de l’ancienne section `interaction`, et la finalisation forçait toujours sa confirmation. Les deux écritures utilisent désormais `preferredModeConfirmed`, issu du choix explicite. Les trois nouveaux tests échouent avant correction et réussissent après ; les sept tests de persistance passent (5,79 s), ainsi que le typecheck API. Aucune migration ni modification d’enrôlement.
+
+## Premiers essais déployés
+
+Sur `3436270`, session existante : cockpit, conseil général avec source et limites, checklist issue des réponses (Zenchef déclaré, connexion non vérifiée, caisse à préciser). Préparer le briefing remplit la barre sans envoyer ; clic explicite sur la flèche produit une réponse, conservée après rechargement. Limite produit visible : synthèse déterministe, IA non configurée ; cela ne valide pas un Advisor conversationnel complet. Essais neuf/physique restent à effectuer.

@@ -174,4 +174,53 @@ describe("onboarding persistence on real PostgreSQL", () => {
     expect(reloaded.revision).toBe(current.revision);
   });
 
+  it("persists an explicit voice preference selected in complements before leaving that step", async () => {
+    await database`update users set preferred_interaction='text',interaction_configured=false,spoken_replies=false where id=${actor.userId!}`;
+    let current = await newProfile("Choix vocal explicite");
+    const answers = completeAnswers(current);
+    answers.interaction.preferredModeConfirmed = false;
+    for (const section of ["establishment", "reservations", "operations"] as const) {
+      current = await save(current, answers, section);
+    }
+    expect(current.confirmedSections).not.toContain("interaction");
+    const chosen = structuredClone(current.answers);
+    chosen.presentationStep = "complements";
+    chosen.interaction = { ...chosen.interaction, preferredMode: "voice", preferredModeConfirmed: true, spokenReplies: true };
+    await save(current, chosen, "operations");
+    const resumed = await repository.readOnboardingDraft(actor, current.restaurantId);
+    expect(resumed.answers.presentationStep).toBe("complements");
+    expect(resumed.answers.interaction).toEqual(chosen.interaction);
+    expect(resumed.confirmedSections).not.toContain("interaction");
+  });
+
+  it("completes a deferred interaction preference without marking the user configured", async () => {
+    await database`update users set preferred_interaction='text',interaction_configured=false,spoken_replies=false where id=${actor.userId!}`;
+    const initial = await newProfile("Choix d’interaction reporté");
+    const answers = completeAnswers(initial);
+    answers.interaction = { ...answers.interaction, preferredMode: "mixed", preferredModeConfirmed: false, spokenReplies: true };
+    const reviewed = await advanceToReview(initial, answers);
+    expect(reviewed.confirmedSections).not.toContain("interaction");
+    await complete(reviewed);
+    const [preferences] = await database<{ configured: boolean; mode: string; spoken: boolean }[]>`select interaction_configured as configured,preferred_interaction as mode,spoken_replies as spoken from users where id=${actor.userId!}`;
+    expect(preferences).toEqual({ configured: false, mode: "text", spoken: false });
+    const resumed = await repository.readOnboardingDraft(actor, initial.restaurantId);
+    expect(resumed.status).toBe("completed");
+    expect(resumed.answers.interaction).toMatchObject({ preferredModeConfirmed: false, preferredMode: "text", spokenReplies: false });
+  });
+
+  it("retains the previous user preference when a later draft has no confirmed choice", async () => {
+    await database`update users set preferred_interaction='voice',interaction_configured=true,spoken_replies=true where id=${actor.userId!}`;
+    const initial = await newProfile("Préférence antérieure conservée");
+    const answers = completeAnswers(initial);
+    answers.interaction = { ...answers.interaction, preferredMode: "text", preferredModeConfirmed: false, spokenReplies: false };
+    const reviewed = await advanceToReview(initial, answers);
+    const afterSave = await repository.readOnboardingDraft(actor, initial.restaurantId);
+    expect(afterSave.answers.interaction).toMatchObject({ preferredMode: "voice", preferredModeConfirmed: true, spokenReplies: true });
+    await complete(reviewed);
+    const afterCompletion = await repository.readOnboardingDraft(actor, initial.restaurantId);
+    expect(afterCompletion.answers.interaction).toEqual(initial.answers.interaction);
+    const [preferences] = await database<{ configured: boolean; mode: string; spoken: boolean }[]>`select interaction_configured as configured,preferred_interaction as mode,spoken_replies as spoken from users where id=${actor.userId!}`;
+    expect(preferences).toEqual({ configured: true, mode: "voice", spoken: true });
+  });
+
 });

@@ -269,7 +269,7 @@ export class PlatformRepository {
           provenance, first_result_id, completed_at, updated_at
       `;
       if (!saved) throw new Error("NOT_FOUND");
-      await saveUserInteraction(transaction, actor.userId, answers.interaction, confirmedSections.includes("interaction"));
+      await saveUserInteraction(transaction, actor.userId, answers.interaction, answers.interaction.preferredModeConfirmed);
       await this.audit(transaction, actor, "onboarding.draft_saved", "onboarding_draft", saved.id, { revision: saved.revision, section: input.currentSection });
       return onboardingDraftView(saved, restaurants, answers.interaction);
     });
@@ -345,7 +345,7 @@ export class PlatformRepository {
           service_goals = excluded.service_goals, operating_setup = excluded.operating_setup,
           completed_at = now(), updated_at = now()
       `;
-      await saveUserInteraction(transaction, actor.userId!, answers.interaction, true);
+      await saveUserInteraction(transaction, actor.userId!, answers.interaction, answers.interaction.preferredModeConfirmed);
       await transaction`update tenants set onboarding_complete = true where id = ${actor.tenantId}`;
       await this.audit(transaction, actor, "onboarding.completed", "tenant", actor.tenantId);
       return { completed: true, firstResultId: result.id, idempotent: false };

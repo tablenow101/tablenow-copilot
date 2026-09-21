@@ -1,7 +1,7 @@
 # Porte de recette du 21 septembre 2026
 
 - Dépôt restauré sans perte : le blocage des 60 fichiers absents est levé.
-- Corrections locales du parcours guidé préparées et compilées ; recette de la nouvelle Preview en cours.
+- Corrections du parcours guidé déployées sur Preview ; correction complémentaire de reprise des préférences testée localement. Recette complète encore ouverte.
 - Parcours complet d’un nouveau compte, saisie TOTP et changement d’application sur un téléphone physique : non exécutés dans cette reprise. La saisie privée reste au propriétaire ; aucun contournement du MFA.
 - Connecteurs externes non activés dans l’onboarding ; déclaration distincte de connexion. Documents stockés, analyse non disponible.
 - Validation produit et promotion restent bloquées jusqu’aux preuves complètes et à l’accord explicite. Aucun lot clôturé.
