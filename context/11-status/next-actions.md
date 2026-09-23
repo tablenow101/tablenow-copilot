@@ -1,5 +1,9 @@
 # Parcours guidé — suite du 21 septembre 2026
 
+## Authentification unifiée Preview — 23 septembre 2026
+
+La présentation et les contrats déployés sont vérifiés sur `265d7595` : une seule entrée, Google puis e-mail, code à six chiffres et nom demandé seulement pour une nouvelle adresse vérifiée. Ne plus réintroduire mot de passe, TOTP, QR ou codes de secours dans ce parcours. La prochaine recette privée utile est unique : réception réelle du code, compte existant, nouvelle adresse puis Google. Elle nécessite les valeurs privées du propriétaire et ne doit pas être remplacée par une nouvelle refonte. Après validation, inventorier les branches distantes puis soumettre la liste exacte à supprimer ; conserver `main` et `product/onboarding-owner` jusque-là.
+
 1. Laisser au propriétaire la saisie privée pour une nouvelle inscription sur `preview.tablenow.io/register`, sans partager codes ni QR.
 2. Vérifier réception réelle du mail, configuration TOTP sur un seul téléphone, changement d’application et reprise.
 3. Sur ce nouveau compte, poursuivre priorités → établissement → systèmes → connexions reportables → compléments → synthèse → premier résultat, puis déconnexion/reconnexion.
