@@ -88,24 +88,26 @@
   animation: tn-auth-ambient 12s ease-in-out infinite alternate;
   pointer-events: none;
 }
-.tn-account .tn-auth-header { position: relative; z-index: 1; margin: 0 0 24px; }
-.tn-account .tn-brand { width: clamp(170px, 42vw, 210px); }
+.tn-account .tn-auth-brand-row { display: grid; grid-template-columns: 48px minmax(0, 1fr) 48px; align-items: center; width: 100%; margin: 0 0 30px; }
+.tn-account .tn-brand { justify-self: center; width: min(100%, 190px); margin: 0; }
 .tn-account .tn-auth-card {
   position: relative;
   z-index: 1;
   display: flex;
-  flex: 1;
   flex-direction: column;
   width: min(100%, 420px);
   min-width: 0;
-  padding: 0;
-  border: 0;
-  background: transparent;
-  box-shadow: none;
+  padding: clamp(26px, 6vw, 40px);
+  border: 1px solid color-mix(in srgb, var(--tn-line) 82%, transparent);
+  border-radius: clamp(24px, 7vw, 32px);
+  background: color-mix(in srgb, var(--tn-surface) 72%, transparent);
+  box-shadow: 0 30px 90px #02051040;
+  backdrop-filter: blur(28px) saturate(130%);
 }
-.tn-account .tn-auth-card h1 { margin: 0 0 12px; font-size: clamp(30px, 8vw, 40px); line-height: 1.08; font-weight: 650; letter-spacing: -.04em; text-align: center; }
-.tn-account .tn-auth-card > p { min-height: 48px; margin: 0; color: var(--tn-muted); font-size: 16px; line-height: 1.5; font-weight: 400; text-align: center; overflow-wrap: anywhere; }
+.tn-account .tn-auth-card h1 { margin: 0 0 12px; font-size: clamp(28px, 6vw, 34px); line-height: 1.08; font-weight: 650; letter-spacing: -.04em; text-align: center; }
+.tn-account .tn-auth-card > p { margin: 0; color: var(--tn-muted); font-size: 16px; line-height: 1.5; font-weight: 400; text-align: center; overflow-wrap: anywhere; }
 .tn-account .tn-auth-card form { display: flex; flex-direction: column; gap: 16px; margin-top: 28px; animation: tn-auth-stage-in .32s cubic-bezier(.22, 1, .36, 1); }
+.tn-account[data-stage="credentials"] .tn-auth-card form { margin-top: 8px; }
 .tn-account .tn-field { min-width: 0; margin: 0; }
 .tn-account .tn-field > span { margin-bottom: 8px; color: var(--tn-text); font-size: 14px; line-height: 1.4; font-weight: 500; letter-spacing: 0; text-transform: none; }
 .tn-account input { width: 100%; min-width: 0; min-height: 54px; border: 1px solid var(--tn-line); border-radius: 18px; padding: 15px 17px; background: var(--tn-raised); color: var(--tn-text); font-size: 16px; font-weight: 400; line-height: 22px; box-shadow: 0 10px 30px #03061114; backdrop-filter: blur(18px); transition: border-color .18s, background .18s, box-shadow .18s; }
@@ -119,14 +121,14 @@
 .tn-account .tn-account-submit:hover:not(:disabled) { background: linear-gradient(105deg, #c9f33a, var(--tn-brand-accent)); filter: brightness(1.04); box-shadow: 0 18px 42px #a9dc2436; }
 .tn-account .tn-account-submit:active:not(:disabled), .tn-account-social button:active:not(:disabled), .tn-account .tn-account-back:active:not(:disabled) { transform: scale(.985); }
 .tn-theme-switch { position: absolute; z-index: 2; right: max(18px, env(safe-area-inset-right)); top: max(18px, env(safe-area-inset-top)); width: 48px; min-height: 48px; border: 1px solid var(--tn-line); border-radius: 50%; background: color-mix(in srgb, var(--tn-raised) 80%, transparent); color: var(--tn-text); backdrop-filter: blur(16px); }
-.tn-account .tn-account-back { display: grid; place-items: center; align-self: flex-start; width: 48px; height: 48px; margin: 0 0 20px; padding: 0; border: 1px solid var(--tn-line); border-radius: 50%; background: var(--tn-raised); color: var(--tn-text); transition: background .16s, transform .12s; }
+.tn-account .tn-account-back { display: grid; place-items: center; width: 48px; height: 48px; margin: 0; padding: 0; border: 1px solid var(--tn-line); border-radius: 50%; background: var(--tn-raised); color: var(--tn-text); transition: background .16s, transform .12s; }
 .tn-code-entry { position: relative; }
 .tn-code-cells { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: clamp(6px, 2vw, 10px); }
 .tn-code-cells > span { display: grid; place-items: center; height: clamp(48px, 12vw, 54px); border-radius: 14px; background: var(--tn-raised); box-shadow: inset 0 0 0 1px var(--tn-line), 0 10px 28px #03061114; font-size: 21px; line-height: 1; font-variant-numeric: tabular-nums; transition: box-shadow .16s, background .16s; }
 .tn-account .tn-account-code { position: absolute; inset: 0; width: 100%; height: 100%; min-height: 0; padding: 0; border: 0; border-radius: 0; opacity: 0; cursor: text; }
 .tn-code-entry:focus-within .tn-code-cells > span[data-active="true"] { box-shadow: inset 0 0 0 2px var(--tn-blue), 0 0 0 4px color-mix(in srgb, var(--tn-blue) 16%, transparent); }
 .tn-code-entry:has(input[aria-invalid="true"]) .tn-code-cells > span { box-shadow: inset 0 0 0 1px var(--tn-red); }
-.tn-account-social { display: grid; gap: 12px; margin-top: 22px; }
+.tn-account-social { display: grid; gap: 14px; margin-top: 26px; }
 .tn-account-divider { display: flex; align-items: center; gap: 12px; margin-bottom: 2px; color: var(--tn-muted); font-size: 12px; }
 .tn-account-divider::before, .tn-account-divider::after { content: ""; flex: 1; height: 1px; background: var(--tn-line); }
 .tn-account-social button { display: flex; align-items: center; justify-content: center; gap: 10px; width: 100%; min-height: 54px; border: 1px solid var(--tn-line); border-radius: 999px; background: var(--tn-raised); color: var(--tn-text); padding: 12px 18px; font-size: 14px; font-weight: 500; box-shadow: 0 10px 30px #03061114; transition: background .16s, border-color .16s, transform .12s; }
@@ -135,9 +137,7 @@
 .tn-account-resend { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 0 4px; margin-top: 18px; color: var(--tn-muted); font-size: 13px; text-align: center; }
 .tn-account .tn-link { min-height: 44px; font-weight: 550; font-size: 13px; color: var(--tn-text); }
 .tn-account .tn-link:disabled { color: var(--tn-muted); }
-.tn-account .tn-auth-card > .tn-auth-access { margin-top: auto; padding-top: 40px; font-size: 13px !important; }
-.tn-account .tn-auth-access a { color: var(--tn-text); font-weight: 600; }
-.tn-account .tn-auth-footer { position: relative; z-index: 1; flex-wrap: wrap; gap: 8px; margin: 24px 0 0; text-align: center; }
+.tn-account .tn-auth-footer { position: relative; z-index: 1; flex-wrap: wrap; gap: 8px; margin: 28px 0 0; font-size: 12px; text-align: center; }
 .tn-account .tn-error { margin: 0; padding: 12px 14px; border: 1px solid color-mix(in srgb, var(--tn-red) 45%, transparent); border-radius: 14px; background: color-mix(in srgb, var(--tn-red) 9%, transparent); color: var(--tn-red); font-size: 13px; line-height: 1.5; }
 .tn-account a { text-underline-offset: 4px; }
 .tn-account a:hover { text-decoration: underline; }
@@ -146,12 +146,11 @@
 @keyframes tn-auth-ambient { from { transform: translate(-54%, -23%) scale(.92); opacity: .72; } to { transform: translate(-46%, -16%) scale(1.08); opacity: 1; } }
 @media (min-width: 768px) {
   .tn-account { justify-content: center; padding-block: max(40px, env(safe-area-inset-top)) max(28px, env(safe-area-inset-bottom)); }
-  .tn-account .tn-auth-header { margin-bottom: 20px; }
-  .tn-account .tn-auth-card { flex: none; min-height: 550px; padding: 40px; border: 1px solid color-mix(in srgb, var(--tn-line) 82%, transparent); border-radius: 32px; background: color-mix(in srgb, var(--tn-surface) 68%, transparent); box-shadow: 0 30px 90px #0205104d; backdrop-filter: blur(28px) saturate(130%); }
+  .tn-account .tn-auth-card { flex: none; }
 }
 @media (max-width: 370px) { .welcome-onboarding .onboarding-actions .primary-button { width: auto; flex: 1 1 0; } }
 @media (max-width: 359px) { .tn-account { padding-inline: 16px; } .tn-code-cells { gap: 5px; } }
-@media (max-height: 650px) and (orientation: landscape) { .tn-account { padding-block: 18px; } .tn-account .tn-auth-header { margin-bottom: 12px; } .tn-account .tn-auth-card > .tn-auth-access { padding-top: 24px; } }
+@media (max-height: 650px) and (orientation: landscape) { .tn-account { padding-block: 18px; } .tn-account .tn-auth-brand-row { margin-bottom: 18px; } }
 @media (prefers-reduced-motion: reduce) { .tn-account::before, .tn-account .tn-auth-card form { animation: none; } }
 .final-onboarding .onboarding-composer { background: transparent; border: 0; padding: 8px 0; box-shadow: none; }
 .final-onboarding .tn-conversation-input { display: block; width: 100%; }

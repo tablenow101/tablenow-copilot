@@ -9,7 +9,7 @@ import { registerGoogleRoutes } from "./google-routes.js";
 import { registerAccountRecoveryRoutes } from "./account-recovery-routes.js";
 import type { GoogleExchange } from "./google-identity.js";
 
-type Payload = { purpose: "signup" | "reset" | "login" | "google"; googleSubject?: string; passwordHash?: string; passwordless?: boolean; name?: string; userId?: string; tenantId?: string; secret?: string; rememberMe?: boolean };
+type Payload = { purpose: "signup" | "reset" | "login" | "google" | "access"; googleSubject?: string; passwordHash?: string; passwordless?: boolean; name?: string; userId?: string; tenantId?: string; secret?: string; rememberMe?: boolean };
 type Challenge = { token_hash: string; email: string; stage: string; payload: string; proof_hash: string | null; attempts: number; expires_at: Date | string; expires_in_seconds?: number };
 type ChallengeState = Challenge & { expired: boolean; unavailable: boolean };
 const emailSchema = z.string().trim().toLowerCase().email().max(254);
@@ -73,6 +73,10 @@ export async function registerAccountRoutes(app: FastifyInstance, database: Data
     const input = z.object({ email: emailSchema, password: passwordSchema.optional(), name: z.string().trim().min(1).max(100), rememberMe: z.boolean().default(true) }).strict().parse(request.body);
     return emailRequest(reply, input.email, { purpose: "signup", rememberMe: input.rememberMe, name: input.name,
       ...(input.password ? { passwordHash: await passwordHash(input.password) } : { passwordless: true }) });
+  });
+  app.post("/v1/account/access", rate, async (request, reply) => {
+    const input = z.object({ email: emailSchema }).strict().parse(request.body);
+    return emailRequest(reply, input.email, { purpose: "access", rememberMe: true, passwordless: true });
   });
   app.post("/v1/account/reset", rate, async (request, reply) => {
     const input = z.object({ email: emailSchema, password: passwordSchema, rememberMe: z.boolean().default(true) }).strict().parse(request.body);
@@ -147,7 +151,7 @@ export async function registerAccountRoutes(app: FastifyInstance, database: Data
     if (!token) return reply.code(204).send();
     const [row] = await database<ChallengeState[]>`select *,expires_at<=now() as expired,(consumed_at is not null or attempts>=5) as unavailable,greatest(0,ceil(extract(epoch from (expires_at-now()))))::int as expires_in_seconds from account_challenges where token_hash=${digest(token)}`;
     if (!row) return reply.code(204).send();
-    if (row.unavailable || !["email", "enroll", "mfa"].includes(row.stage)) return unavailable(reply);
+    if (row.unavailable || !["email", "profile", "enroll", "mfa"].includes(row.stage)) return unavailable(reply);
     if (row.expired) return expired(reply);
     const payload = unseal<Payload>(row.payload, secret);
     // Reading a challenge never rotates its token, enrollment key or expiration.
@@ -181,6 +185,10 @@ export async function registerAccountRoutes(app: FastifyInstance, database: Data
         await tx`select pg_advisory_xact_lock(hashtext(${row.email}))`;
         const [existingUser] = await tx<{ id: string; status: string }[]>`select id,status from users where email=${row.email}`;
         if (existingUser?.status && existingUser.status !== "active") return null;
+        if (payload.purpose === "access" && !existingUser) {
+          const [advanced] = await tx<{ expires_at: Date | string; expires_in_seconds: number }[]>`update account_challenges set stage='profile',attempts=0 where token_hash=${row.token_hash} returning expires_at,greatest(0,ceil(extract(epoch from (expires_at-now()))))::int as expires_in_seconds`;
+          return { stage: "profile" as const, email: row.email, expiresAt: advanced!.expires_at, expiresInSeconds: Number(advanced!.expires_in_seconds) };
+        }
         if (payload.purpose === "login" && !existingUser) {
           await tx`update account_challenges set consumed_at=now() where token_hash=${row.token_hash}`;
           return null;
@@ -234,8 +242,54 @@ export async function registerAccountRoutes(app: FastifyInstance, database: Data
       return { authenticated: true };
     }
     if (result && "outcome" in result) return result.outcome === "expired" ? expired(reply) : invalidCode(reply);
-    if (result) reply.setCookie("tn_auth", token, cookieOptions).header("Cache-Control", "no-store");
+    if (result) reply.setCookie("tn_auth", token, { ...cookieOptions, maxAge: "expiresInSeconds" in result ? result.expiresInSeconds : challengeMaxAgeSeconds }).header("Cache-Control", "no-store");
     return result || unavailable(reply);
+  });
+  app.post("/v1/account/complete-profile", rate, async (request, reply) => {
+    const { name } = z.object({ name: z.string().trim().min(1).max(100) }).strict().parse(request.body);
+    const token = request.cookies.tn_auth;
+    if (!token) return unavailable(reply);
+    const result = await database.begin(async tx => {
+      const [row] = await tx<ChallengeState[]>`select *,expires_at<=now() as expired,(consumed_at is not null or attempts>=5) as unavailable from account_challenges where token_hash=${digest(token)} and stage='profile' for update`;
+      if (!row || row.unavailable) return null;
+      if (row.expired) return { outcome: "expired" as const };
+      const payload = unseal<Payload>(row.payload, secret);
+      if (payload.purpose !== "access") return null;
+      await tx`select pg_advisory_xact_lock(hashtext(${row.email}))`;
+      const [existingUser] = await tx<{ id: string; status: string }[]>`select id,status from users where email=${row.email}`;
+      if (existingUser?.status && existingUser.status !== "active") return null;
+      let userId = existingUser?.id;
+      let tenantId: string | undefined;
+      let created = false;
+      if (!userId) {
+        const [user] = await tx<{ id: string }[]>`insert into users(email,display_name) values (${row.email},${name}) returning id`;
+        userId = user!.id;
+        const [tenant] = await tx<{ id: string }[]>`insert into tenants(name,slug) values ('Mon établissement',${`restaurant-${crypto.randomUUID()}`}) returning id`;
+        tenantId = tenant!.id;
+        await tx`insert into memberships(tenant_id,user_id,role) values (${tenantId},${userId},'owner')`;
+        await tx`select set_config('app.tenant_id',${tenantId},true)`;
+        await tx`insert into restaurants(tenant_id,name,slug,is_demo) values (${tenantId},'Mon établissement','principal',false)`;
+        created = true;
+      } else {
+        const [membership] = await tx<{ tenant_id: string }[]>`select m.tenant_id from memberships m join tenants t on t.id=m.tenant_id and t.status in ('pilot','active') where m.user_id=${userId} order by m.created_at limit 1`;
+        if (!membership) return null;
+        tenantId = membership.tenant_id;
+      }
+      await tx`update account_challenges set consumed_at=now() where email=${row.email} and consumed_at is null`;
+      await tx`update otp_challenges set consumed_at=now() where email=${row.email} and consumed_at is null`;
+      const sessionToken = randomToken(32), csrfToken = randomToken(24);
+      const maxAgeSeconds = config.SESSION_TTL_HOURS * 3600;
+      await tx`insert into sessions(token_hash,user_id,tenant_id,csrf_hash,ip_hash,user_agent,expires_at) values (${digest(sessionToken)},${userId},${tenantId},${digest(csrfToken)},${digest(request.ip)},${request.headers['user-agent'] || null},${new Date(Date.now()+maxAgeSeconds*1000)})`;
+      await tx`select set_config('app.tenant_id',${tenantId},true)`;
+      await tx`insert into privacy_preferences(tenant_id,user_id) values (${tenantId},${userId}) on conflict do nothing`;
+      await tx`insert into audit_events(tenant_id,actor_id,actor_type,action,resource_type,resource_id) values (${tenantId},${userId},'user',${created ? 'auth.registered' : 'auth.email_verified'},'user',${userId})`;
+      return { outcome: "authenticated" as const, sessionToken, csrfToken, maxAgeSeconds, rememberMe: true };
+    });
+    if (result?.outcome === "expired") return expired(reply);
+    if (!result || !("sessionToken" in result)) return unavailable(reply);
+    setSessionCookies(reply, result);
+    reply.clearCookie("tn_auth", { path: "/" });
+    return { authenticated: true };
   });
   app.post("/v1/account/verify-mfa", rate, async (request, reply) => {
     const { code } = proofSchema.parse(request.body);

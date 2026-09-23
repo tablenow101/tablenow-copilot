@@ -58,6 +58,55 @@ afterAll(async () => {
 });
 
 describe("simple account access", () => {
+  it("uses one email entry point and signs an existing owner in after the code", async () => {
+    const email = "unified-returning@tablenow.test";
+    const signup = await post("account/signup", { email, name: "Unified Returning", rememberMe: true });
+    expect((await post("account/verify-email", { code: latestCode(email) }, cookies(signup))).statusCode).toBe(200);
+
+    const access = await post("account/access", { email });
+    expect(access.statusCode, access.body).toBe(202);
+    expect(access.json()).toMatchObject({ stage: "email", expiresAt: expect.any(String), expiresInSeconds: expect.any(Number) });
+
+    const verified = await post("account/verify-email", { code: latestCode(email) }, cookies(access));
+    expect(verified.statusCode, verified.body).toBe(200);
+    expect(verified.json()).toEqual({ authenticated: true });
+    expect(verified.cookies.find(cookie => cookie.name === "tn_session")?.httpOnly).toBe(true);
+  });
+
+  it("asks a new verified owner for their name before creating the account", async () => {
+    const email = "unified-new@tablenow.test";
+    const access = await post("account/access", { email });
+
+    expect(access.statusCode, access.body).toBe(202);
+    expect(await database`select id from users where email=${email}`).toHaveLength(0);
+    const premature = await post("account/complete-profile", { name: "Too Soon" }, cookies(access));
+    expect(premature.statusCode).toBe(400);
+    expect(await database`select id from users where email=${email}`).toHaveLength(0);
+
+    const verified = await post("account/verify-email", { code: latestCode(email) }, cookies(access));
+    expect(verified.statusCode, verified.body).toBe(200);
+    expect(verified.json()).toMatchObject({ stage: "profile", email, expiresAt: expect.any(String), expiresInSeconds: expect.any(Number) });
+    expect(cookies(verified)).not.toContain("tn_session");
+    expect(await database`select id from users where email=${email}`).toHaveLength(0);
+
+    const continuation = await app.inject({ method: "GET", url: "/v1/account/continuation", headers: { cookie: cookies(verified) } });
+    expect(continuation.statusCode, continuation.body).toBe(200);
+    expect(continuation.json()).toMatchObject({ stage: "profile", email, purpose: "access" });
+
+    const completed = await post("account/complete-profile", { name: "Unified New" }, cookies(verified));
+    expect(completed.statusCode, completed.body).toBe(200);
+    expect(completed.json()).toEqual({ authenticated: true });
+    expect(completed.cookies.find(cookie => cookie.name === "tn_session")?.httpOnly).toBe(true);
+    expect(await database`select id, display_name from users where email=${email}`).toMatchObject([{ display_name: "Unified New" }]);
+    const replay = await post("account/complete-profile", { name: "Replay" }, cookies(verified));
+    expect(replay.statusCode).toBe(400);
+    expect(await database`select id from users where email=${email}`).toHaveLength(1);
+
+    const session = await app.inject({ method: "GET", url: "/v1/auth/session", headers: { cookie: cookies(completed) } });
+    expect(session.statusCode).toBe(200);
+    expect(session.json().tenant.onboardingComplete).toBe(false);
+  });
+
   it("creates an owner session after the email code without password, TOTP or recovery codes", async () => {
     const email = "simple-signup@tablenow.test";
     const signup = await post("account/signup", { email, name: "Simple Owner", rememberMe: false });

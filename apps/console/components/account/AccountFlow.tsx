@@ -6,22 +6,23 @@ import { useRouter } from "next/navigation";
 import { ArrowLeft, LoaderCircle, Moon, Sun } from "lucide-react";
 import { ApiError } from "@/lib/api";
 import { accountRequest as api, accountFeedback } from "@/lib/account-feedback";
-import { readAccountProgress, type AccountContinuation, type AccountMode } from "@/lib/account-continuation";
+import { readAccountProgress, type AccountContinuation } from "@/lib/account-continuation";
 import { challengeSecondsRemaining } from "@/lib/account-challenge";
 import { Brand } from "../Brand";
 
-type Stage = "credentials" | "email";
+type Stage = "credentials" | "email" | "profile";
 type EmailChallenge = { stage: "email"; expiresAt: string; expiresInSeconds: number };
+type ProfileChallenge = { stage: "profile"; email: string; expiresAt: string; expiresInSeconds: number };
 
-export function AccountFlow({ mode }: { mode: AccountMode }) {
+export function AccountFlow() {
   const router = useRouter();
   const codeRef = useRef<HTMLInputElement>(null);
+  const nameRef = useRef<HTMLInputElement>(null);
   const started = useRef(false);
   const [stage, setStage] = useState<Stage>("credentials");
   const [email, setEmail] = useState("");
   const [name, setName] = useState("");
   const [code, setCode] = useState("");
-  const [rememberMe, setRememberMe] = useState(true);
   const [busy, setBusy] = useState(true);
   const [initializing, setInitializing] = useState(true);
   const [needsProgressCheck, setNeedsProgressCheck] = useState(false);
@@ -46,11 +47,10 @@ export function AccountFlow({ mode }: { mode: AccountMode }) {
   }
 
   function resumeChallenge(challenge: AccountContinuation) {
-    setStage("email");
+    setStage(challenge.stage);
     setEmail(challenge.email);
-    setRememberMe(challenge.rememberMe);
     recordChallengeExpiry(challenge.expiresInSeconds);
-    setCooldown(60);
+    if (challenge.stage === "email") setCooldown(60);
   }
 
   useEffect(() => {
@@ -62,7 +62,7 @@ export function AccountFlow({ mode }: { mode: AccountMode }) {
     if (new URLSearchParams(window.location.search).get("google") === "error") setError("La connexion Google n’a pas abouti. Réessayez ou utilisez votre e-mail.");
     void (async () => {
       try {
-        const progress = await readAccountProgress(mode);
+        const progress = await readAccountProgress();
         if (!live || started.current) return;
         if (progress.kind === "session") router.replace(progress.onboardingComplete ? "/dashboard" : "/onboarding");
         else if (progress.kind === "challenge") { started.current = true; resumeChallenge(progress.challenge); }
@@ -76,7 +76,7 @@ export function AccountFlow({ mode }: { mode: AccountMode }) {
       }
     })();
     return () => { live = false; };
-  }, [mode, router]);
+  }, [router]);
 
   useEffect(() => {
     if (!cooldown) return;
@@ -98,20 +98,23 @@ export function AccountFlow({ mode }: { mode: AccountMode }) {
     };
   }, [challengeExpiresAt]);
 
-  useEffect(() => { if (stage === "email") codeRef.current?.focus(); }, [stage]);
+  useEffect(() => {
+    if (stage === "email") codeRef.current?.focus();
+    if (stage === "profile") nameRef.current?.focus();
+  }, [stage]);
 
   async function reconcileProgress() {
     setNeedsProgressCheck(true);
     setBusy(true);
     try {
-      const progress = await readAccountProgress(mode);
+      const progress = await readAccountProgress();
       if (progress.kind === "session") await enterApp();
       else if (progress.kind === "challenge") {
         resumeChallenge(progress.challenge);
         setError("");
         setNeedsProgressCheck(false);
       } else {
-        setChallengeUnavailable(stage === "email");
+        setChallengeUnavailable(stage !== "credentials");
         setError("Aucune vérification active n’a été retrouvée. Recommencez la connexion.");
         setNeedsProgressCheck(false);
       }
@@ -126,9 +129,9 @@ export function AccountFlow({ mode }: { mode: AccountMode }) {
   async function submit(event: FormEvent) {
     event.preventDefault();
     if (busy || needsProgressCheck) return;
-    if (stage === "email" && challengeSecondsRemaining(challengeExpiresAt) === 0) {
+    if (stage !== "credentials" && challengeSecondsRemaining(challengeExpiresAt) === 0) {
       setChallengeUnavailable(true);
-      setError("Ce code a expiré. Demandez-en un nouveau.");
+      setError("Cette vérification a expiré. Recommencez pour continuer.");
       return;
     }
     started.current = true;
@@ -136,13 +139,20 @@ export function AccountFlow({ mode }: { mode: AccountMode }) {
     setError("");
     try {
       if (stage === "credentials") {
-        const next = await api<EmailChallenge>(`/v1/account/${mode}`, { method: "POST", body: JSON.stringify({ email, rememberMe, ...(mode === "signup" ? { name } : {}) }) });
+        const next = await api<EmailChallenge>("/v1/account/access", { method: "POST", body: JSON.stringify({ email }) });
         setStage("email");
         setCode("");
         setCooldown(60);
         recordChallengeExpiry(next.expiresInSeconds);
+      } else if (stage === "email") {
+        const next = await api<{ authenticated: true } | ProfileChallenge>("/v1/account/verify-email", { method: "POST", body: JSON.stringify({ code }) });
+        if ("authenticated" in next) await enterApp();
+        else {
+          setStage("profile");
+          recordChallengeExpiry(next.expiresInSeconds);
+        }
       } else {
-        await api<{ authenticated: true }>("/v1/account/verify-email", { method: "POST", body: JSON.stringify({ code }) });
+        await api<{ authenticated: true }>("/v1/account/complete-profile", { method: "POST", body: JSON.stringify({ name }) });
         await enterApp();
       }
     } catch (caught) {
@@ -177,6 +187,7 @@ export function AccountFlow({ mode }: { mode: AccountMode }) {
   function restart() {
     setStage("credentials");
     setCode("");
+    setName("");
     setChallengeExpiresAt("");
     setChallengeSeconds(0);
     setChallengeUnavailable(false);
@@ -191,26 +202,33 @@ export function AccountFlow({ mode }: { mode: AccountMode }) {
     try { localStorage.setItem("tn-theme", next); } catch { /* Optional preference persistence. */ }
   }
 
-  const challengeExpired = stage === "email" && Boolean(challengeExpiresAt) && challengeSeconds === 0;
+  const challengeExpired = stage !== "credentials" && Boolean(challengeExpiresAt) && challengeSeconds === 0;
   const restartRequired = challengeExpired || challengeUnavailable;
-  const title = stage === "email" ? "Vérifiez votre e-mail" : mode === "signup" ? "Créer votre compte" : "Bienvenue";
+  const title = stage === "email" ? "Vérifiez votre e-mail" : stage === "profile" ? "Comment devons-nous vous appeler ?" : "Se connecter ou créer un compte";
+  const description = stage === "email"
+    ? <>Nous avons envoyé un code à <strong>{email}</strong>.</>
+    : stage === "profile"
+      ? <>Votre adresse e-mail est vérifiée. Cette dernière information personnalise votre espace.</>
+      : <>Entrez votre adresse e-mail. Nous vous enverrons un code pour accéder à votre compte ou en créer un.</>;
 
   return <main className={`tn-auth tn-account theme-${theme}`} data-stage={stage}>
     <button type="button" className="tn-icon tn-theme-switch" onClick={changeTheme} aria-label={theme === "dark" ? "Mode clair" : "Mode sombre"}>{theme === "dark" ? <Sun size={18} /> : <Moon size={18} />}</button>
-    <header className="tn-auth-header"><Brand /></header>
     <section className="tn-auth-card" aria-labelledby="auth-title" aria-busy={busy}>
-      {stage === "email" && <button type="button" className="tn-account-back" disabled={busy} onClick={restart} aria-label="Revenir à l’adresse e-mail"><ArrowLeft size={20} /></button>}
+      <div className="tn-auth-brand-row">
+        {stage !== "credentials" ? <button type="button" className="tn-account-back" disabled={busy} onClick={restart} aria-label="Recommencer avec une autre adresse"><ArrowLeft size={20} /></button> : <span aria-hidden="true" />}
+        <Brand />
+        <span aria-hidden="true" />
+      </div>
       <h1 id="auth-title">{title}</h1>
-      {initializing ? <p role="status">Vérification de votre accès…</p> : stage === "email"
-        ? <p>Code envoyé à <strong>{email}</strong>.</p>
-        : <p>{mode === "signup" ? "Deux informations suffisent pour commencer." : "Recevez un code sécurisé pour accéder à votre espace."}</p>}
+      {initializing ? <p role="status">Vérification de votre accès…</p> : <p>{description}</p>}
+
+      {stage === "credentials" && googleStart && <div className="tn-account-social">
+        <button type="button" disabled={busy} onClick={() => { setBusy(true); window.location.assign(`${googleStart}?remember=1`); }}><img src="/brand/google-official.png" width={20} height={20} alt="" />Continuer avec Google</button>
+        <div className="tn-account-divider"><span>ou</span></div>
+      </div>}
 
       <form key={stage} onSubmit={submit}>
-        {stage === "credentials" && <>
-          {mode === "signup" && <label className="tn-field"><span>Votre nom</span><input name="name" placeholder="Votre nom" autoComplete="name" maxLength={100} value={name} onChange={event => setName(event.target.value)} required /></label>}
-          <label className="tn-field"><span>E-mail</span><input name="email" type="email" placeholder="Votre adresse e-mail" autoComplete="email" autoCapitalize="none" maxLength={254} value={email} onChange={event => setEmail(event.target.value)} required /></label>
-          <label className="tn-account-remember"><input type="checkbox" checked={rememberMe} onChange={event => setRememberMe(event.target.checked)} /><span>Rester connecté sur cet appareil</span></label>
-        </>}
+        {stage === "credentials" && <label className="tn-field"><span>Adresse e-mail</span><input name="email" type="email" placeholder="vous@restaurant.fr" autoComplete="email" autoCapitalize="none" maxLength={254} value={email} onChange={event => setEmail(event.target.value)} required /></label>}
 
         {stage === "email" && <>
           <label className="tn-field tn-code-field">
@@ -220,25 +238,21 @@ export function AccountFlow({ mode }: { mode: AccountMode }) {
               <input ref={codeRef} name="code" className="tn-account-code" inputMode="numeric" autoComplete="one-time-code" pattern="[0-9]{6}" minLength={6} maxLength={6} required disabled={restartRequired || busy || needsProgressCheck} aria-describedby={error ? "account-error" : undefined} aria-invalid={error ? true : undefined} value={code} onChange={event => setCode(event.target.value.replace(/\D/g, "").slice(0, 6))} />
             </div>
           </label>
-          {!restartRequired && <small role="status">Expire dans {Math.max(1, Math.ceil(challengeSeconds / 60))} min.</small>}
+          {!restartRequired && <small role="status">Ce code expire dans {Math.max(1, Math.ceil(challengeSeconds / 60))} min.</small>}
         </>}
+
+        {stage === "profile" && <label className="tn-field"><span>Votre nom</span><input ref={nameRef} name="name" placeholder="Votre nom" autoComplete="name" maxLength={100} value={name} onChange={event => setName(event.target.value)} required disabled={restartRequired || busy || needsProgressCheck} /></label>}
 
         {error && <p id="account-error" className="tn-error" role="alert">{error}</p>}
         {needsProgressCheck
           ? <button className="tn-primary tn-account-submit" type="button" disabled={busy} onClick={() => void reconcileProgress()}>Vérifier ma connexion</button>
           : restartRequired
-            ? <button className="tn-primary tn-account-submit" type="button" disabled={busy} onClick={restart}>Demander un nouveau code</button>
-            : <button className="tn-primary tn-account-submit" type="submit" disabled={busy || (stage === "email" && code.length !== 6)}>{busy && <LoaderCircle size={17} className="spinning" />}{stage === "email" ? "Continuer" : mode === "signup" ? "Créer mon compte" : "Recevoir mon code"}</button>}
+            ? <button className="tn-primary tn-account-submit" type="button" disabled={busy} onClick={restart}>Recommencer</button>
+            : <button className="tn-primary tn-account-submit" type="submit" disabled={busy || (stage === "email" && code.length !== 6)}>{busy && <LoaderCircle size={17} className="spinning" />}{stage === "email" ? "Continuer" : stage === "profile" ? "Créer mon compte" : "Continuer"}</button>}
       </form>
 
-      {stage === "credentials" && googleStart && <div className="tn-account-social">
-        <div className="tn-account-divider"><span>OU</span></div>
-        <button type="button" disabled={busy} onClick={() => { setBusy(true); window.location.assign(`${googleStart}?remember=${rememberMe ? "1" : "0"}`); }}><img src="/brand/google-official.png" width={20} height={20} alt="" />Continuer avec Google</button>
-      </div>}
-
       {stage === "email" && !restartRequired && <div className="tn-account-resend"><span>Vous n’avez rien reçu ?</span><button type="button" className="tn-link" disabled={busy || needsProgressCheck || cooldown > 0} onClick={() => void resend()}>{cooldown ? `Renvoyer dans ${cooldown} s` : "Renvoyer le code"}</button></div>}
-      {stage === "credentials" && <p className="tn-auth-access">{mode === "login" ? <>Nouveau sur TableNow ? <Link href="/register">Créer un compte</Link></> : <>Vous avez déjà un compte ? <Link href="/login">Se connecter</Link></>}</p>}
+      <footer className="tn-auth-footer"><Link href="/legal/privacy">Confidentialité</Link><span>·</span><Link href="/legal/terms">Conditions d’utilisation</Link></footer>
     </section>
-    <footer className="tn-auth-footer"><Link href="/legal/privacy">Confidentialité</Link><span>·</span><Link href="/legal/terms">Conditions d’utilisation</Link></footer>
   </main>;
 }
