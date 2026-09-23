@@ -36,8 +36,17 @@
 .choice-grid .priority-expand { width: 44px; min-height: 44px; justify-content: center; padding: 0; font-size: 24px; font-weight: 300; border-radius: 50%; }
 /* Authentication: one focused, responsive surface using the TableNow palette. */
 .tn-account {
+  --tn-bg: #0b0f15;
+  --tn-surface: #111827;
+  --tn-raised: #151c29e6;
+  --tn-line: #344054;
+  --tn-text: #f4f7fb;
+  --tn-muted: #a8b2c5;
+  --tn-blue: #9db9ff;
   --tn-auth-glow-a: #435ddc40;
   --tn-auth-glow-b: #743ca830;
+  color: var(--tn-text);
+  color-scheme: dark;
   position: relative;
   isolation: isolate;
   min-height: 100dvh;
