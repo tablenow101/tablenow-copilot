@@ -33,8 +33,19 @@ Suite API : 150 tests réussis, 4 tests externes ignorés ; ajout final ciblé :
 - Aucun e-mail réel envoyé pendant cette recette ; transport remplacé uniquement dans le banc de test hors dépôt. Aucune clé, aucun code ou lien secret dans les captures.
 - Captures dans le dossier `auth-split-2026-09-23/` : première page claire, inscription, confirmation, arrivée sur onboarding. Les dimensions sont émulées ; aucun appareil physique certifié.
 
-## Vérifications restant à effectuer après publication
+## Preview effectivement vérifiée
 
-Preview READY au commit exact, contrôles visuels déployés mobile/desktop ; réception du vrai e-mail et retour Google avec intervention privée du propriétaire. La recette globale du produit et les pages juridiques ne sont pas déclarées validées par ce lot.
+Commit applicatif `e52ca142625c06ef34f921ded98ba314ca615ec8`, déploiement `dpl_3YhURRM4W1xCtMT5JhRZZhng31Q7`, statut READY, environnement Preview (`target: null`). URL immuable : https://tablenow-copilot-v2-cu090xu3v-tablenow101.vercel.app ; alias https://preview.tablenow.io. Main distant reste `665ca205111c7937b1e7507137e0af2b3c161c54`.
+
+- La session propriétaire existante a survécu au déploiement et ouvert le cockpit. Déconnexion normale effectuée pour vérifier les pages publiques ; aucune donnée métier modifiée.
+- Login : e-mail + mot de passe, Google actif, Apple désactivé, inscription distincte. Inscription : e-mail + mot de passe, aucun nom.
+- Modes clair/sombre vérifiés. À 390 × 844, champs hauts de 44 px et larges de 342 px, pictogramme de thème 16 px ; aucun débordement horizontal. À 820 × 1180, formulaire de 372 px sans débordement. À 1440 × 900, champs de 44 px sans débordement.
+- Liens de récupération et de connexion sans mot de passe testés sur Preview : pages distinctes, respectivement e-mail/nouveau mot de passe et e-mail seul. Retour à la connexion réussi. Aucun formulaire réel envoyé.
+- Captures déployées : `preview-login-mobile-clear.png`, `preview-login-mobile-dark.png`, `preview-login-desktop-clear.png`, `preview-signup-mobile-dark.png`, `preview-signup-tablet-dark.png`, `preview-signup-desktop-clear.png`.
+- Serveurs locaux de cette recette arrêtés ; navigateur laissé sur la connexion Preview, taille normale restaurée.
+
+## Limites restantes
+
+Réception réelle du lien e-mail, nouveau retour Google et parcours MFA privé après cette publication : NON EXÉCUTÉS. Les tests automatisés Google simulent le fournisseur et ne les remplacent pas. Les formats navigateur sont émulés, aucun téléphone ou tablette physique testé. La recette globale du produit et les pages juridiques ne sont pas déclarées validées par ce lot. Aucun lot produit clôturé ni passage sur main autorisé.
 
 Mémoire canonique : sauvegarde en attente, connecteur Neon bloqué par validation de schéma `project_id` malgré les paramètres fournis. Décision conservée dans le journal du dépôt, sans prétendre l’avoir enregistrée dans PostgreSQL.

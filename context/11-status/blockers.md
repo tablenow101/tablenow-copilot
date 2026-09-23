@@ -1,3 +1,9 @@
+# Authentification séparée — 23 septembre 2026
+
+Preview READY et écrans publics vérifiés au commit applicatif `e52ca14`. Restent non exécutés : réception réelle du lien, nouveau retour Google, saisie TOTP privée et essais sur appareil physique. Aucun lot produit clôturé. Mémoire canonique : sauvegarde en attente, connecteur Neon refuse le schéma des paramètres ; décision conservée dans le journal du dépôt. [Preuves et limites](../../docs/qa/auth-split-2026-09-23.md).
+
+Les entrées ci-dessous sont historiques et ne remplacent pas la décision d’authentification séparée.
+
 # Porte de recette du 21 septembre 2026
 
 - Dépôt restauré sans perte : le blocage des 60 fichiers absents est levé.

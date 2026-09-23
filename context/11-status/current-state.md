@@ -1,6 +1,8 @@
-# Authentification séparée — 23 septembre 2026, préparation Preview
+# Authentification séparée — 23 septembre 2026, Preview publiée
 
-Le parcours validé est implémenté sur `product/onboarding-owner` : connexion distincte de l’inscription, mot de passe, confirmation par lien, Google existant/nouveau, code e-mail alternatif et récupération séparée. Aucun nom demandé avant onboarding. Les facteurs existants restent obligatoires. La recette locale prouve inscription → lien → Priorités → sauvegarde → Établissement ; les e-mails et Google externes ne sont pas certifiés réels. Main/production et pages juridiques inchangés. Publication Preview et vérification du commit servi en cours. [Détail](../../docs/qa/auth-split-2026-09-23.md).
+Le parcours validé est implémenté sur `product/onboarding-owner` : connexion distincte de l’inscription, mot de passe, confirmation par lien, Google existant/nouveau, code e-mail alternatif et récupération séparée. Aucun nom demandé avant onboarding. Les facteurs existants restent obligatoires. La recette locale prouve inscription → lien → Priorités → sauvegarde → Établissement ; les e-mails et Google externes ne sont pas certifiés réels. Main/production et pages juridiques inchangés. Commit applicatif `e52ca142625c06ef34f921ded98ba314ca615ec8`, déploiement `dpl_3YhURRM4W1xCtMT5JhRZZhng31Q7` READY, alias `preview.tablenow.io` vérifiés. Pages publiques contrôlées en clair/sombre sur formats navigateur téléphone, tablette et ordinateur. Session existante conservée ; nouveaux parcours Google/e-mail privés et appareils physiques non vérifiés. [Détail](../../docs/qa/auth-split-2026-09-23.md).
+
+## Historique — les consignes ci-dessous sont remplacées par la décision d’authentification séparée ci-dessus
 
 # Point de livraison — 22 septembre 2026
 
