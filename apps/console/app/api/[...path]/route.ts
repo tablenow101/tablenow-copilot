@@ -1,5 +1,6 @@
 import { buildApp } from "@tablenow/core-api/app";
 import { isPublicPilotHostname } from "@/lib/public-pilot-host";
+import { bodyForProxyResponse } from "@/lib/proxy-response";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -40,7 +41,7 @@ async function handler(request: Request, context: RouteContext): Promise<Respons
     else if (value !== undefined) responseHeaders.set(key, String(value));
   }
   responseHeaders.set("cache-control", "no-store");
-  return new Response(method === "HEAD" ? null : new Uint8Array(injected.rawPayload), {
+  return new Response(bodyForProxyResponse(method, injected.statusCode, new Uint8Array(injected.rawPayload)), {
     status: injected.statusCode,
     headers: responseHeaders,
   });
