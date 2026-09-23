@@ -9,7 +9,7 @@ import { registerGoogleRoutes } from "./google-routes.js";
 import { registerAccountRecoveryRoutes } from "./account-recovery-routes.js";
 import type { GoogleExchange } from "./google-identity.js";
 
-type Payload = { purpose: "signup" | "reset" | "login" | "google"; googleSubject?: string; passwordHash?: string; name?: string; userId?: string; tenantId?: string; secret?: string; rememberMe?: boolean };
+type Payload = { purpose: "signup" | "reset" | "login" | "google"; googleSubject?: string; passwordHash?: string; passwordless?: boolean; name?: string; userId?: string; tenantId?: string; secret?: string; rememberMe?: boolean };
 type Challenge = { token_hash: string; email: string; stage: string; payload: string; proof_hash: string | null; attempts: number; expires_at: Date | string; expires_in_seconds?: number };
 type ChallengeState = Challenge & { expired: boolean; unavailable: boolean };
 const emailSchema = z.string().trim().toLowerCase().email().max(254);
@@ -70,19 +70,22 @@ export async function registerAccountRoutes(app: FastifyInstance, database: Data
     return reply.code(202).send({ stage: "email", expiresAt: token.expiresAt, expiresInSeconds: token.expiresInSeconds });
   }
   app.post("/v1/account/signup", rate, async (request, reply) => {
-    const input = z.object({ email: emailSchema, password: passwordSchema, name: z.string().trim().min(1).max(100), rememberMe: z.boolean().default(true) }).strict().parse(request.body);
-    return emailRequest(reply, input.email, { purpose: "signup", rememberMe: input.rememberMe, name: input.name, passwordHash: await passwordHash(input.password) });
+    const input = z.object({ email: emailSchema, password: passwordSchema.optional(), name: z.string().trim().min(1).max(100), rememberMe: z.boolean().default(true) }).strict().parse(request.body);
+    return emailRequest(reply, input.email, { purpose: "signup", rememberMe: input.rememberMe, name: input.name,
+      ...(input.password ? { passwordHash: await passwordHash(input.password) } : { passwordless: true }) });
   });
   app.post("/v1/account/reset", rate, async (request, reply) => {
     const input = z.object({ email: emailSchema, password: passwordSchema, rememberMe: z.boolean().default(true) }).strict().parse(request.body);
     return emailRequest(reply, input.email, { purpose: "reset", rememberMe: input.rememberMe, passwordHash: await passwordHash(input.password) });
   });
   app.post("/v1/account/login", rate, async (request, reply) => {
-    const input = z.object({ email: emailSchema, password: z.string().min(1).max(128), rememberMe: z.boolean().default(true) }).strict().parse(request.body);
+    const input = z.object({ email: emailSchema, password: z.string().min(1).max(128).optional(), rememberMe: z.boolean().default(true) }).strict().parse(request.body);
+    const password = input.password;
+    if (!password) return emailRequest(reply, input.email, { purpose: "login", rememberMe: input.rememberMe, passwordless: true });
     const challengeExpiry = await database.begin(async tx => {
     await tx`select pg_advisory_xact_lock(hashtext(${input.email}))`;
     const [row] = await tx<{ user_id: string; password_hash: string; locked: boolean }[]>`select c.user_id,c.password_hash,(c.locked_until>now()) as locked from account_credentials c join users u on u.id=c.user_id where u.email=${input.email} and u.status='active'`;
-    const matches = await passwordMatches(input.password, row?.password_hash);
+    const matches = await passwordMatches(password, row?.password_hash);
     if (!row || row.locked || !matches) {
       if (row && !row.locked) await tx`update account_credentials set failed_attempts=failed_attempts+1, locked_until=case when failed_attempts+1>=10 then now()+interval '15 minutes' else locked_until end where user_id=${row.user_id}`;
       return null;
@@ -98,21 +101,45 @@ export async function registerAccountRoutes(app: FastifyInstance, database: Data
     if (!row) return fail(reply);
     return emailRequest(reply, row.email, unseal<Payload>(row.payload, secret));
   });
-  await registerGoogleRoutes(app, database, async (identity, rememberMe, reply) => {
-    await database.begin(async tx => {
+  await registerGoogleRoutes(app, database, async (identity, rememberMe, request, reply) => {
+    const result = await database.begin(async tx => {
+      await tx`select pg_advisory_xact_lock(hashtext(${`google:${identity.sub}`}))`;
       const [linked] = await tx<{ user_id: string; email: string }[]>`select g.user_id,u.email from google_identities g join users u on u.id=g.user_id where g.subject=${identity.sub}`;
       const email = linked?.email || identity.email;
       await tx`select pg_advisory_xact_lock(hashtext(${email}))`;
       const [user] = await tx<{ id: string; status: string }[]>`select id,status from users where email=${email}`;
       if (user && user.status !== "active") throw new Error("GOOGLE_ACCOUNT_UNAVAILABLE");
-      const [credential] = user ? await tx<{ locked: boolean }[]>`select (locked_until>now()) as locked from account_credentials where user_id=${user.id}` : [];
-      // Existing accounts must prove their existing TOTP, never enroll a replacement.
-      if (user && (!credential || credential.locked)) throw new Error("GOOGLE_ACCOUNT_UNAVAILABLE");
       const [other] = user ? await tx<{ subject: string }[]>`select subject from google_identities where user_id=${user.id}` : [];
       if (other && other.subject !== identity.sub) throw new Error("GOOGLE_ACCOUNT_UNAVAILABLE");
-      await challenge(reply, email, user ? "mfa" : "enroll", { purpose: "google", googleSubject: identity.sub, rememberMe,
-        ...(user ? { userId: user.id } : { name: identity.name, secret: newTotpSecret() }) }, undefined, tx);
+      let userId = user?.id;
+      let tenantId: string | undefined;
+      let onboardingComplete = false;
+      if (!userId) {
+        const [createdUser] = await tx<{ id: string }[]>`insert into users(email,display_name) values (${email},${identity.name}) returning id`;
+        userId = createdUser!.id;
+        const [tenant] = await tx<{ id: string }[]>`insert into tenants(name,slug) values ('Mon établissement',${`restaurant-${crypto.randomUUID()}`}) returning id`;
+        tenantId = tenant!.id;
+        await tx`insert into memberships(tenant_id,user_id,role) values (${tenantId},${userId},'owner')`;
+        await tx`select set_config('app.tenant_id',${tenantId},true)`;
+        await tx`insert into restaurants(tenant_id,name,slug,is_demo) values (${tenantId},'Mon établissement','principal',false)`;
+      } else {
+        const [membership] = await tx<{ tenant_id: string; onboarding_complete: boolean }[]>`select m.tenant_id,t.onboarding_complete from memberships m join tenants t on t.id=m.tenant_id and t.status in ('pilot','active') where m.user_id=${userId} order by m.created_at limit 1`;
+        if (!membership) throw new Error("GOOGLE_ACCOUNT_UNAVAILABLE");
+        tenantId = membership.tenant_id;
+        onboardingComplete = membership.onboarding_complete;
+      }
+      await tx`insert into google_identities(subject,user_id) values (${identity.sub},${userId}) on conflict (subject) do nothing`;
+      const sessionToken = randomToken(32), csrfToken = randomToken(24);
+      const maxAgeSeconds = config.SESSION_TTL_HOURS * 3600;
+      await tx`insert into sessions(token_hash,user_id,tenant_id,csrf_hash,ip_hash,user_agent,expires_at) values (${digest(sessionToken)},${userId},${tenantId},${digest(csrfToken)},${digest(request.ip)},${request.headers['user-agent'] || null},${new Date(Date.now()+maxAgeSeconds*1000)})`;
+      await tx`select set_config('app.tenant_id',${tenantId},true)`;
+      await tx`insert into privacy_preferences(tenant_id,user_id) values (${tenantId},${userId}) on conflict do nothing`;
+      await tx`insert into audit_events(tenant_id,actor_id,actor_type,action,resource_type,resource_id) values (${tenantId},${userId},'user','auth.google_verified','user',${userId})`;
+      return { sessionToken, csrfToken, maxAgeSeconds, rememberMe, destination: onboardingComplete ? "/dashboard" as const : "/onboarding" as const };
     });
+    setSessionCookies(reply, result);
+    reply.clearCookie("tn_auth", { path: "/" });
+    return result.destination;
   }, googleExchange);
   // Read-only resume has its own budget; code attempts keep the stricter unchanged limit.
   app.get("/v1/account/continuation", { config: { rateLimit: { max: 30, timeWindow: "15 minutes" } } }, async (request, reply) => {
@@ -150,6 +177,41 @@ export async function registerAccountRoutes(app: FastifyInstance, database: Data
       await tx`update account_challenges set attempts=attempts+1 where token_hash=${row.token_hash}`;
       if (!row.proof_hash || !constantTimeEqual(row.proof_hash, digest(code))) return { outcome: "invalid" as const };
       const payload = unseal<Payload>(row.payload, secret);
+      if (payload.passwordless) {
+        await tx`select pg_advisory_xact_lock(hashtext(${row.email}))`;
+        const [existingUser] = await tx<{ id: string; status: string }[]>`select id,status from users where email=${row.email}`;
+        if (existingUser?.status && existingUser.status !== "active") return null;
+        if (payload.purpose === "login" && !existingUser) {
+          await tx`update account_challenges set consumed_at=now() where token_hash=${row.token_hash}`;
+          return null;
+        }
+
+        let userId = existingUser?.id;
+        let tenantId: string | undefined;
+        if (!userId) {
+          const [createdUser] = await tx<{ id: string }[]>`insert into users(email,display_name) values (${row.email},${payload.name!}) returning id`;
+          userId = createdUser!.id;
+          const [tenant] = await tx<{ id: string }[]>`insert into tenants(name,slug) values ('Mon établissement',${`restaurant-${crypto.randomUUID()}`}) returning id`;
+          tenantId = tenant!.id;
+          await tx`insert into memberships(tenant_id,user_id,role) values (${tenantId},${userId},'owner')`;
+          await tx`select set_config('app.tenant_id',${tenantId},true)`;
+          await tx`insert into restaurants(tenant_id,name,slug,is_demo) values (${tenantId},'Mon établissement','principal',false)`;
+        } else {
+          const [membership] = await tx<{ tenant_id: string }[]>`select m.tenant_id from memberships m join tenants t on t.id=m.tenant_id and t.status in ('pilot','active') join users u on u.id=m.user_id and u.status='active' where m.user_id=${userId} order by m.created_at limit 1`;
+          if (!membership) return null;
+          tenantId = membership.tenant_id;
+        }
+
+        await tx`update account_challenges set consumed_at=now() where email=${row.email} and consumed_at is null`;
+        await tx`update otp_challenges set consumed_at=now() where email=${row.email} and consumed_at is null`;
+        const sessionToken = randomToken(32), csrfToken = randomToken(24);
+        const maxAgeSeconds = config.SESSION_TTL_HOURS * 3600;
+        await tx`insert into sessions(token_hash,user_id,tenant_id,csrf_hash,ip_hash,user_agent,expires_at) values (${digest(sessionToken)},${userId},${tenantId},${digest(csrfToken)},${digest(request.ip)},${request.headers['user-agent'] || null},${new Date(Date.now()+maxAgeSeconds*1000)})`;
+        await tx`select set_config('app.tenant_id',${tenantId},true)`;
+        await tx`insert into privacy_preferences(tenant_id,user_id) values (${tenantId},${userId}) on conflict do nothing`;
+        await tx`insert into audit_events(tenant_id,actor_id,actor_type,action,resource_type,resource_id) values (${tenantId},${userId},'user',${payload.purpose === 'signup' ? 'auth.registered' : 'auth.email_verified'},'user',${userId})`;
+        return { outcome: "authenticated" as const, sessionToken, csrfToken, maxAgeSeconds, rememberMe: payload.rememberMe ?? true };
+      }
       const [user] = await tx<{ id: string; status: string }[]>`select id,status from users where email=${row.email}`;
       if (user?.status && user.status !== "active") return null;
       const [credentials] = user ? await tx<{ user_id: string }[]>`select user_id from account_credentials where user_id=${user.id}` : [];
@@ -165,7 +227,12 @@ export async function registerAccountRoutes(app: FastifyInstance, database: Data
       const [advanced] = await tx<{ expires_at: Date | string; expires_in_seconds: number }[]>`update account_challenges set stage=${stage},payload=${seal(payload,secret)},attempts=0,expires_at=now()+(${challengeMaxAgeSeconds} * interval '1 second') where token_hash=${row.token_hash} returning expires_at,greatest(0,ceil(extract(epoch from (expires_at-now()))))::int as expires_in_seconds`;
       return { stage, expiresAt: advanced!.expires_at, expiresInSeconds: Number(advanced!.expires_in_seconds), ...(payload.secret ? { secret: payload.secret } : {}) };
     });
-    if (result && "existing" in result) return reply.code(409).send({ error: { code: "ACCOUNT_EXISTS", message: "Cette adresse possède déjà un compte. Connectez-vous, ou utilisez « Mot de passe oublié » pour définir votre mot de passe." } });
+    if (result && "existing" in result) return reply.code(409).send({ error: { code: "ACCOUNT_EXISTS", message: "Cette adresse possède déjà un compte. Revenez à la connexion pour recevoir un nouveau code." } });
+    if (result?.outcome === "authenticated" && "sessionToken" in result) {
+      setSessionCookies(reply, { sessionToken: result.sessionToken, csrfToken: result.csrfToken, maxAgeSeconds: result.maxAgeSeconds, rememberMe: result.rememberMe });
+      reply.clearCookie("tn_auth", { path: "/" });
+      return { authenticated: true };
+    }
     if (result && "outcome" in result) return result.outcome === "expired" ? expired(reply) : invalidCode(reply);
     if (result) reply.setCookie("tn_auth", token, cookieOptions).header("Cache-Control", "no-store");
     return result || unavailable(reply);

@@ -1,2 +1,5 @@
-import { AccountFlow } from "@/components/account/AccountFlow";
-export default function ForgotPasswordPage() { return <AccountFlow mode="reset" />; }
+import { redirect } from "next/navigation";
+
+export default function ForgotPasswordPage() {
+  redirect("/login");
+}

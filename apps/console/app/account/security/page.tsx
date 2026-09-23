@@ -1,5 +1,5 @@
-import { BackupRecovery } from "@/components/account/BackupRecovery";
+import { redirect } from "next/navigation";
 
 export default function AccountSecurityPage() {
-  return <BackupRecovery />;
+  redirect("/profile");
 }

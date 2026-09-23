@@ -1123,7 +1123,6 @@ export function OwnerShell({ section }: { section: string }) {
                   </small>
                 </div>
               </div>
-              <Link className="tn-secondary" href="/account/security">Codes de secours</Link>
               <button
                 className="tn-secondary"
                 onClick={() => void logout()}

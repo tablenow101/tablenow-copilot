@@ -1,13 +1,12 @@
 import { ApiError } from "./api";
 import { accountRequest } from "./account-feedback";
 
-export type AccountMode = "signup" | "login" | "reset";
+export type AccountMode = "signup" | "login";
 export type AccountContinuation = {
-  stage: "email" | "enroll" | "mfa";
+  stage: "email";
   email: string;
-  purpose: AccountMode | "google";
+  purpose: AccountMode;
   rememberMe: boolean;
-  secret?: string;
   expiresAt: string;
   expiresInSeconds: number;
 };
@@ -23,6 +22,6 @@ export async function readAccountProgress(mode: AccountMode): Promise<AccountPro
     if (!(error instanceof ApiError) || error.status !== 401) throw error;
   }
   const challenge = await accountRequest<AccountContinuation | null>("/v1/account/continuation");
-  if (!challenge || (challenge.purpose !== mode && !(challenge.purpose === "google" && mode === "login"))) return { kind: "none" };
+  if (!challenge || challenge.stage !== "email" || challenge.purpose !== mode) return { kind: "none" };
   return { kind: "challenge", challenge };
 }

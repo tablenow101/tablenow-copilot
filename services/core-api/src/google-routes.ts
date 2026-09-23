@@ -1,4 +1,4 @@
-import type { FastifyInstance, FastifyReply } from "fastify";
+import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { z } from "zod";
 import { hashSecret, randomToken, type Database } from "@tablenow/provider-adapters";
 import { getConfig } from "./environment.js";
@@ -6,7 +6,7 @@ import { seal, unseal } from "./account-crypto.js";
 import { exchangeGoogleCode, googleAuthorizationUrl, googleConfiguration, googleCallbackConfiguration, type GoogleExchange, type GoogleIdentity } from "./google-identity.js";
 
 type Attempt = { verifier: string; nonce: string; rememberMe: boolean; origin?: string };
-type BeginAccount = (identity: GoogleIdentity, rememberMe: boolean, reply: FastifyReply) => Promise<void>;
+type BeginAccount = (identity: GoogleIdentity, rememberMe: boolean, request: FastifyRequest, reply: FastifyReply) => Promise<"/onboarding" | "/dashboard">;
 export async function registerGoogleRoutes(app: FastifyInstance, database: Database, beginAccount: BeginAccount, exchange: GoogleExchange = exchangeGoogleCode) {
   const config = googleConfiguration();
   const secret = getConfig().SESSION_SECRET;
@@ -44,8 +44,8 @@ export async function registerGoogleRoutes(app: FastifyInstance, database: Datab
       const attemptOrigin = attempt.origin ?? config.origin;
       if (attemptOrigin !== callbackConfig.origin) throw new Error();
       const identity = await exchange(callbackConfig, input.code, attempt.verifier, attempt.nonce);
-      await beginAccount(identity, attempt.rememberMe, reply);
-      return reply.redirect(`${callbackConfig.origin}/login?google=continue`);
+      const destination = await beginAccount(identity, attempt.rememberMe, request, reply);
+      return reply.redirect(`${callbackConfig.origin}${destination}`);
     } catch {
       // Fixed destination and fixed error: no provider response or secret in URLs/logs.
       return reply.redirect(`${config.origin}/login?google=error`);

@@ -1,5 +1,9 @@
 # Point de livraison — 22 septembre 2026
 
+## Authentification simple — 23 septembre 2026, en cours
+
+Le propriétaire limite désormais le travail au seul bloc authentification : création et retour par code e-mail à six chiffres, plus Google, sans mot de passe ni TOTP imposé dans l’interface. L’implémentation locale et ses contrôles techniques sont terminés sur une branche isolée ; publication et recette réelle Preview restent à effectuer. `main`, la production et les autres parcours demeurent inchangés. Détails : [auth-simple-preview-2026-09-23.md](auth-simple-preview-2026-09-23.md).
+
 Preview READY sur `6a114c8` (interface `cca7cdd`) : accueil corrigé, recette isolée sans suppression, configuration compacte, prochain pas lié aux priorités et chiffres visibles. 132 tests API et 125 console réussis, 4 API externes non exécutés. Parcours ciblé déployé ordinateur/tablette/téléphone simulés vérifié ; captures et limites dans [la recette](../../docs/qa/livraison-guidee-integrations-2026-09-21.md). Extension 015 déployée : deux conversations de recette prouvées isolées, quatre messages associés conservés ; 35 tests ciblés passent. Après rechargement, recettes absentes et échanges utilisateur présents. Fournisseur IA et accès partenaires manquants : les intégrations ne sont pas annoncées fonctionnelles. Recette nouvel utilisateur privé et téléphone physique reste ouverte. Aucun lot clôturé, main/production intacts.
 
 # Livraison guidée et tous raccordements — 21 septembre 2026, en cours

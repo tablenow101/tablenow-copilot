@@ -2,7 +2,7 @@ import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import type { FastifyInstance } from "fastify";
 import type { Database } from "@tablenow/provider-adapters";
 import { createTestDatabase } from "./testing/pglite.js";
-import { totpAt, passwordHash, passwordMatches, seal, unseal, newTotpSecret } from "./account-crypto.js";
+import { passwordHash, passwordMatches, seal, unseal } from "./account-crypto.js";
 import {
   googleCallbackConfiguration,
   googleConfiguration,
@@ -28,14 +28,14 @@ async function start(remember = "1") {
   expect(r.cookies[0]).toMatchObject({ name: "tn_google", httpOnly: true, path: "/api/v1/oauth/google", sameSite: "Lax" });
   return { state: target.searchParams.get("state")!, cookie: cookieOf(r) };
 }
-async function google(sub: string, email: string, remember = "1") {
+async function google(sub: string, email: string, remember = "1", destination = "/onboarding") {
   exchange.mockResolvedValueOnce({ sub, email, name: "Restaurateur" });
   const s = await start(remember);
   const r = await get(`/v1/oauth/google/callback?state=${s.state}&code=fixture`, s.cookie);
-  expect(r.headers.location).toBe("http://localhost:3000/login?google=continue");
+  expect(r.headers.location).toBe(`http://localhost:3000${destination}`);
   const cookie = cookieOf(r);
-  expect(cookie).not.toContain("tn_session");
-  return { cookie, next: (await get("/v1/account/google-continuation", cookie)).json() };
+  expect(cookie).toContain("tn_session");
+  return { cookie, response: r, session: await get("/v1/auth/session", cookie) };
 }
 beforeAll(async () => {
   for (const [key, value] of Object.entries({ NODE_ENV: "test", APP_ENV: "test", DATABASE_URL: "postgres://test:test@localhost/test", PUBLIC_ORIGIN: "http://localhost:3000", SESSION_SECRET: "s".repeat(48), OTP_PEPPER: "p".repeat(48), PLATFORM_ADMIN_EMAIL: "admin@tablenow.test", EMAIL_TRANSPORT: "log", LOG_LEVEL: "silent", GOOGLE_OAUTH_CLIENT_ID: "fixture.apps.googleusercontent.com", GOOGLE_OAUTH_CLIENT_SECRET: "fixture-only" })) vi.stubEnv(key, value);
@@ -94,35 +94,18 @@ describe("Google authentication", () => {
     expect(response.headers.location).toBe("http://localhost:3000/login?google=error");
     expect(exchange.mock.calls).toHaveLength(calls);
   });
-  it("creates no account or session until the new Google owner proves TOTP; respects transient cookies", async () => {
+  it("creates the new Google owner and a transient session without TOTP or recovery codes", async () => {
     const flow = await google("new-sub", "google-new@tablenow.test", "0");
-    expect(flow.next.stage).toBe("enroll");
-    const resumed = await get("/v1/account/continuation", flow.cookie);
-    const reload = await get("/v1/account/continuation", flow.cookie);
-    expect(resumed.json()).toEqual({ ...flow.next, purpose: "google", rememberMe: false, expiresInSeconds: expect.any(Number) });
-    expect(reload.json().secret === flow.next.secret).toBe(true);
-    expect(reload.json().expiresAt).toBe(flow.next.expiresAt);
-    expect(reload.json().expiresInSeconds).toBeLessThanOrEqual(resumed.json().expiresInSeconds);
-    expect(reload.cookies).toHaveLength(0);
     expect(send).not.toHaveBeenCalled();
-    expect(new Date(flow.next.expiresAt).getTime()).toBeGreaterThan(Date.now());
-    expect(flow.next.expiresInSeconds).toBeGreaterThan(0);
-    expect(await database`select id from users`).toHaveLength(0);
-    const r = await post("/v1/account/verify-mfa", { code: totpAt(flow.next.secret, Math.floor(Date.now()/30000)) }, flow.cookie);
-    expect(r.statusCode, r.body).toBe(200);
-    expect(r.json().backupCodes).toHaveLength(8);
-    expect(r.cookies.filter(c => c.name === "tn_session" || c.name === "tn_csrf").every(c => c.maxAge === undefined)).toBe(true);
-    const session = await get("/v1/auth/session", cookieOf(r));
-    expect(session.json().tenant.onboardingComplete).toBe(false);
-    expect((await get("/v1/onboarding", cookieOf(r))).statusCode).toBe(200);
+    expect(flow.response.cookies.filter(c => c.name === "tn_session" || c.name === "tn_csrf").every(c => c.maxAge === undefined)).toBe(true);
+    expect(flow.session.statusCode).toBe(200);
+    expect(flow.session.json().tenant.onboardingComplete).toBe(false);
+    expect((await get("/v1/onboarding", flow.cookie)).statusCode).toBe(200);
     expect(await database`select subject from google_identities`).toEqual([{ subject: "new-sub" }]);
-    expect(await database`select password_hash is null as no_password from account_credentials`).toEqual([{ no_password: true }]);
-    await post("/v1/auth/request-code", { email: "google-new@tablenow.test" });
-    expect(send).not.toHaveBeenCalled();
-    expect((await post("/v1/account/login", { email: "google-new@tablenow.test", password: "anything" })).statusCode).toBe(400);
-    expect((await post("/v1/account/verify-mfa", { code: r.json().backupCodes[0] }, flow.cookie)).statusCode).toBe(400);
+    expect(await database`select user_id from account_credentials`).toHaveLength(0);
+    expect((await get("/v1/account/continuation", flow.cookie)).statusCode).toBe(204);
   });
-  it("keeps the existing password, TOTP, membership and completed profile when linking Google", async () => {
+  it("keeps the existing credentials, membership and completed profile when linking Google", async () => {
     const { seedOwnerFixture } = await import("./testing/owner-fixture.js");
     const fixture = await seedOwnerFixture(database);
     await database`update users set email='existing@tablenow.test' where id=${fixture.userId}`;
@@ -130,42 +113,20 @@ describe("Google authentication", () => {
       await tx`select set_config('app.tenant_id',${fixture.tenantId},true)`;
       await tx`insert into onboarding_drafts(tenant_id,restaurant_id,status,completed_at) values (${fixture.tenantId},${fixture.restaurantId},'completed',now())`;
     });
-    const totp = newTotpSecret();
     const hash = await passwordHash("Phrase du propriétaire existant 123");
-    await database`insert into account_credentials(user_id,password_hash,totp_secret) values (${fixture.userId},${hash},${seal(totp,"s".repeat(48))})`;
-    const flow = await google("existing-sub", "existing@tablenow.test");
-    expect(flow.next.stage).toBe("mfa");
-    expect(new Date(flow.next.expiresAt).getTime()).toBeGreaterThan(Date.now());
-    expect(flow.next.expiresInSeconds).toBeGreaterThan(0);
-    expect(flow.next.secret).toBeUndefined();
-    const resumed = await get("/v1/account/continuation", flow.cookie);
-    expect(resumed.json()).toEqual({ ...flow.next, purpose: "google", rememberMe: true, expiresInSeconds: expect.any(Number) });
-    expect(resumed.json().secret).toBeUndefined();
-    expect(resumed.cookies).toHaveLength(0);
-    expect(await database`select subject from google_identities where subject='existing-sub'`).toHaveLength(0);
-    const r = await post("/v1/account/verify-mfa", { code: totpAt(totp, Math.floor(Date.now()/30000)) }, flow.cookie);
-    expect(r.statusCode, r.body).toBe(200);
+    const sealedTotp = seal("legacy-totp-secret", "s".repeat(48));
+    await database`insert into account_credentials(user_id,password_hash,totp_secret) values (${fixture.userId},${hash},${sealedTotp})`;
+    const flow = await google("existing-sub", "existing@tablenow.test", "1", "/dashboard");
     const [credential] = await database<{ password_hash: string; totp_secret: string }[]>`select password_hash,totp_secret from account_credentials where user_id=${fixture.userId}`;
     expect(credential!.password_hash).toBe(hash);
+    expect(credential!.totp_secret).toBe(sealedTotp);
     expect(await passwordMatches("Phrase du propriétaire existant 123", credential!.password_hash)).toBe(true);
-    const session = (await get("/v1/auth/session", cookieOf(r))).json();
+    const session = flow.session.json();
     expect(session.user.id).toBe(fixture.userId);
     expect(session.tenant.id).toBe(fixture.tenantId);
     expect(session.tenant.onboardingComplete).toBe(true);
-    const again = await google("existing-sub", "changed-email@tablenow.test");
-    expect(again.next.email).toBe("existing@tablenow.test");
-    const mailCalls = send.mock.calls.length;
-    await database`update account_challenges set expires_at=now()-interval '1 second' where email='existing@tablenow.test' and stage='mfa' and consumed_at is null`;
-    const expiredContinuation = await get("/v1/account/google-continuation", again.cookie);
-    expect(expiredContinuation.statusCode).toBe(410);
-    expect(expiredContinuation.json().error.code).toBe("ACCOUNT_CHALLENGE_EXPIRED");
-    expect((await get("/v1/account/continuation", again.cookie)).json().error.code).toBe("ACCOUNT_CHALLENGE_EXPIRED");
-    const expired = await post("/v1/account/verify-mfa", { code: "000000" }, again.cookie);
-    expect(expired.statusCode).toBe(410);
-    expect(expired.json().error.code).toBe("ACCOUNT_CHALLENGE_EXPIRED");
-    const [expiredChallenge] = await database<{ attempts: number }[]>`select attempts from account_challenges where email='existing@tablenow.test' and stage='mfa' and consumed_at is null order by created_at desc limit 1`;
-    expect(expiredChallenge?.attempts).toBe(0);
-    expect(send.mock.calls).toHaveLength(mailCalls);
+    const again = await google("existing-sub", "changed-email@tablenow.test", "1", "/dashboard");
+    expect(again.session.json().user.email).toBe("existing@tablenow.test");
     exchange.mockResolvedValueOnce({ sub: "different-sub", email: "existing@tablenow.test", name: "Other" });
     const s = await start();
     expect((await get(`/v1/oauth/google/callback?state=${s.state}&code=fixture`, s.cookie)).headers.location).toContain("google=error");
