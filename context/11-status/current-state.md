@@ -1,3 +1,7 @@
+# Authentification séparée — 23 septembre 2026, préparation Preview
+
+Le parcours validé est implémenté sur `product/onboarding-owner` : connexion distincte de l’inscription, mot de passe, confirmation par lien, Google existant/nouveau, code e-mail alternatif et récupération séparée. Aucun nom demandé avant onboarding. Les facteurs existants restent obligatoires. La recette locale prouve inscription → lien → Priorités → sauvegarde → Établissement ; les e-mails et Google externes ne sont pas certifiés réels. Main/production et pages juridiques inchangés. Publication Preview et vérification du commit servi en cours. [Détail](../../docs/qa/auth-split-2026-09-23.md).
+
 # Point de livraison — 22 septembre 2026
 
 ## Authentification unifiée — 23 septembre 2026, déployée en Preview

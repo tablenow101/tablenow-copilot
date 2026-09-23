@@ -73,38 +73,40 @@ describe("simple account access", () => {
     expect(verified.cookies.find(cookie => cookie.name === "tn_session")?.httpOnly).toBe(true);
   });
 
-  it("asks a new verified owner for their name before creating the account", async () => {
+  it("creates a new owner only through explicit signup, then reuses it at login", async () => {
     const email = "unified-new@tablenow.test";
-    const access = await post("account/access", { email });
-
-    expect(access.statusCode, access.body).toBe(202);
+    const access = await post("account/signup", { email });
+    expect(access.statusCode).toBe(202);
     expect(await database`select id from users where email=${email}`).toHaveLength(0);
-    const premature = await post("account/complete-profile", { name: "Too Soon" }, cookies(access));
-    expect(premature.statusCode).toBe(400);
-    expect(await database`select id from users where email=${email}`).toHaveLength(0);
-
-    const verified = await post("account/verify-email", { code: latestCode(email) }, cookies(access));
+    expect((await post("account/complete-profile", {}, cookies(access))).statusCode).toBe(400);
+    const code = latestCode(email);
+    const verified = await post("account/verify-email", { code }, cookies(access));
     expect(verified.statusCode, verified.body).toBe(200);
-    expect(verified.json()).toMatchObject({ stage: "profile", email, expiresAt: expect.any(String), expiresInSeconds: expect.any(Number) });
-    expect(cookies(verified)).not.toContain("tn_session");
-    expect(await database`select id from users where email=${email}`).toHaveLength(0);
+    expect(verified.json()).toEqual({ authenticated: true });
+    expect(verified.cookies.find(cookie => cookie.name === "tn_session")?.httpOnly).toBe(true);
+    const [user] = await database<{ id: string; display_name: string | null }[]>`select id,display_name from users where email=${email}`;
+    expect(user?.display_name).toBeNull();
+    const session = await app.inject({ method: "GET", url: "/v1/auth/session", headers: { cookie: cookies(verified) } });
+    expect(session.json().tenant.onboardingComplete).toBe(false);
+    expect((await post("account/verify-email", { code }, cookies(access))).statusCode).toBe(400);
+    const returning = await post("account/access", { email });
+    const signedIn = await post("account/verify-email", { code: latestCode(email) }, cookies(returning));
+    expect(signedIn.json()).toEqual({ authenticated: true });
+    const resumed = await app.inject({ method: "GET", url: "/v1/auth/session", headers: { cookie: cookies(signedIn) } });
+    expect(resumed.json().user.id).toBe(user!.id);
+    expect(resumed.json().tenant.id).toBe(session.json().tenant.id);
+    expect(await database`select id from users where email=${email}`).toHaveLength(1);
+  });
 
-    const continuation = await app.inject({ method: "GET", url: "/v1/account/continuation", headers: { cookie: cookies(verified) } });
-    expect(continuation.statusCode, continuation.body).toBe(200);
-    expect(continuation.json()).toMatchObject({ stage: "profile", email, purpose: "access" });
-
-    const completed = await post("account/complete-profile", { name: "Unified New" }, cookies(verified));
+  it("finishes an already verified legacy profile challenge without asking for a name", async () => {
+    const email = "pending-profile@tablenow.test";
+    const access = await post("account/access", { email });
+    // A challenge advanced by the previously deployed version: email proof already checked.
+    await database`update account_challenges set stage='profile',payload=${seal({ purpose: 'access', passwordless: true }, 's'.repeat(48))} where email=${email}`;
+    const completed = await post("account/complete-profile", {}, cookies(access));
     expect(completed.statusCode, completed.body).toBe(200);
     expect(completed.json()).toEqual({ authenticated: true });
-    expect(completed.cookies.find(cookie => cookie.name === "tn_session")?.httpOnly).toBe(true);
-    expect(await database`select id, display_name from users where email=${email}`).toMatchObject([{ display_name: "Unified New" }]);
-    const replay = await post("account/complete-profile", { name: "Replay" }, cookies(verified));
-    expect(replay.statusCode).toBe(400);
-    expect(await database`select id from users where email=${email}`).toHaveLength(1);
-
-    const session = await app.inject({ method: "GET", url: "/v1/auth/session", headers: { cookie: cookies(completed) } });
-    expect(session.statusCode).toBe(200);
-    expect(session.json().tenant.onboardingComplete).toBe(false);
+    expect((await post("account/complete-profile", {}, cookies(access))).statusCode).toBe(400);
   });
 
   it("creates an owner session after the email code without password, TOTP or recovery codes", async () => {
@@ -150,7 +152,7 @@ describe("simple account access", () => {
     expect(verified.cookies.filter(cookie => ["tn_session", "tn_csrf"].includes(cookie.name)).every(cookie => Number(cookie.maxAge) > 0)).toBe(true);
   });
 
-  it("signs an existing owner in when they use the registration screen again", async () => {
+  it("requires an existing owner to return to login instead of registering twice", async () => {
     const email = "return-via-signup@tablenow.test";
     const first = await post("account/signup", { email, name: "Existing Owner", rememberMe: true });
     expect((await post("account/verify-email", { code: latestCode(email) }, cookies(first))).statusCode).toBe(200);
@@ -158,12 +160,12 @@ describe("simple account access", () => {
     const repeated = await post("account/signup", { email, name: "Existing Owner", rememberMe: true });
     const verified = await post("account/verify-email", { code: latestCode(email) }, cookies(repeated));
 
-    expect(verified.statusCode, verified.body).toBe(200);
-    expect(verified.json()).toEqual({ authenticated: true });
+    expect(verified.statusCode, verified.body).toBe(409);
+    expect(verified.json().error.code).toBe("ACCOUNT_EXISTS");
     expect(await database`select id from users where email=${email}`).toHaveLength(1);
   });
 
-  it("also accepts an email code for an existing account that still has legacy credentials", async () => {
+  it("requires the existing TOTP after an email code instead of bypassing it", async () => {
     const { seedOwnerFixture } = await import("./testing/owner-fixture.js");
     const fixture = await seedOwnerFixture(database);
     const email = "legacy-owner@tablenow.test";
@@ -175,9 +177,8 @@ describe("simple account access", () => {
     const verified = await post("account/verify-email", { code: latestCode(email) }, cookies(login));
 
     expect(verified.statusCode, verified.body).toBe(200);
-    expect(verified.json()).toEqual({ authenticated: true });
+    expect(verified.json().stage).toBe("mfa");
     const session = await app.inject({ method: "GET", url: "/v1/auth/session", headers: { cookie: cookies(verified) } });
-    expect(session.json().user.id).toBe(fixture.userId);
-    expect(session.json().tenant.id).toBe(fixture.tenantId);
+    expect(session.statusCode).toBe(401);
   });
 });

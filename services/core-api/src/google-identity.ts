@@ -7,7 +7,7 @@ export const googlePreviewOrigin = tableNowDeploymentTopology.preview.origin;
 export const googleProductionOrigin = tableNowDeploymentTopology.production.origin;
 export const googleCallbackPath = "/api/v1/oauth/google/callback";
 export type GoogleConfig = { clientId: string; clientSecret: string; origin: string };
-export type GoogleIdentity = { sub: string; email: string; name: string };
+export type GoogleIdentity = { sub: string; email: string; name: string; emailAuthoritative?: boolean };
 export function googleConfiguration(environment: NodeJS.ProcessEnv = process.env): GoogleConfig | null {
   const test = environment.APP_ENV === "test" && environment.NODE_ENV === "test" && !environment.VERCEL;
   const clientId = environment.GOOGLE_OAUTH_CLIENT_ID, clientSecret = environment.GOOGLE_OAUTH_CLIENT_SECRET;
@@ -39,8 +39,8 @@ export const exchangeGoogleCode: GoogleExchange = async (config, code, verifier,
     const ticket = await oauth.verifyIdToken({ idToken: tokens.id_token, audience: config.clientId });
     // The official verifier checks signature, issuer, audience and expiry.
     const claims = z.object({ sub: z.string().min(1).max(255), email: z.email().max(254), email_verified: z.literal(true),
-      nonce: z.literal(nonce), name: z.string().trim().max(100).optional(), azp: z.string().optional() }).parse(ticket.getPayload());
+      nonce: z.literal(nonce), name: z.string().trim().max(100).optional(), azp: z.string().optional(), hd: z.string().min(1).optional() }).parse(ticket.getPayload());
     if (claims.azp && claims.azp !== config.clientId) throw new Error();
-    return { sub: claims.sub, email: claims.email.toLowerCase(), name: claims.name || claims.email.split("@")[0]! };
+    return { emailAuthoritative: claims.email.toLowerCase().endsWith("@gmail.com") || Boolean(claims.hd), sub: claims.sub, email: claims.email.toLowerCase(), name: claims.name || claims.email.split("@")[0]! };
   } catch { throw new Error("GOOGLE_IDENTITY_FAILED"); }
 };

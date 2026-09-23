@@ -28,14 +28,14 @@ describe("account progress reconciliation", () => {
     expect(await readAccountProgress()).toEqual({ kind: "challenge", challenge });
     expect(fetchMock.mock.calls.every(call => call[1].method === undefined)).toBe(true);
   });
-  it("ignores a legacy MFA challenge instead of reopening the retired flow", async () => {
+  it("resumes the required second factor of a protected account", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValueOnce(unauthorized()).mockResolvedValueOnce(response({ stage: "mfa", purpose: "login" })));
-    expect(await readAccountProgress()).toEqual({ kind: "none" });
+    expect(await readAccountProgress()).toEqual({ kind: "challenge", challenge: { stage: "mfa", purpose: "login" } });
   });
-  it("ignores a legacy Google challenge because Google now creates the session directly", async () => {
+  it("preserves an enrollment already started before deployment", async () => {
     const challenge = { stage: "enroll", purpose: "google" };
     vi.stubGlobal("fetch", vi.fn().mockResolvedValueOnce(unauthorized()).mockResolvedValueOnce(response(challenge)));
-    expect(await readAccountProgress()).toEqual({ kind: "none" });
+    expect(await readAccountProgress()).toEqual({ kind: "challenge", challenge });
   });
   it("keeps an unavailable server distinct from an absent session", async () => {
     const fetchMock = vi.fn().mockResolvedValue(response({ error: { message: "Unavailable" } }, 503));

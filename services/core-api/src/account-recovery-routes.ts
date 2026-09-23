@@ -32,7 +32,7 @@ export async function registerAccountRecoveryRoutes(app: FastifyInstance, databa
       const [session] = await tx`select user_id from sessions where token_hash=${sessionHash} and user_id=${userId} and expires_at>now() for update`;
       if (!session) return { error: "unauthenticated" as const };
       const [credential] = await tx<{ totp_secret: string; last_totp_step: number; locked: boolean }[]>`select totp_secret,last_totp_step,(locked_until>now()) as locked from account_credentials where user_id=${userId} for update`;
-      if (!credential || credential.locked) return { error: "unavailable" as const };
+      if (!credential?.totp_secret || credential.locked) return { error: "unavailable" as const };
       const [existing] = await tx<RecoveryRow[]>`select payload,consumed_at,expires_at,expires_at<=now() as expired,greatest(0,ceil(extract(epoch from (expires_at-now()))))::int as expires_in_seconds from account_challenges where token_hash=${operationHash} for update`;
       if (existing) {
         const escrow = unseal<Escrow>(existing.payload, secret);

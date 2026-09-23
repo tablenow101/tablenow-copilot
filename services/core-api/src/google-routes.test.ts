@@ -2,7 +2,7 @@ import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import type { FastifyInstance } from "fastify";
 import type { Database } from "@tablenow/provider-adapters";
 import { createTestDatabase } from "./testing/pglite.js";
-import { passwordHash, passwordMatches, seal, unseal } from "./account-crypto.js";
+import { passwordHash, passwordMatches, seal, unseal, newTotpSecret, totpAt } from "./account-crypto.js";
 import {
   googleCallbackConfiguration,
   googleConfiguration,
@@ -17,8 +17,8 @@ const send = vi.fn();
 const cookieOf = (r: { cookies: { name: string; value: string }[] }) => r.cookies.filter(c => c.value).map(c => `${c.name}=${c.value}`).join("; ");
 const get = (url: string, cookie = "") => app.inject({ method: "GET", url, headers: { host: "localhost:3000", cookie }, remoteAddress: `127.0.0.${n++}` });
 const post = (url: string, payload: Record<string, unknown>, cookie = "") => app.inject({ method: "POST", url, payload, headers: { host: "localhost:3000", origin: "http://localhost:3000", cookie }, remoteAddress: `127.0.0.${n++}` });
-async function start(remember = "1") {
-  const r = await get(`/v1/oauth/google/start?remember=${remember}`);
+async function start(remember = "1", intent = "signup") {
+  const r = await get(`/v1/oauth/google/start?remember=${remember}&intent=${intent}`);
   expect(r.statusCode).toBe(302);
   const target = new URL(r.headers.location!);
   expect(target.origin).toBe("https://accounts.google.com");
@@ -28,9 +28,9 @@ async function start(remember = "1") {
   expect(r.cookies[0]).toMatchObject({ name: "tn_google", httpOnly: true, path: "/api/v1/oauth/google", sameSite: "Lax" });
   return { state: target.searchParams.get("state")!, cookie: cookieOf(r) };
 }
-async function google(sub: string, email: string, remember = "1", destination = "/onboarding") {
-  exchange.mockResolvedValueOnce({ sub, email, name: "Restaurateur" });
-  const s = await start(remember);
+async function google(sub: string, email: string, remember = "1", destination = "/onboarding", intent = "signup") {
+  exchange.mockResolvedValueOnce({ sub, email, name: "Restaurateur", emailAuthoritative: true });
+  const s = await start(remember, intent);
   const r = await get(`/v1/oauth/google/callback?state=${s.state}&code=fixture`, s.cookie);
   expect(r.headers.location).toBe(`http://localhost:3000${destination}`);
   const cookie = cookieOf(r);
@@ -38,7 +38,7 @@ async function google(sub: string, email: string, remember = "1", destination = 
   return { cookie, response: r, session: await get("/v1/auth/session", cookie) };
 }
 beforeAll(async () => {
-  for (const [key, value] of Object.entries({ NODE_ENV: "test", APP_ENV: "test", DATABASE_URL: "postgres://test:test@localhost/test", PUBLIC_ORIGIN: "http://localhost:3000", SESSION_SECRET: "s".repeat(48), OTP_PEPPER: "p".repeat(48), PLATFORM_ADMIN_EMAIL: "admin@tablenow.test", EMAIL_TRANSPORT: "log", LOG_LEVEL: "silent", GOOGLE_OAUTH_CLIENT_ID: "fixture.apps.googleusercontent.com", GOOGLE_OAUTH_CLIENT_SECRET: "fixture-only" })) vi.stubEnv(key, value);
+  for (const [key, value] of Object.entries({ NODE_ENV: "test", APP_ENV: "test", DATABASE_URL: "postgres://test:test@localhost/test", PUBLIC_ORIGIN: "http://localhost:3000", SESSION_SECRET: "s".repeat(48), OTP_PEPPER: "p".repeat(48), PLATFORM_ADMIN_EMAIL: "admin@tablenow.test", EMAIL_TRANSPORT: "smtp", SMTP_HOST: "test.invalid", SMTP_USER: "test", SMTP_PASSWORD: "test", LOG_LEVEL: "silent", GOOGLE_OAUTH_CLIENT_ID: "fixture.apps.googleusercontent.com", GOOGLE_OAUTH_CLIENT_SECRET: "fixture-only" })) vi.stubEnv(key, value);
   ({ sql: database } = await createTestDatabase());
   const { buildApp } = await import("./app.js");
   app = await buildApp({ database, googleExchange: exchange, email: { send } });
@@ -96,7 +96,7 @@ describe("Google authentication", () => {
   });
   it("creates the new Google owner and a transient session without TOTP or recovery codes", async () => {
     const flow = await google("new-sub", "google-new@tablenow.test", "0");
-    expect(send).not.toHaveBeenCalled();
+    expect(send).toHaveBeenCalledWith(expect.objectContaining({to:"google-new@tablenow.test",subject:"Bienvenue sur TableNow"}));
     expect(flow.response.cookies.filter(c => c.name === "tn_session" || c.name === "tn_csrf").every(c => c.maxAge === undefined)).toBe(true);
     expect(flow.session.statusCode).toBe(200);
     expect(flow.session.json().tenant.onboardingComplete).toBe(false);
@@ -114,9 +114,17 @@ describe("Google authentication", () => {
       await tx`insert into onboarding_drafts(tenant_id,restaurant_id,status,completed_at) values (${fixture.tenantId},${fixture.restaurantId},'completed',now())`;
     });
     const hash = await passwordHash("Phrase du propriétaire existant 123");
-    const sealedTotp = seal("legacy-totp-secret", "s".repeat(48));
+    const totpSecret = newTotpSecret();
+    const sealedTotp = seal(totpSecret, "s".repeat(48));
     await database`insert into account_credentials(user_id,password_hash,totp_secret) values (${fixture.userId},${hash},${sealedTotp})`;
-    const flow = await google("existing-sub", "existing@tablenow.test", "1", "/dashboard");
+    exchange.mockResolvedValueOnce({ sub: "existing-sub", email: "existing@tablenow.test", name: "Owner", emailAuthoritative: true });
+    const attempt = await start();
+    const callback = await get(`/v1/oauth/google/callback?state=${attempt.state}&code=fixture`, attempt.cookie);
+    expect(callback.headers.location).toBe("http://localhost:3000/login?google=continue");
+    expect((await get("/v1/auth/session", cookieOf(callback))).statusCode).toBe(401);
+    const mfa = await post("/v1/account/verify-mfa", {code: totpAt(totpSecret, Math.floor(Date.now()/30000))}, cookieOf(callback));
+    expect(mfa.statusCode).toBe(200);
+    const flow = { session: await get("/v1/auth/session", cookieOf(mfa)) };
     const [credential] = await database<{ password_hash: string; totp_secret: string }[]>`select password_hash,totp_secret from account_credentials where user_id=${fixture.userId}`;
     expect(credential!.password_hash).toBe(hash);
     expect(credential!.totp_secret).toBe(sealedTotp);
@@ -125,10 +133,50 @@ describe("Google authentication", () => {
     expect(session.user.id).toBe(fixture.userId);
     expect(session.tenant.id).toBe(fixture.tenantId);
     expect(session.tenant.onboardingComplete).toBe(true);
-    const again = await google("existing-sub", "changed-email@tablenow.test", "1", "/dashboard");
-    expect(again.session.json().user.email).toBe("existing@tablenow.test");
-    exchange.mockResolvedValueOnce({ sub: "different-sub", email: "existing@tablenow.test", name: "Other" });
+    exchange.mockResolvedValueOnce({ sub: "existing-sub", email: "changed-email@tablenow.test", name: "Owner", emailAuthoritative: true });
+    const returning = await start("1", "login");
+    const again = await get(`/v1/oauth/google/callback?state=${returning.state}&code=fixture`, returning.cookie);
+    expect(again.headers.location).toBe("http://localhost:3000/login?google=continue");
+    expect((await get("/v1/account/continuation", cookieOf(again))).json().email).toBe("existing@tablenow.test");
+    exchange.mockResolvedValueOnce({ sub: "different-sub", email: "existing@tablenow.test", name: "Other", emailAuthoritative: true });
     const s = await start();
     expect((await get(`/v1/oauth/google/callback?state=${s.state}&code=fixture`, s.cookie)).headers.location).toContain("google=error");
   });
+});
+
+it("does not create an account from the Google login screen", async () => {
+  exchange.mockResolvedValueOnce({sub:"never-create",email:"not-registered@gmail.com",name:"New",emailAuthoritative:true});
+  const attempt=await start("1","login");
+  const callback=await get(`/v1/oauth/google/callback?state=${attempt.state}&code=fixture`,attempt.cookie);
+  expect(callback.headers.location).toBe("http://localhost:3000/login?google=signup-required");
+  expect((await get("/v1/auth/session",cookieOf(callback))).statusCode).toBe(401);
+  expect(await database`select id from users where email='not-registered@gmail.com'`).toHaveLength(0);
+});
+it("requires mailbox proof before creating an identity whose email Google does not own", async () => {
+  exchange.mockResolvedValueOnce({sub:"external-mail",email:"outside@tablenow.test",name:"External",emailAuthoritative:false});
+  const attempt=await start();
+  const callback=await get(`/v1/oauth/google/callback?state=${attempt.state}&code=fixture`,attempt.cookie);
+  expect(callback.headers.location).toBe("http://localhost:3000/login?google=continue");
+  expect((await get("/v1/auth/session",cookieOf(callback))).statusCode).toBe(401);
+  expect(await database`select id from users where email='outside@tablenow.test'`).toHaveLength(0);
+  const code = send.mock.calls.at(-1)![0].text.match(/\b\d{6}\b/)![0];
+  const verified = await post("/v1/account/verify-email",{code},cookieOf(callback));
+  expect(verified.json()).toEqual({authenticated:true});
+  expect((await get("/v1/auth/session",cookieOf(verified))).json().user.email).toBe("outside@tablenow.test");
+});
+
+it("signs a linked Google account in through login without creating a second user", async()=>{
+ const returned=await google("new-sub","google-new@tablenow.test","1","/onboarding","login");
+ expect(returned.session.json().user.email).toBe("google-new@tablenow.test");
+ expect(await database`select id from users where email='google-new@tablenow.test'`).toHaveLength(1);
+});
+
+it("returns a readable login error when additional mailbox verification cannot be delivered",async()=>{
+ send.mockRejectedValueOnce(new Error("SMTP unavailable"));
+ exchange.mockResolvedValueOnce({sub:"failed-mail",email:"failed@tablenow.test",name:"External",emailAuthoritative:false});
+ const attempt=await start();
+ const callback=await get(`/v1/oauth/google/callback?state=${attempt.state}&code=fixture`,attempt.cookie);
+ expect(callback.headers.location).toBe("http://localhost:3000/login?google=email-error");
+ expect(await database`select id from users where email='failed@tablenow.test'`).toHaveLength(0);
+ expect((await get("/v1/auth/session",cookieOf(callback))).statusCode).toBe(401);
 });

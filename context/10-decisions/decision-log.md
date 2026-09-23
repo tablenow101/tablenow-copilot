@@ -1,3 +1,7 @@
+## 23 septembre 2026 — Connexion et inscription séparées, validation explicite du propriétaire
+
+Source : « Applique tout ce que tu viens de mettre dans moment et parcours », après validation du tableau dans cette conversation. Cette décision remplace l’entrée unifiée et le nom demandé avant onboarding. Connexion e-mail/mot de passe ou Google existant ; inscription e-mail/mot de passe avec lien à usage unique ou Google ; code e-mail alternatif pour les comptes existants ; récupération distincte ; TOTP actif et données conservés. Google garanti : pas de confirmation e-mail redondante, bienvenue envoyée. Authentification seule, main/production intacts, présentation validée et thème compact conservés. Mémoire canonique inaccessible : enregistrement PostgreSQL en attente. [Preuves et limites](../../docs/qa/auth-split-2026-09-23.md).
+
 - 2026-09-21 — Reprise exacte : conserver l’adresse de l’étape après confirmation serveur, y compris si elle était déjà enregistrée. Correction issue d’un échec reproduit en Preview ; aucun changement de parcours métier.
 
 - 2026-09-21 — Correctif de conservation : la confirmation d’une préférence vient du choix explicite, jamais du franchissement d’une ancienne section ou de la finalisation. Deux appels corrigés, trois régressions reproduites puis vérifiées ; aucun nouveau choix produit ni migration.

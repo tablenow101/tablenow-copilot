@@ -1,3 +1,7 @@
+# Prochaine action — authentification uniquement
+
+Terminer la publication Preview du parcours séparé et contrôler son rendu déployé. Puis faire vérifier la réception réelle et la connexion privée au propriétaire sans fermer son onglet. Aucun autre écran ni main/production à modifier. [Rapport](../../docs/qa/auth-split-2026-09-23.md).
+
 # Parcours guidé — suite du 21 septembre 2026
 
 ## Authentification unifiée Preview — 23 septembre 2026
