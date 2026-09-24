@@ -74,10 +74,17 @@ export async function registerAccountRoutes(app: FastifyInstance, database: Data
       await mail.send(payload.delivery === "link"
         ? { to: email, subject: label + " — TableNow", text: `${label} : ${link}\nCe lien est à usage unique et expire dans 10 minutes. Si vous n’avez pas demandé cette opération, ignorez ce message.`, html: `<p>${label} :</p><p><a href="${link.replaceAll("&", "&amp;")}">${label}</a></p><p>Ce lien est à usage unique et expire dans 10 minutes. Si vous n’avez pas demandé cette opération, ignorez ce message.</p>` }
         : { to: email, subject: "Votre code de connexion TableNow", text: `Votre code de connexion TableNow : ${code}. Il expire dans 10 minutes. Si vous n’avez pas demandé cette opération, ignorez ce message.`, html: `<p>Votre code de connexion TableNow : <strong>${code}</strong>.</p><p>Il expire dans 10 minutes. Si vous n’avez pas demandé cette opération, ignorez ce message.</p>` });
-    } catch {
+    } catch (caught) {
+      const failure = caught && typeof caught === "object" ? caught as { code?: unknown; responseCode?: unknown; command?: unknown } : {};
+      app.log.warn({
+        event: "account.email_delivery_failed",
+        code: typeof failure.code === "string" ? failure.code : "UNKNOWN",
+        responseCode: typeof failure.responseCode === "number" ? failure.responseCode : undefined,
+        command: typeof failure.command === "string" ? failure.command : undefined,
+      }, "Account email delivery failed");
       await database`update account_challenges set consumed_at=now() where token_hash=${digest(token.token)}`;
       reply.clearCookie("tn_auth", { path: "/" });
-      return redirectTo ? reply.redirect(`${config.PUBLIC_ORIGIN}/login?google=email-error`) : reply.code(503).send({ error: { message: "L’envoi de l’e-mail est indisponible. Réessayez plus tard." } });
+      return redirectTo ? reply.redirect(`${config.PUBLIC_ORIGIN}/login?google=email-error`) : reply.code(503).send({ error: { code: "ACCOUNT_EMAIL_UNAVAILABLE", message: "L’envoi de l’e-mail est indisponible. Réessayez plus tard." } });
     }
     if (redirectTo) return reply.redirect(redirectTo);
     return reply.code(202).send({ stage: "email", delivery: payload.delivery ?? "code", expiresAt: token.expiresAt, expiresInSeconds: token.expiresInSeconds });

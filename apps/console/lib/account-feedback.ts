@@ -20,7 +20,13 @@ export function accountFeedback(error: unknown): { message: string; restart: boo
   if (!(error instanceof ApiError)) return { message: "Un problème technique empêche la vérification. Votre saisie est conservée. Réessayez.", restart: false };
   if (error.code === "ACCOUNT_CHALLENGE_EXPIRED") return { message: "Cette vérification a expiré. Relancez la connexion ; vos informations déjà enregistrées sont conservées.", restart: true };
   if (error.code === "ACCOUNT_CHALLENGE_UNAVAILABLE") return { message: "Cette vérification n’est plus disponible. Elle a déjà été utilisée ou le nombre d’essais autorisés est atteint. Relancez la connexion.", restart: true };
+  if (error.code === "ACCOUNT_EMAIL_UNAVAILABLE") return { message: "L’envoi de l’e-mail est indisponible. Réessayez dans quelques minutes.", restart: false };
   if (error.status >= 500) return { message: "Le service de vérification rencontre un problème technique. Votre saisie est conservée. Réessayez dans un instant.", restart: false };
   if (error.status === 429) return { message: "Trop de tentatives. Patientez avant de réessayer. Ne créez pas un nouveau compte.", restart: false };
   return { message: error.message, restart: false };
+}
+
+/** Reconcile only outcomes whose server result is unknown, never an explicit failure. */
+export function shouldReconcileAccountFailure(error: unknown): boolean {
+  return error instanceof ApiError && error.status === 0;
 }

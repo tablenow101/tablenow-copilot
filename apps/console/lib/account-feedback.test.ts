@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ApiError } from "./api";
-import { accountFeedback, accountRequest } from "./account-feedback";
+import { accountFeedback, accountRequest, shouldReconcileAccountFailure } from "./account-feedback";
 
 afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); vi.useRealTimers(); });
 
@@ -9,6 +9,16 @@ describe("account verification feedback", () => {
     expect(accountFeedback(new ApiError(400, "ACCOUNT_CODE_INVALID", "Code incorrect."))).toEqual({ message: "Code incorrect.", restart: false });
     expect(accountFeedback(new ApiError(410, "ACCOUNT_CHALLENGE_EXPIRED", "expired")).restart).toBe(true);
     expect(accountFeedback(new ApiError(503, "SERVER_FAILURE", "internal detail"))).toEqual({ message: "Le service de vérification rencontre un problème technique. Votre saisie est conservée. Réessayez dans un instant.", restart: false });
+  });
+
+  it("does not replace an explicit email delivery failure with a missing-challenge error", () => {
+    const deliveryFailure = new ApiError(503, "ACCOUNT_EMAIL_UNAVAILABLE", "L’envoi de l’e-mail est indisponible.");
+    expect(shouldReconcileAccountFailure(deliveryFailure)).toBe(false);
+    expect(accountFeedback(deliveryFailure)).toEqual({
+      message: "L’envoi de l’e-mail est indisponible. Réessayez dans quelques minutes.",
+      restart: false,
+    });
+    expect(shouldReconcileAccountFailure(new ApiError(0, "ACCOUNT_NETWORK", "interrupted"))).toBe(true);
   });
 
   it("reports an interrupted connection without asserting that the code was wrong", async () => {

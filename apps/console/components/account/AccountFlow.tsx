@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, Eye, EyeOff, LoaderCircle, Moon, Sun } from "lucide-react";
 import { ApiError } from "@/lib/api";
-import { accountRequest as api, accountFeedback } from "@/lib/account-feedback";
+import { accountRequest as api, accountFeedback, shouldReconcileAccountFailure } from "@/lib/account-feedback";
 import { readAccountProgress, type AccountContinuation } from "@/lib/account-continuation";
 import { challengeSecondsRemaining } from "@/lib/account-challenge";
 import { Brand } from "../Brand";
@@ -185,7 +185,7 @@ export function AccountFlow({ mode = "login" }: { mode?: Mode }) {
         } else await resumeChallenge({ ...next, email, purpose: "login", rememberMe });
       }
     } catch (caught) {
-      if (caught instanceof ApiError && (caught.status === 0 || caught.status >= 500)) await reconcileProgress();
+      if (shouldReconcileAccountFailure(caught)) await reconcileProgress();
       else {
         const feedback = accountFeedback(caught);
         setChallengeUnavailable(feedback.restart);
@@ -204,7 +204,7 @@ export function AccountFlow({ mode = "login" }: { mode?: Mode }) {
       setCooldown(60);
       recordChallengeExpiry(next.expiresInSeconds);
     } catch (caught) {
-      if (caught instanceof ApiError && (caught.status === 0 || caught.status >= 500)) await reconcileProgress();
+      if (shouldReconcileAccountFailure(caught)) await reconcileProgress();
       else {
         const feedback = accountFeedback(caught);
         setChallengeUnavailable(feedback.restart);
