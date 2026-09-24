@@ -37,6 +37,7 @@ export function AccountFlow({ mode = "login" }: { mode?: Mode }) {
   const [challengeSeconds, setChallengeSeconds] = useState(0);
   const [cooldown, setCooldown] = useState(0);
   const [error, setError] = useState("");
+  const [errorAction, setErrorAction] = useState<"signup" | undefined>();
   const [theme, setTheme] = useState("dark");
   const [googleStart, setGoogleStart] = useState<string | null>(null);
 
@@ -102,7 +103,9 @@ export function AccountFlow({ mode = "login" }: { mode?: Mode }) {
         }
       } catch (caught) {
         if (live) {
-          setError(accountFeedback(caught).message);
+          const feedback = accountFeedback(caught);
+          setError(feedback.message);
+          setErrorAction(feedback.action);
           if (caught instanceof ApiError && (caught.status === 0 || caught.status >= 500)) setNeedsProgressCheck(true);
         }
       } finally {
@@ -189,6 +192,7 @@ export function AccountFlow({ mode = "login" }: { mode?: Mode }) {
       if (shouldReconcileAccountFailure(caught)) await reconcileProgress(caught);
       else {
         const feedback = accountFeedback(caught);
+        setErrorAction(feedback.action);
         setChallengeUnavailable(feedback.restart);
         setError(feedback.message);
       }
@@ -223,6 +227,7 @@ export function AccountFlow({ mode = "login" }: { mode?: Mode }) {
     setChallengeSeconds(0);
     setChallengeUnavailable(false);
     setNeedsProgressCheck(false);
+    setErrorAction(undefined);
     setError("");
     window.history.replaceState(null, "", window.location.pathname);
   }
@@ -268,7 +273,7 @@ export function AccountFlow({ mode = "login" }: { mode?: Mode }) {
         {credentialsVisible && mode !== "passwordless" && <label className="tn-field"><span>{mode === "reset" ? "Nouveau mot de passe" : "Mot de passe"}</span><div className="tn-password-entry"><input name="password" type={showPassword ? "text" : "password"} autoComplete={mode === "login" ? "current-password" : "new-password"} minLength={mode === "login" ? 1 : 15} maxLength={128} placeholder="Votre mot de passe" value={password} onChange={event => setPassword(event.target.value)} required /><button type="button" aria-label={showPassword ? "Masquer le mot de passe" : "Afficher le mot de passe"} onClick={() => setShowPassword(!showPassword)}>{showPassword ? <EyeOff size={18} /> : <Eye size={18} />}</button></div>{mode !== "login" && <small>Au moins 15 caractères. Vous pouvez utiliser une phrase.</small>}</label>}
         {credentialsVisible && (mode === "login" || mode === "signup") && <div className="tn-account-options"><label><input type="checkbox" checked={rememberMe} onChange={event => setRememberMe(event.target.checked)} />Se souvenir de moi</label>{mode === "login" && <Link href="/forgot-password">Mot de passe oublié ?</Link>}</div>}
         {stage === "enroll" && <div className="tn-enrollment"><label className="tn-field"><span>Clé à ajouter dans votre application</span><input readOnly value={enrollmentKey} aria-label="Clé d’authentification" /></label><button type="button" onClick={() => void navigator.clipboard.writeText(enrollmentKey).catch(() => setError("Sélectionnez et copiez la clé affichée."))}>Copier la clé</button></div>}
-        {(stage === "mfa" || stage === "enroll" || (stage === "email" && !emailLink)) && <>
+        {!errorAction && (stage === "mfa" || stage === "enroll" || (stage === "email" && !emailLink)) && <>
           <label className="tn-field tn-code-field">
             <span>{recoveryCode ? "Code de récupération" : "Code à 6 chiffres"}</span>
             <div className={recoveryCode ? "tn-recovery-entry" : "tn-code-entry"}>
@@ -280,7 +285,7 @@ export function AccountFlow({ mode = "login" }: { mode?: Mode }) {
         </>}
 
         {error && <p id="account-error" className="tn-error" role="alert">{error}</p>}
-        {backupCodes.length > 0 ? <div><p>Conservez ces codes de récupération dans un endroit sûr.</p><pre>{backupCodes.join("\n")}</pre><button type="button" className="tn-primary tn-account-submit" onClick={() => void enterApp()}>J’ai sauvegardé mes codes</button></div> : needsProgressCheck
+        {errorAction === "signup" ? <Link className="tn-primary tn-account-submit" href="/register">S’inscrire</Link> : backupCodes.length > 0 ? <div><p>Conservez ces codes de récupération dans un endroit sûr.</p><pre>{backupCodes.join("\n")}</pre><button type="button" className="tn-primary tn-account-submit" onClick={() => void enterApp()}>J’ai sauvegardé mes codes</button></div> : needsProgressCheck
           ? <button className="tn-primary tn-account-submit" type="button" disabled={busy} onClick={() => void reconcileProgress()}>Vérifier ma connexion</button>
           : restartRequired
             ? <button className="tn-primary tn-account-submit" type="button" disabled={busy} onClick={restart}>Recommencer</button>
@@ -294,7 +299,7 @@ export function AccountFlow({ mode = "login" }: { mode?: Mode }) {
       </div>}
       {credentialsVisible && mode === "login" && <Link className="tn-link tn-account-secondary" href="/login/email">Se connecter sans mot de passe</Link>}
       {stage === "mfa" && <button type="button" className="tn-link tn-account-change-email" onClick={() => { setRecoveryCode(!recoveryCode); setCode(""); }}>{recoveryCode ? "Utiliser mon application d’authentification" : "Utiliser un code de récupération"}</button>}
-      {stage === "email" && !restartRequired && <div className="tn-account-resend"><span>Vous n’avez rien reçu ?</span><button type="button" className="tn-link" disabled={busy || needsProgressCheck || cooldown > 0} onClick={() => void resend()}>{cooldown ? `Renvoyer dans ${cooldown} s` : emailLink ? "Renvoyer le lien" : "Renvoyer le code"}</button></div>}
+      {stage === "email" && !restartRequired && !errorAction && <div className="tn-account-resend"><span>Vous n’avez rien reçu ?</span><button type="button" className="tn-link" disabled={busy || needsProgressCheck || cooldown > 0} onClick={() => void resend()}>{cooldown ? `Renvoyer dans ${cooldown} s` : emailLink ? "Renvoyer le lien" : "Renvoyer le code"}</button></div>}
       {stage === "email" && <button type="button" className="tn-link tn-account-change-email" disabled={busy} onClick={restart}>Modifier l’adresse</button>}
       {mode !== "login" && <Link className="tn-link tn-account-secondary" href="/login">Retour à la connexion</Link>}
       <footer className="tn-auth-footer"><p>{mode === "signup" ? <>Vous avez déjà un compte ? <Link href="/login">Se connecter</Link></> : <>Vous n’avez pas de compte ? <Link href="/register">S’inscrire</Link></>}</p><div><Link href="/legal/privacy">Confidentialité</Link><span>·</span><Link href="/legal/terms">Conditions d’utilisation</Link></div></footer>

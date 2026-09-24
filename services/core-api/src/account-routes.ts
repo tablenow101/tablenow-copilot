@@ -238,7 +238,8 @@ export async function registerAccountRoutes(app: FastifyInstance, database: Data
         }
         if ((payload.purpose === "login" || payload.purpose === "access" || payload.purpose === "reset") && !existingUser) {
           await tx`update account_challenges set consumed_at=now() where token_hash=${row.token_hash}`;
-          return null;
+          // Only the proven mailbox owner may learn that signup is required.
+          return { signupRequired: true };
         }
 
         const [credential] = existingUser ? await tx<{ totp_secret: string | null }[]>`select totp_secret from account_credentials where user_id=${existingUser.id}` : [];
@@ -302,6 +303,10 @@ export async function registerAccountRoutes(app: FastifyInstance, database: Data
       const [advanced] = await tx<{ expires_at: Date | string; expires_in_seconds: number }[]>`update account_challenges set stage=${stage},payload=${seal(payload,secret)},attempts=0,expires_at=now()+(${challengeMaxAgeSeconds} * interval '1 second') where token_hash=${row.token_hash} returning expires_at,greatest(0,ceil(extract(epoch from (expires_at-now()))))::int as expires_in_seconds`;
       return { stage, expiresAt: advanced!.expires_at, expiresInSeconds: Number(advanced!.expires_in_seconds), ...(payload.secret ? { secret: payload.secret } : {}) };
     });
+    if (result && "signupRequired" in result) {
+      reply.clearCookie("tn_auth", { path: "/" });
+      return reply.code(409).send({ error: { code: "ACCOUNT_SIGNUP_REQUIRED", message: "Votre adresse e-mail est vérifiée, mais aucun compte TableNow n’y est associé. Inscrivez-vous pour créer votre compte." } });
+    }
     if (result && "existing" in result) return reply.code(409).send({ error: { code: "ACCOUNT_EXISTS", message: "Cette adresse possède déjà un compte. Connectez-vous ou utilisez « Mot de passe oublié ? »." } });
     if (result?.outcome === "authenticated" && "sessionToken" in result) {
       setSessionCookies(reply, { sessionToken: result.sessionToken, csrfToken: result.csrfToken, maxAgeSeconds: result.maxAgeSeconds, rememberMe: result.rememberMe });

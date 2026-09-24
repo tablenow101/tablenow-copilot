@@ -16,10 +16,11 @@ export async function accountRequest<T>(path: string, init: RequestInit = {}): P
   }
 }
 
-export function accountFeedback(error: unknown): { message: string; restart: boolean } {
+export function accountFeedback(error: unknown): { message: string; restart: boolean; action?: "signup" } {
   if (!(error instanceof ApiError)) return { message: "Un problème technique empêche la vérification. Votre saisie est conservée. Réessayez.", restart: false };
   if (error.code === "ACCOUNT_CHALLENGE_EXPIRED") return { message: "Cette vérification a expiré. Relancez la connexion ; vos informations déjà enregistrées sont conservées.", restart: true };
-  if (error.code === "ACCOUNT_CHALLENGE_UNAVAILABLE") return { message: "Cette vérification n’est plus disponible. Elle a déjà été utilisée ou le nombre d’essais autorisés est atteint. Relancez la connexion.", restart: true };
+  if (error.code === "ACCOUNT_CHALLENGE_UNAVAILABLE") return { message: "Cette vérification n’est plus disponible. Recommencez pour continuer.", restart: true };
+  if (error.code === "ACCOUNT_SIGNUP_REQUIRED") return { message: "Votre adresse e-mail est vérifiée, mais aucun compte TableNow n’y est associé. Inscrivez-vous pour créer votre compte.", restart: false, action: "signup" };
   if (error.code === "ACCOUNT_EMAIL_UNAVAILABLE") return { message: "L’envoi de l’e-mail est indisponible. Réessayez dans quelques minutes.", restart: false };
   if (error.status >= 500) return { message: "Le service de vérification rencontre un problème technique. Votre saisie est conservée. Réessayez dans un instant.", restart: false };
   if (error.status === 429) return { message: "Trop de tentatives. Patientez avant de réessayer. Ne créez pas un nouveau compte.", restart: false };

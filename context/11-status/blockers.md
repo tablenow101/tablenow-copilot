@@ -1,5 +1,7 @@
 # Blocage SMTP — 24 septembre 2026
 
+Blocage suivant établi à 15:35 : adresse sans compte, code valide consommé par un parcours de connexion. Ancien message trompeur. Correction vers l'inscription testée localement ; recette privée d'inscription par lien encore attendue. Aucun facteur ni compte existant modifié.
+
 Le refus SMTP (`535 EAUTH`) est levé : clé dédiée en Preview, déploiement `d554eb5` READY et code de connexion envoyé réellement depuis l'interface, marqué livré par Resend à 15:29 Paris. Restent non vérifiés : réception confirmée par le propriétaire, saisie privée, inscription par lien et connexion complète. L'onglet reste ouvert. La correction du message d'erreur seule n'avait pas résolu l'envoi. [Preuves](../../docs/qa/auth-consolidation-2026-09-24.md).
 
 # Authentification séparée — 23 septembre 2026

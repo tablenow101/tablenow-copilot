@@ -1,5 +1,7 @@
 # Prochaine action — confirmer la réparation SMTP
 
+Priorité après le code refusé à 15:35 : publier la correction du compte absent, puis laisser le propriétaire démarrer l'inscription sur `/register` (e-mail + mot de passe → lien de confirmation). Ne plus lui faire essayer une connexion tant que son compte n'existe pas. Ne pas réutiliser le code consommé, ni déclencher d'envoi automatique.
+
 Preview `d554eb5` READY ; envoi réel du code marqué livré par Resend à 15:29 Paris. Attendre la confirmation de réception du propriétaire et sa saisie privée dans l'onglet laissé ouvert, sans le fermer ni le recharger. Vérifier ensuite la connexion puis, séparément, l'inscription par lien et la reprise d'onboarding. Une seule branche de travail : `product/onboarding-owner`. Aucune suppression avant recette et accord, aucune production.
 
 # Prochaine action — authentification uniquement

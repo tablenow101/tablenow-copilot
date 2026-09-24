@@ -5,6 +5,13 @@ import { accountFeedback, accountRequest, missingAccountProgressFeedback, should
 afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); vi.useRealTimers(); });
 
 describe("account verification feedback", () => {
+  it("offers signup after a verified address has no account, without calling the code invalid or exhausted", () => {
+    expect(accountFeedback(new ApiError(409, "ACCOUNT_SIGNUP_REQUIRED", "verified address"))).toEqual({
+      message: "Votre adresse e-mail est vérifiée, mais aucun compte TableNow n’y est associé. Inscrivez-vous pour créer votre compte.",
+      restart: false,
+      action: "signup",
+    });
+  });
   it("separates a rejected code from an expired verification and a server failure", () => {
     expect(accountFeedback(new ApiError(400, "ACCOUNT_CODE_INVALID", "Code incorrect."))).toEqual({ message: "Code incorrect.", restart: false });
     expect(accountFeedback(new ApiError(410, "ACCOUNT_CHALLENGE_EXPIRED", "expired")).restart).toBe(true);

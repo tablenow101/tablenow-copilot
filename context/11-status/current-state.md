@@ -1,5 +1,7 @@
 # Authentification — 24 septembre 2026, correction SMTP
 
+Mise à jour après l'essai de 15:35 : code reçu et correct, mais adresse sans compte dans Preview. Le test avait été lancé dans la connexion, pas l'inscription. Correction ciblée : proposer explicitement « S’inscrire » après la preuve d'adresse, sans créer automatiquement un compte. 26 tests ciblés réussis ; parcours navigateur local vers l'inscription vérifié aux formats mobile/ordinateur. Déploiement de cette seconde correction et inscription réelle restent à vérifier. [Diagnostic](../../docs/qa/auth-consolidation-2026-09-24.md).
+
 Le refus SMTP `535 EAUTH` est corrigé avec une clé dédiée, limitée à Preview / `product/onboarding-owner`. Déploiement `d554eb5` READY et un code de connexion envoyé depuis l'interface à 15:29 Paris, marqué livré par Resend. Confirmation de réception et saisie privées attendues ; l'inscription par lien et le parcours complet restent à vérifier. Aucune correction d'authentification manquante dans les autres branches : la branche propriétaire rassemble déjà leur historique utile. Correction du message de reprise : 13 tests réussis. Aucune branche supprimée, main/production inchangés. [Rapport](../../docs/qa/auth-consolidation-2026-09-24.md).
 
 # Authentification séparée — 23 septembre 2026, Preview publiée

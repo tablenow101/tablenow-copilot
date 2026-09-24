@@ -35,3 +35,13 @@ La reprise après interruption conserve l'erreur d'origine quand aucune vérific
 - Mémoire canonique inaccessible : le connecteur Neon rejette `project_id` malgré sa présence ; sauvegarde en attente. Les décisions sont consignées dans le dépôt.
 
 Les branches obsolètes ne seront proposées à la suppression qu'après recette et validation explicite du propriétaire.
+
+## Échec du code reçu — diagnostic suivant, 24 septembre à 15:35
+
+L'envoi réussi ne validait pas la connexion. Le test avait été lancé à tort dans la connexion sans mot de passe pour une adresse sans compte, alors que l'objectif du propriétaire était l'inscription.
+
+Lecture seule sur l'endpoint Preview autorisé `ep-rapid-leaf-zas11naf` : aucun utilisateur pour cette adresse ; challenge créé à 13:29:29 UTC, échéance 13:39:29, une seule tentative, consommation à 13:34:36. Le journal confirme un seul POST verify-email à 13:34:35, statut 400. Le code correspondait à la preuve : le chemin serveur le consomme après validation puis retourne la même erreur générique que pour une vérification indisponible quand le compte est absent. Ni expiration ni plafond d'essais atteint. Aucun code, hash ou secret n'a été lu dans cette requête.
+
+Correction : après preuve d'adresse valide seulement, retourner `ACCOUNT_SIGNUP_REQUIRED`, terminer le challenge et effacer son cookie. L'interface affiche la cause réelle et un lien principal « S’inscrire », sans relance du code ni création automatique. Les demandes non prouvées et les mauvais codes ne révèlent toujours pas l'existence du compte. Le message générique ne prétend plus connaître une cause non établie.
+
+Preuves : nouveau test de régression rouge (400 au lieu du résultat attendu), puis 12 tests API et 14 tests interface verts ; contrôles TypeScript API/console réussis. Recette navigateur locale sur base jetable : code valide d'une adresse inconnue → explication → S’inscrire → formulaire e-mail/mot de passe, sans ancienne erreur. Formats 390×844 et 1440×900, aucun appareil physique ni e-mail réel dans cette recette. Captures conservées dans `/private/tmp/tn-verified-signup-evidence`. Inscription réelle par lien et onboarding du propriétaire restent ouverts.

@@ -89,3 +89,6 @@ Le propriétaire valide la maquette Aujourd’hui sombre/claire et autorise sa t
 # 24 septembre 2026 — consolidation de l'authentification
 
 Source : accord « Okay go » du propriétaire après proposition d'inventorier les branches, conserver les corrections utiles sur `product/onboarding-owner`, vérifier le parcours réel puis proposer les suppressions. Cette décision conserve le parcours séparé validé le 23 septembre ; elle n'autorise ni fusion globale, ni suppression avant validation, ni promotion main. L'inspection n'identifie aucun commit d'authentification absent de la branche cible. Rotation SMTP limitée à la Preview pour réparer le refus d'authentification établi. Enregistrement canonique en attente (connecteur indisponible).
+# 24 septembre 2026 — compte absent après preuve d'adresse
+
+Application du parcours séparé déjà validé, sans nouvelle décision produit : la connexion ne crée pas de compte. Après un code e-mail correct pour une adresse sans compte, proposer l'inscription explicitement au lieu d'annoncer à tort une vérification expirée ou des essais épuisés. Aucun indice d'existence du compte avant preuve d'adresse. Diagnostic et tests dans `docs/qa/auth-consolidation-2026-09-24.md` ; mémoire canonique toujours indisponible via le connecteur Neon, sauvegarde en attente.

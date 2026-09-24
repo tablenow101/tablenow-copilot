@@ -43,12 +43,29 @@ it("never creates an account from passwordless login and rejects expired links",
  const email="unknown-login@tablenow.test";
  const start=await post("access",{email});
  const code=inbox.findLast(m=>m.to===email)!.text.match(/\b\d{6}\b/)![0];
- expect((await post("verify-email",{code},cookies(start))).statusCode).toBe(400);
+ expect((await post("verify-email",{code},cookies(start))).json().error.code).toBe("ACCOUNT_SIGNUP_REQUIRED");
  expect(await db`select id from users where email=${email}`).toHaveLength(0);
  const exp="expired-link@tablenow.test";
  await post("signup",{email:exp,password:"Une phrase de test 2026!",delivery:"link"});
  await db`update account_challenges set expires_at=now()-interval '1 second' where email=${exp}`;
  expect((await post("verify-email",proof(exp))).statusCode).toBe(410);
+});
+it("guides a verified unknown login to signup without revealing account existence before the proof", async()=>{
+ const email="verified-unknown@tablenow.test";
+ const start=await post("login",{email});
+ expect(start.statusCode).toBe(202);
+ const code=inbox.findLast(m=>m.to===email)!.text.match(/\b\d{6}\b/)![0];
+ const cookie=cookies(start);
+ const wrong=await post("verify-email",{code:"invalid"},cookie);
+ expect(wrong.json().error.code).toBe("ACCOUNT_CODE_INVALID");
+ const verified=await post("verify-email",{code},cookie);
+ expect(verified.statusCode).toBe(409);
+ expect(verified.json().error.code).toBe("ACCOUNT_SIGNUP_REQUIRED");
+ expect(verified.cookies.some(c=>c.name==="tn_session"&&c.value)).toBe(false);
+ expect(await db`select id from users where email=${email}`).toHaveLength(0);
+ const [challenge]=await db`select attempts,consumed_at is not null as consumed from account_challenges where email=${email}`;
+ expect(challenge).toMatchObject({attempts:2,consumed:true});
+ expect((await post("verify-email",{code},cookie)).json().error.code).toBe("ACCOUNT_CHALLENGE_UNAVAILABLE");
 });
 it("changes a password only after a fresh reset link and revokes older sessions",async()=>{
  const email="split-new@tablenow.test",password="Une phrase remplacee 2026!";
