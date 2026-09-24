@@ -18,6 +18,7 @@ export async function accountRequest<T>(path: string, init: RequestInit = {}): P
 
 export function accountFeedback(error: unknown): { message: string; restart: boolean; action?: "signup" } {
   if (!(error instanceof ApiError)) return { message: "Un problème technique empêche la vérification. Votre saisie est conservée. Réessayez.", restart: false };
+  if (error.code === "ACCOUNT_METHOD_CHANGED") return { message: "Votre vérification utilise désormais un code reçu par e-mail. Recommencez la connexion.", restart: true };
   if (error.code === "ACCOUNT_CHALLENGE_EXPIRED") return { message: "Cette vérification a expiré. Relancez la connexion ; vos informations déjà enregistrées sont conservées.", restart: true };
   if (error.code === "ACCOUNT_CHALLENGE_UNAVAILABLE") return { message: "Cette vérification n’est plus disponible. Recommencez pour continuer.", restart: true };
   if (error.code === "ACCOUNT_SIGNUP_REQUIRED") return { message: "Votre adresse e-mail est vérifiée, mais aucun compte TableNow n’y est associé. Inscrivez-vous pour créer votre compte.", restart: false, action: "signup" };

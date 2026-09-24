@@ -219,12 +219,12 @@ export class PlatformRepository {
       const answers = normalizeOnboardingAnswers(input.answers);
       await validateApprovalAssignee(transaction, actor.tenantId, answers);
       const previousAnswers = normalizeOnboardingAnswers(onboardingAnswersSchema.parse(current.answers));
-      const { presentationStep: previousStep, ...previousBusinessAnswers } = previousAnswers;
-      const { presentationStep, ...businessAnswers } = answers;
+      const { presentationStep: previousStep, conversationDraft: previousDraft, ...previousBusinessAnswers } = previousAnswers;
+      const { presentationStep, conversationDraft, ...businessAnswers } = answers;
       const answersChanged = !isDeepStrictEqual(previousBusinessAnswers, businessAnswers);
       const provenance = trustedOnboardingProvenance(input.provenance, current.provenance, actor.userId);
       if (!answersChanged && current.status === "completed") {
-        if (previousStep === presentationStep) return onboardingDraftView(current, restaurants, answers.interaction);
+        if (previousStep === presentationStep && previousDraft === conversationDraft) return onboardingDraftView(current, restaurants, answers.interaction);
         // Navigation is persisted, but does not change the certified answer revision or its result.
         const [navigated] = await transaction<OnboardingDraftRow[]>`
           update onboarding_drafts set answers = ${transaction.json(answers as JSONValue)}, current_section = ${input.currentSection}

@@ -1,0 +1,1220 @@
+diff --git a/apps/console/auth-flow-boundary.test.ts b/apps/console/auth-flow-boundary.test.ts
+index 25451a0..a31d7cf 100644
+--- a/apps/console/auth-flow-boundary.test.ts
++++ b/apps/console/auth-flow-boundary.test.ts
+@@ -15,7 +15,7 @@ describe("separate authentication screens", () => {
+     expect(flow).toContain('href="/login/email"');
+     expect(flow).not.toContain('name="name"');
+     expect(flow).toContain("Code reçu par e-mail");
+-    expect(flow).toContain("Code de votre application d’authentification");
++    expect(flow).not.toContain("Code de votre application d’authentification");
+     expect(login).toContain("<AccountFlow />");
+     expect(register).toContain('<AccountFlow mode="signup" />');
+   });
+diff --git a/apps/console/components/account/AccountFlow.tsx b/apps/console/components/account/AccountFlow.tsx
+index 3590e59..f47a84e 100644
+--- a/apps/console/components/account/AccountFlow.tsx
++++ b/apps/console/components/account/AccountFlow.tsx
+@@ -10,24 +10,22 @@ import { readAccountProgress, type AccountContinuation } from "@/lib/account-con
+ import { challengeSecondsRemaining } from "@/lib/account-challenge";
+ import { Brand } from "../Brand";
+ 
+-type Stage = "credentials" | "email" | "mfa" | "enroll";
++type Stage = "credentials" | "email";
+ type Mode = "login" | "signup" | "reset" | "passwordless" | "verify";
+-type EmailChallenge = { stage: "email" | "mfa" | "enroll"; delivery?: "code" | "link"; secret?: string; expiresAt: string; expiresInSeconds: number };
++type EmailChallenge = { stage: "email"; delivery?: "code" | "link"; expiresAt: string; expiresInSeconds: number };
+ type ProfileChallenge = { stage: "profile"; email: string; expiresAt: string; expiresInSeconds: number };
+ 
+ export function AccountFlow({ mode = "login" }: { mode?: Mode }) {
+   const router = useRouter();
+   const codeRef = useRef<HTMLInputElement>(null);
+   const started = useRef(false);
++  const submitting = useRef(false);
+   const [stage, setStage] = useState<Stage>("credentials");
+   const [email, setEmail] = useState("");
+   const [password, setPassword] = useState("");
+   const [showPassword, setShowPassword] = useState(false);
+   const [rememberMe, setRememberMe] = useState(true);
+   const [delivery, setDelivery] = useState<"link" | "code">("code");
+-  const [recoveryCode, setRecoveryCode] = useState(false);
+-  const [enrollmentKey, setEnrollmentKey] = useState("");
+-  const [backupCodes, setBackupCodes] = useState<string[]>([]);
+   const [code, setCode] = useState("");
+   const [busy, setBusy] = useState(true);
+   const [initializing, setInitializing] = useState(true);
+@@ -63,7 +61,6 @@ export function AccountFlow({ mode = "login" }: { mode?: Mode }) {
+     if (stage !== challenge.stage) setCode("");
+     setStage(challenge.stage);
+     setDelivery(challenge.delivery ?? "code");
+-    setEnrollmentKey(challenge.secret ?? "");
+     setEmail(challenge.email);
+     recordChallengeExpiry(challenge.expiresInSeconds);
+     if (challenge.stage === "email") setCooldown(60);
+@@ -89,7 +86,7 @@ export function AccountFlow({ mode = "login" }: { mode?: Mode }) {
+           const next = await api<{ authenticated: true } | EmailChallenge>("/v1/account/verify-email", { method: "POST", body: JSON.stringify({ challenge, code: proof }) });
+           if ("authenticated" in next) await enterApp();
+           else {
+-            setStage(next.stage); setEnrollmentKey(next.secret ?? ""); recordChallengeExpiry(next.expiresInSeconds);
++            setStage(next.stage); recordChallengeExpiry(next.expiresInSeconds);
+           }
+           return;
+         }
+@@ -98,7 +95,7 @@ export function AccountFlow({ mode = "login" }: { mode?: Mode }) {
+         if (progress.kind === "session") router.replace(progress.onboardingComplete ? "/dashboard" : "/onboarding");
+         else if (progress.kind === "challenge") {
+           const challengeMode = progress.challenge.purpose === "signup" ? "signup" : progress.challenge.purpose === "reset" ? "reset" : "passwordless";
+-          const securityStep = progress.challenge.stage !== "email" || progress.challenge.purpose === "google";
++          const securityStep = progress.challenge.stage !== "email" || progress.challenge.purpose === "google" || ((progress.challenge.purpose === "login" || progress.challenge.purpose === "access") && (mode === "login" || mode === "passwordless"));
+           if (securityStep || mode === challengeMode) { started.current = true; await resumeChallenge(progress.challenge); }
+         }
+       } catch (caught) {
+@@ -136,7 +133,7 @@ export function AccountFlow({ mode = "login" }: { mode?: Mode }) {
+   }, [challengeExpiresAt]);
+ 
+   useEffect(() => {
+-    if ((stage === "email" && delivery === "code") || stage === "mfa" || stage === "enroll") codeRef.current?.focus();
++    if (stage === "email" && delivery === "code") codeRef.current?.focus();
+   }, [stage, delivery]);
+ 
+   async function reconcileProgress(originalError?: unknown) {
+@@ -165,13 +162,14 @@ export function AccountFlow({ mode = "login" }: { mode?: Mode }) {
+ 
+   async function submit(event: FormEvent) {
+     event.preventDefault();
+-    if (busy || needsProgressCheck) return;
++    if (busy || needsProgressCheck || submitting.current) return;
+     if (stage !== "credentials" && challengeSecondsRemaining(challengeExpiresAt) === 0) {
+       setChallengeUnavailable(true);
+       setError("Cette vérification a expiré. Recommencez pour continuer.");
+       return;
+     }
+     started.current = true;
++    submitting.current = true;
+     setBusy(true);
+     setError("");
+     try {
+@@ -182,10 +180,9 @@ export function AccountFlow({ mode = "login" }: { mode?: Mode }) {
+         if ("authenticated" in next) await enterApp();
+         else { setStage(next.stage); setDelivery(next.delivery ?? "code"); setCode(""); setCooldown(60); recordChallengeExpiry(next.expiresInSeconds); }
+       } else {
+-        const next = await api<{ authenticated: true; backupCodes?: string[] } | EmailChallenge | ProfileChallenge>(`/v1/account/${stage === "email" ? "verify-email" : "verify-mfa"}`, { method: "POST", body: JSON.stringify({ code }) });
++        const next = await api<{ authenticated: true } | EmailChallenge | ProfileChallenge>("/v1/account/verify-email", { method: "POST", body: JSON.stringify({ code }) });
+         if ("authenticated" in next) {
+-          if (next.backupCodes?.length) setBackupCodes(next.backupCodes);
+-          else await enterApp();
++          await enterApp();
+         } else await resumeChallenge({ ...next, email, purpose: "login", rememberMe });
+       }
+     } catch (caught) {
+@@ -196,11 +193,12 @@ export function AccountFlow({ mode = "login" }: { mode?: Mode }) {
+         setChallengeUnavailable(feedback.restart);
+         setError(feedback.message);
+       }
+-    } finally { setBusy(false); }
++    } finally { submitting.current = false; setBusy(false); }
+   }
+ 
+   async function resend() {
+-    if (busy || cooldown) return;
++    if (busy || cooldown || submitting.current) return;
++    submitting.current = true;
+     setBusy(true);
+     setError("");
+     try {
+@@ -215,14 +213,13 @@ export function AccountFlow({ mode = "login" }: { mode?: Mode }) {
+         setChallengeUnavailable(feedback.restart);
+         setError(feedback.message);
+       }
+-    } finally { setBusy(false); }
++    } finally { submitting.current = false; setBusy(false); }
+   }
+ 
+   function restart() {
+     if (mode === "verify") { router.replace("/login"); return; }
+     setStage("credentials");
+     setCode("");
+-    setRecoveryCode(false);
+     setChallengeExpiresAt("");
+     setChallengeSeconds(0);
+     setChallengeUnavailable(false);
+@@ -241,20 +238,17 @@ export function AccountFlow({ mode = "login" }: { mode?: Mode }) {
+   const challengeExpired = stage !== "credentials" && Boolean(challengeExpiresAt) && challengeSeconds === 0;
+   const restartRequired = challengeExpired || challengeUnavailable;
+   const emailLink = stage === "email" && delivery === "link";
+-  const title = stage === "mfa" || stage === "enroll" ? "Code de votre application d’authentification"
+-    : stage === "email" ? emailLink ? "Confirmez votre adresse" : "Code reçu par e-mail"
++  const title = stage === "email" ? emailLink ? "Confirmez votre adresse" : "Code reçu par e-mail"
+     : mode === "signup" ? "Créer votre compte" : mode === "reset" ? "Mot de passe oublié ?"
+     : mode === "passwordless" ? "Se connecter sans mot de passe" : mode === "verify" ? "Vérification de votre adresse" : "Heureux de vous retrouver";
+-  const description = stage === "mfa" ? "Ouvrez votre application d’authentification et saisissez le code actuel. Aucun e-mail n’a été envoyé pour cette étape."
+-    : stage === "enroll" ? "Sur ce téléphone : copiez la clé ci-dessous, ajoutez TableNow dans votre application d’authentification, puis revenez saisir son code."
+-    : stage === "email" ? <>Nous avons envoyé {emailLink ? "un lien de confirmation" : "un code"} à <strong>{email}</strong>. {emailLink ? "Ouvrez cet e-mail pour continuer." : ""}</>
++  const description = stage === "email" ? <>Nous avons envoyé {emailLink ? "un lien de confirmation" : "un code"} à <strong>{email}</strong>. {emailLink ? "Ouvrez cet e-mail pour continuer." : ""}</>
+     : mode === "signup" ? "Créez votre compte pour commencer avec TableNow."
+     : mode === "reset" ? "Choisissez un nouveau mot de passe. Un lien envoyé par e-mail permettra de confirmer ce changement."
+     : mode === "passwordless" ? "Recevez un code temporaire pour vous connecter à votre compte."
+     : mode === "verify" ? "Nous vérifions votre lien sécurisé."
+     : "Connectez-vous pour retrouver votre espace TableNow.";
+   const credentialsVisible = stage === "credentials" && mode !== "verify";
+-  const showSubmit = !emailLink && (mode !== "verify" || stage === "mfa" || stage === "enroll");
++  const showSubmit = !emailLink && (mode !== "verify" || stage === "email");
+ 
+   return <main className={`tn-auth tn-account theme-${theme}`} data-stage={stage}>
+     <section className="tn-auth-card" aria-labelledby="auth-title" aria-busy={busy}>
+@@ -272,24 +266,23 @@ export function AccountFlow({ mode = "login" }: { mode?: Mode }) {
+ 
+         {credentialsVisible && mode !== "passwordless" && <label className="tn-field"><span>{mode === "reset" ? "Nouveau mot de passe" : "Mot de passe"}</span><div className="tn-password-entry"><input name="password" type={showPassword ? "text" : "password"} autoComplete={mode === "login" ? "current-password" : "new-password"} minLength={mode === "login" ? 1 : 15} maxLength={128} placeholder="Votre mot de passe" value={password} onChange={event => setPassword(event.target.value)} required /><button type="button" aria-label={showPassword ? "Masquer le mot de passe" : "Afficher le mot de passe"} onClick={() => setShowPassword(!showPassword)}>{showPassword ? <EyeOff size={18} /> : <Eye size={18} />}</button></div>{mode !== "login" && <small>Au moins 15 caractères. Vous pouvez utiliser une phrase.</small>}</label>}
+         {credentialsVisible && (mode === "login" || mode === "signup") && <div className="tn-account-options"><label><input type="checkbox" checked={rememberMe} onChange={event => setRememberMe(event.target.checked)} />Se souvenir de moi</label>{mode === "login" && <Link href="/forgot-password">Mot de passe oublié ?</Link>}</div>}
+-        {stage === "enroll" && <div className="tn-enrollment"><label className="tn-field"><span>Clé à ajouter dans votre application</span><input readOnly value={enrollmentKey} aria-label="Clé d’authentification" /></label><button type="button" onClick={() => void navigator.clipboard.writeText(enrollmentKey).catch(() => setError("Sélectionnez et copiez la clé affichée."))}>Copier la clé</button></div>}
+-        {!errorAction && (stage === "mfa" || stage === "enroll" || (stage === "email" && !emailLink)) && <>
++        {!errorAction && (stage === "email" && !emailLink) && <>
+           <label className="tn-field tn-code-field">
+-            <span>{recoveryCode ? "Code de récupération" : "Code à 6 chiffres"}</span>
+-            <div className={recoveryCode ? "tn-recovery-entry" : "tn-code-entry"}>
+-              {!recoveryCode && <div className="tn-code-cells" aria-hidden="true">{Array.from({ length: 6 }, (_, index) => <span key={index} data-active={index === Math.min(code.length, 5)}>{code[index] || ""}</span>)}</div>}
+-              <input ref={codeRef} name="code" className={recoveryCode ? "" : "tn-account-code"} inputMode={recoveryCode ? "text" : "numeric"} autoComplete="one-time-code" pattern={recoveryCode ? undefined : "[0-9]{6}"} minLength={6} maxLength={recoveryCode ? 64 : 6} required disabled={restartRequired || busy || needsProgressCheck} onPaste={event => { event.preventDefault(); setCode(recoveryCode ? event.clipboardData.getData("text").trim().slice(0,64) : event.clipboardData.getData("text").replace(/\D/g, "").slice(0, 6)); }} aria-describedby={error ? "account-error" : undefined} aria-invalid={error ? true : undefined} value={code} onChange={event => setCode(recoveryCode ? event.target.value : event.target.value.replace(/\D/g, "").slice(0, 6))} />
++            <span>Code à 6 chiffres</span>
++            <div className="tn-code-entry">
++              {<div className="tn-code-cells" aria-hidden="true">{Array.from({ length: 6 }, (_, index) => <span key={index} data-active={index === Math.min(code.length, 5)}>{code[index] || ""}</span>)}</div>}
++              <input ref={codeRef} name="code" className="tn-account-code" inputMode="numeric" autoComplete="one-time-code" pattern="[0-9]{6}" minLength={6} maxLength={6} required disabled={restartRequired || busy || needsProgressCheck} onPaste={event => { event.preventDefault(); setCode(event.clipboardData.getData("text").replace(/\D/g, "").slice(0, 6)); }} aria-describedby={error ? "account-error" : undefined} aria-invalid={error ? true : undefined} value={code} onChange={event => setCode(event.target.value.replace(/\D/g, "").slice(0, 6))} />
+             </div>
+           </label>
+           {!restartRequired && <small role="status">Cette vérification expire dans {Math.max(1, Math.ceil(challengeSeconds / 60))} min.</small>}
+         </>}
+ 
+         {error && <p id="account-error" className="tn-error" role="alert">{error}</p>}
+-        {errorAction === "signup" ? <Link className="tn-primary tn-account-submit" href="/register">S’inscrire</Link> : backupCodes.length > 0 ? <div><p>Conservez ces codes de récupération dans un endroit sûr.</p><pre>{backupCodes.join("\n")}</pre><button type="button" className="tn-primary tn-account-submit" onClick={() => void enterApp()}>J’ai sauvegardé mes codes</button></div> : needsProgressCheck
++        {errorAction === "signup" ? <Link className="tn-primary tn-account-submit" href="/register">S’inscrire</Link> : needsProgressCheck
+           ? <button className="tn-primary tn-account-submit" type="button" disabled={busy} onClick={() => void reconcileProgress()}>Vérifier ma connexion</button>
+           : restartRequired
+             ? <button className="tn-primary tn-account-submit" type="button" disabled={busy} onClick={restart}>Recommencer</button>
+-            : showSubmit ? <button className="tn-primary tn-account-submit" type="submit" disabled={busy || (stage !== "credentials" && (recoveryCode ? code.length < 6 : code.length !== 6))}>{busy && <LoaderCircle size={17} className="spinning" />}{stage !== "credentials" ? "Vérifier" : mode === "signup" ? "S’inscrire" : mode === "login" ? "Se connecter" : "Continuer"}</button> : null}
++            : showSubmit ? <button className="tn-primary tn-account-submit" type="submit" disabled={busy || (stage !== "credentials" && code.length !== 6)}>{busy && <LoaderCircle size={17} className="spinning" />}{stage !== "credentials" ? "Vérifier" : mode === "signup" ? "S’inscrire" : mode === "login" ? "Se connecter" : "Continuer"}</button> : null}
+       </form>
+ 
+       {credentialsVisible && (mode === "login" || mode === "signup") && <div className="tn-account-social">
+@@ -298,7 +291,6 @@ export function AccountFlow({ mode = "login" }: { mode?: Mode }) {
+         <button type="button" disabled title="La connexion Apple n’est pas encore disponible"><svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M17.1 12.5c0-2.1 1.7-3.1 1.8-3.2-1-1.4-2.5-1.6-3-1.6-1.3-.2-2.5.8-3.1.8-.6 0-1.6-.8-2.6-.8-1.4 0-2.7.8-3.4 2-1.5 2.4-.4 6.1 1 8.1.7 1 1.4 2 2.5 2 1 0 1.4-.7 2.7-.7 1.2 0 1.6.7 2.7.6 1.1 0 1.7-1 2.4-2 .8-1.1 1.1-2.2 1.1-2.3-.1 0-2.1-.8-2.1-3ZM15 6.4c.5-.7.9-1.7.8-2.7-.8 0-1.9.6-2.5 1.3-.6.6-1 1.6-.9 2.5 1 .1 2-.5 2.6-1.1Z" /></svg>Continuer avec Apple — bientôt</button>
+       </div>}
+       {credentialsVisible && mode === "login" && <Link className="tn-link tn-account-secondary" href="/login/email">Se connecter sans mot de passe</Link>}
+-      {stage === "mfa" && <button type="button" className="tn-link tn-account-change-email" onClick={() => { setRecoveryCode(!recoveryCode); setCode(""); }}>{recoveryCode ? "Utiliser mon application d’authentification" : "Utiliser un code de récupération"}</button>}
+       {stage === "email" && !restartRequired && !errorAction && <div className="tn-account-resend"><span>Vous n’avez rien reçu ?</span><button type="button" className="tn-link" disabled={busy || needsProgressCheck || cooldown > 0} onClick={() => void resend()}>{cooldown ? `Renvoyer dans ${cooldown} s` : emailLink ? "Renvoyer le lien" : "Renvoyer le code"}</button></div>}
+       {stage === "email" && <button type="button" className="tn-link tn-account-change-email" disabled={busy} onClick={restart}>Modifier l’adresse</button>}
+       {mode !== "login" && <Link className="tn-link tn-account-secondary" href="/login">Retour à la connexion</Link>}
+diff --git a/apps/console/lib/account-continuation.test.ts b/apps/console/lib/account-continuation.test.ts
+index 04871fb..5d073cc 100644
+--- a/apps/console/lib/account-continuation.test.ts
++++ b/apps/console/lib/account-continuation.test.ts
+@@ -21,21 +21,21 @@ describe("account progress reconciliation", () => {
+     expect(await readAccountProgress()).toEqual({ kind: "challenge", challenge });
+     expect(fetchMock.mock.calls.every(call => call[1].method === undefined)).toBe(true);
+   });
+-  it("resumes the short profile step after the address has been verified", async () => {
++  it("recognizes a legacy verified profile for completion without a new name screen", async () => {
+     const challenge = { stage: "profile", purpose: "access", email: "new@tablenow.test" };
+     const fetchMock = vi.fn().mockResolvedValueOnce(unauthorized()).mockResolvedValueOnce(response(challenge));
+     vi.stubGlobal("fetch", fetchMock);
+     expect(await readAccountProgress()).toEqual({ kind: "challenge", challenge });
+     expect(fetchMock.mock.calls.every(call => call[1].method === undefined)).toBe(true);
+   });
+-  it("resumes the required second factor of a protected account", async () => {
+-    vi.stubGlobal("fetch", vi.fn().mockResolvedValueOnce(unauthorized()).mockResolvedValueOnce(response({ stage: "mfa", purpose: "login" })));
+-    expect(await readAccountProgress()).toEqual({ kind: "challenge", challenge: { stage: "mfa", purpose: "login" } });
++  it("resumes email verification of a protected account", async () => {
++    vi.stubGlobal("fetch", vi.fn().mockResolvedValueOnce(unauthorized()).mockResolvedValueOnce(response({ stage: "email", purpose: "login" })));
++    expect(await readAccountProgress()).toEqual({ kind: "challenge", challenge: { stage: "email", purpose: "login" } });
+   });
+-  it("preserves an enrollment already started before deployment", async () => {
++  it("does not reopen a retired authenticator enrollment", async () => {
+     const challenge = { stage: "enroll", purpose: "google" };
+     vi.stubGlobal("fetch", vi.fn().mockResolvedValueOnce(unauthorized()).mockResolvedValueOnce(response(challenge)));
+-    expect(await readAccountProgress()).toEqual({ kind: "challenge", challenge });
++    expect(await readAccountProgress()).toEqual({ kind: "none" });
+   });
+   it("keeps an unavailable server distinct from an absent session", async () => {
+     const fetchMock = vi.fn().mockResolvedValue(response({ error: { message: "Unavailable" } }, 503));
+diff --git a/apps/console/lib/account-continuation.ts b/apps/console/lib/account-continuation.ts
+index c5b7832..926d7f1 100644
+--- a/apps/console/lib/account-continuation.ts
++++ b/apps/console/lib/account-continuation.ts
+@@ -2,9 +2,8 @@ import { ApiError } from "./api";
+ import { accountRequest } from "./account-feedback";
+ 
+ export type AccountContinuation = {
+-  stage: "email" | "profile" | "mfa" | "enroll";
++  stage: "email" | "profile";
+   delivery?: "link" | "code";
+-  secret?: string;
+   email: string;
+   purpose: "access" | "login" | "signup" | "reset" | "google";
+   rememberMe: boolean;
+@@ -23,6 +22,6 @@ export async function readAccountProgress(): Promise<AccountProgress> {
+     if (!(error instanceof ApiError) || error.status !== 401) throw error;
+   }
+   const challenge = await accountRequest<AccountContinuation | null>("/v1/account/continuation");
+-  if (!challenge || !["email", "profile", "mfa", "enroll"].includes(challenge.stage)) return { kind: "none" };
++  if (!challenge || !["email", "profile"].includes(challenge.stage)) return { kind: "none" };
+   return { kind: "challenge", challenge };
+ }
+diff --git a/apps/console/lib/account-feedback.test.ts b/apps/console/lib/account-feedback.test.ts
+index 5109d2f..820c40c 100644
+--- a/apps/console/lib/account-feedback.test.ts
++++ b/apps/console/lib/account-feedback.test.ts
+@@ -44,7 +44,7 @@ describe("account verification feedback", () => {
+   it("treats truncated JSON as an uncertain response without replaying the request", async () => {
+     const fetchMock = vi.fn().mockResolvedValue(new Response('{"authenticated":', { status: 200, headers: { "content-type": "application/json" } }));
+     vi.stubGlobal("fetch", fetchMock);
+-    await expect(accountRequest("/v1/account/verify-mfa", { method: "POST", body: JSON.stringify({ code: "000000" }) })).rejects.toMatchObject({ code: "ACCOUNT_RESPONSE_UNCERTAIN", status: 0 });
++    await expect(accountRequest("/v1/account/verify-email", { method: "POST", body: JSON.stringify({ code: "000000" }) })).rejects.toMatchObject({ code: "ACCOUNT_RESPONSE_UNCERTAIN", status: 0 });
+     expect(fetchMock).toHaveBeenCalledTimes(1);
+   });
+ 
+@@ -54,7 +54,7 @@ describe("account verification feedback", () => {
+       init.signal?.addEventListener("abort", () => reject(new DOMException("Aborted", "AbortError")));
+     }));
+     vi.stubGlobal("fetch", fetchMock);
+-    const result = expect(accountRequest("/v1/account/verify-mfa", { method: "POST", body: JSON.stringify({ code: "000000" }) })).rejects.toMatchObject({ code: "ACCOUNT_TIMEOUT" });
++    const result = expect(accountRequest("/v1/account/verify-email", { method: "POST", body: JSON.stringify({ code: "000000" }) })).rejects.toMatchObject({ code: "ACCOUNT_TIMEOUT" });
+     await vi.advanceTimersByTimeAsync(20_000);
+     await result;
+     expect(fetchMock).toHaveBeenCalledTimes(1);
+diff --git a/apps/console/lib/account-feedback.ts b/apps/console/lib/account-feedback.ts
+index 3c74b1c..26cb027 100644
+--- a/apps/console/lib/account-feedback.ts
++++ b/apps/console/lib/account-feedback.ts
+@@ -18,6 +18,7 @@ export async function accountRequest<T>(path: string, init: RequestInit = {}): P
+ 
+ export function accountFeedback(error: unknown): { message: string; restart: boolean; action?: "signup" } {
+   if (!(error instanceof ApiError)) return { message: "Un problème technique empêche la vérification. Votre saisie est conservée. Réessayez.", restart: false };
++  if (error.code === "ACCOUNT_METHOD_CHANGED") return { message: "Votre vérification utilise désormais un code reçu par e-mail. Recommencez la connexion.", restart: true };
+   if (error.code === "ACCOUNT_CHALLENGE_EXPIRED") return { message: "Cette vérification a expiré. Relancez la connexion ; vos informations déjà enregistrées sont conservées.", restart: true };
+   if (error.code === "ACCOUNT_CHALLENGE_UNAVAILABLE") return { message: "Cette vérification n’est plus disponible. Recommencez pour continuer.", restart: true };
+   if (error.code === "ACCOUNT_SIGNUP_REQUIRED") return { message: "Votre adresse e-mail est vérifiée, mais aucun compte TableNow n’y est associé. Inscrivez-vous pour créer votre compte.", restart: false, action: "signup" };
+diff --git a/services/core-api/src/account-recovery-routes.test.ts b/services/core-api/src/account-recovery-routes.test.ts
+index 2759de4..a874546 100644
+--- a/services/core-api/src/account-recovery-routes.test.ts
++++ b/services/core-api/src/account-recovery-routes.test.ts
+@@ -1,130 +1,13 @@
+-import { randomUUID } from "node:crypto";
+-import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+-import type { FastifyInstance } from "fastify";
+-import type { Database } from "@tablenow/provider-adapters";
+-import { createTestDatabase } from "./testing/pglite.js";
+-import { totpAt } from "./account-crypto.js";
+-
+-let app: FastifyInstance, database: Database, sequence = 1;
+-const inbox: string[] = [];
+-const password = "Phrase de recette confidentielle 123";
+-const cookies = (response: { cookies: { name: string; value: string }[] }) => response.cookies.filter(c => c.value).map(c => `${c.name}=${c.value}`).join("; ");
+-const csrf = (cookie: string) => cookie.split("; ").find(value => value.startsWith("tn_csrf="))?.slice(8) || "";
+-const post = (path: string, body: object, cookie = "", headers: Record<string, string> = {}) => app.inject({ method: "POST", url: `/v1/account/${path}`, payload: body, headers: { origin: "http://localhost:3000", cookie, "x-csrf-token": csrf(cookie), ...headers }, remoteAddress: `127.0.0.${sequence++}` });
+-const recover = (action: string, body: object, cookie = "", headers: Record<string, string> = {}) => post(`backup-codes/${action}`, body, cookie, headers);
+-async function enrolled() {
+-  const email = `recovery-${randomUUID()}@tablenow.test`;
+-  const signup = await post("signup", { email, password, name: "Owner" });
+-  const challengeCookie = cookies(signup);
+-  const code = inbox.at(-1)!.match(/\b\d{6}\b/)![0];
+-  const enrollment = await post("verify-email", { code }, challengeCookie);
+-  const secret = enrollment.json().secret as string;
+-  const verification = await post("verify-mfa", { code: totpAt(secret, Math.floor(Date.now() / 30000) - 1) }, challengeCookie);
+-  expect(verification.statusCode).toBe(200);
+-  return { email, secret, cookie: cookies(verification), oldBackup: verification.json().backupCodes as string[] };
+-}
+-
+-beforeAll(async () => {
+-  for (const [key, value] of Object.entries({ NODE_ENV: "test", APP_ENV: "test", DATABASE_URL: "postgres://test:test@localhost/test", PUBLIC_ORIGIN: "http://localhost:3000", SESSION_SECRET: "s".repeat(48), OTP_PEPPER: "p".repeat(48), PLATFORM_ADMIN_EMAIL: "admin@tablenow.test", EMAIL_TRANSPORT: "smtp", SMTP_HOST: "test.invalid", SMTP_USER: "fixture", SMTP_PASSWORD: "fixture", LOG_LEVEL: "silent" })) vi.stubEnv(key, value);
+-  ({ sql: database } = await createTestDatabase());
+-  const { buildApp } = await import("./app.js");
+-  app = await buildApp({ database, email: { send: async message => { inbox.push(message.text); } } });
+-}, 60000);
+-afterAll(async () => { await app?.close(); await database?.end(); vi.unstubAllEnvs(); });
+-
+-describe("secure backup code recovery after a lost response", () => {
+-  it("requires a user session, CSRF, allowed origin and a fresh TOTP before recovering codes", async () => {
+-    const operationId = randomUUID();
+-    expect((await recover("replace", { operationId, code: "123456" })).statusCode).toBe(401);
+-    const owner = await enrolled();
+-    expect((await recover("replace", { operationId, code: "123456" }, owner.cookie, { "x-csrf-token": "" })).statusCode).toBe(403);
+-    expect((await recover("replace", { operationId, code: "123456" }, owner.cookie, { origin: "https://unrelated.example" })).statusCode).toBe(403);
+-    expect((await recover("replace", { operationId, code: totpAt(owner.secret, Math.floor(Date.now() / 30000) - 1) }, owner.cookie)).json().error.code).toBe("ACCOUNT_CODE_INVALID");
+-    expect((await recover("read", { operationId }, owner.cookie)).json()).toEqual({ state: "missing" });
+-    expect((await recover("replace", { operationId, code: owner.oldBackup[0] }, owner.cookie)).statusCode).toBe(400);
+-    const generated = await recover("replace", { operationId, code: totpAt(owner.secret, Math.floor(Date.now() / 30000)) }, owner.cookie);
+-    expect(generated.statusCode).toBe(200);
+-    expect(generated.json().backupCodes).toHaveLength(8);
+-    expect(generated.headers["cache-control"]).toBe("no-store");
+-    expect(generated.cookies).toHaveLength(0);
+-  });
+-
+-  it("recovers one encrypted batch after a lost response and erases its escrow after acknowledgment", async () => {
+-    const owner = await enrolled(), operationId = randomUUID();
+-    const code = totpAt(owner.secret, Math.floor(Date.now() / 30000));
+-    const first = await recover("replace", { operationId, code }, owner.cookie);
+-    expect(first.statusCode).toBe(200);
+-    // The caller can discard the replace response and reconcile before resubmitting.
+-    const resumed = await recover("read", { operationId }, owner.cookie);
+-    expect(resumed.json().state).toBe("ready");
+-    expect(resumed.json().backupCodes).toHaveLength(8);
+-    const retried = await recover("replace", { operationId, code }, owner.cookie);
+-    expect(JSON.stringify(retried.json().backupCodes) === JSON.stringify(resumed.json().backupCodes)).toBe(true);
+-    expect(retried.json().expiresAt).toBe(resumed.json().expiresAt);
+-    expect(retried.json().expiresInSeconds).toBeLessThanOrEqual(resumed.json().expiresInSeconds);
+-    const replay = await recover("replace", { operationId: randomUUID(), code }, owner.cookie);
+-    expect(replay.json().error.code).toBe("ACCOUNT_CODE_INVALID");
+-    const stored = await database<{ payload: string }[]>`select payload from account_challenges where email=${owner.email} and token_hash like 'backup:%'`;
+-    expect(stored).toHaveLength(1);
+-    expect(stored.every(row => resumed.json().backupCodes.every((value: string) => !row.payload.includes(value)))).toBe(true);
+-    const login = await post("login", { email: owner.email, password });
+-    expect((await post("verify-mfa", { code: owner.oldBackup[0] }, cookies(login))).json().error.code).toBe("ACCOUNT_CODE_INVALID");
+-    const otherSession = await post("verify-mfa", { code: resumed.json().backupCodes[0] }, cookies(login));
+-    expect(otherSession.statusCode).toBe(200);
+-    expect((await recover("read", { operationId }, cookies(otherSession))).json()).toEqual({ state: "missing" });
+-    expect((await recover("acknowledge", { operationId }, owner.cookie)).json()).toEqual({ state: "acknowledged" });
+-    expect((await recover("acknowledge", { operationId }, owner.cookie)).json()).toEqual({ state: "acknowledged" });
+-    expect((await recover("read", { operationId }, owner.cookie)).json()).toEqual({ state: "acknowledged" });
+-    expect((await recover("replace", { operationId, code }, owner.cookie)).json()).toEqual({ state: "acknowledged" });
+-    const [erased] = await database<{ payload: string }[]>`select payload from account_challenges where email=${owner.email} and token_hash like 'backup:%'`;
+-    expect(erased!.payload).not.toBe(stored[0]!.payload);
+-  });
+-
+-  it("expires recovery without renewing the lifetime or rotating codes", async () => {
+-    const owner = await enrolled(), operationId = randomUUID();
+-    const code = totpAt(owner.secret, Math.floor(Date.now() / 30000));
+-    expect((await recover("replace", { operationId, code }, owner.cookie)).statusCode).toBe(200);
+-    await database`update account_challenges set expires_at=now()-interval '1 second' where email=${owner.email} and token_hash like 'backup:%'`;
+-    expect((await recover("read", { operationId }, owner.cookie)).statusCode).toBe(410);
+-    expect((await recover("replace", { operationId, code }, owner.cookie)).statusCode).toBe(410);
+-    const [count] = await database<{ total: number }[]>`select count(*)::int as total from account_challenges where email=${owner.email} and token_hash like 'backup:%'`;
+-    expect(count?.total).toBe(1);
+-  });
+-
+-  it("keeps account lockout across operation identifiers and rejects revoked sessions", async () => {
+-    const owner = await enrolled();
+-    const activeCodes = [-1, 0, 1].map(offset => totpAt(owner.secret, Math.floor(Date.now() / 30000) + offset));
+-    const wrongCode = ["000000", "111111", "222222", "333333"].find(value => !activeCodes.includes(value))!;
+-    for (let attempt = 0; attempt < 10; attempt++) {
+-      const invalid = await recover("replace", { operationId: randomUUID(), code: wrongCode }, owner.cookie);
+-      expect(invalid.statusCode).toBe(400);
+-    }
+-    const locked = await recover("replace", { operationId: randomUUID(), code: totpAt(owner.secret, Math.floor(Date.now() / 30000)) }, owner.cookie);
+-    expect(locked.json().error.code).toBe("ACCOUNT_CHALLENGE_UNAVAILABLE");
+-    await database`delete from sessions where user_id in (select id from users where email=${owner.email})`;
+-    expect((await recover("read", { operationId: randomUUID() }, owner.cookie)).statusCode).toBe(401);
+-  });
+-  it("serializes concurrent rotations and invalidates an older encrypted recovery batch", async () => {
+-    const owner = await enrolled();
+-    const operationIds = [randomUUID(), randomUUID()];
+-    const step = Math.floor(Date.now() / 30000);
+-    const replies = await Promise.all(operationIds.map(operationId => recover("replace", { operationId, code: totpAt(owner.secret, step) }, owner.cookie)));
+-    expect(replies.map(reply => reply.statusCode).sort()).toEqual([200, 400]);
+-    const won = replies.findIndex(reply => reply.statusCode === 200);
+-    const replaced = await recover("replace", { operationId: randomUUID(), code: totpAt(owner.secret, step + 1) }, owner.cookie);
+-    expect(replaced.statusCode).toBe(200);
+-    const stale = await recover("read", { operationId: operationIds[won] }, owner.cookie);
+-    expect(stale.statusCode).toBe(400);
+-    expect(stale.json().error.code).toBe("ACCOUNT_CHALLENGE_UNAVAILABLE");
+-    expect(stale.json().backupCodes).toBeUndefined();
+-  });
+-
+-  it("rate limits replacement attempts from one source", async () => {
+-    const owner = await enrolled();
+-    for (let attempt = 0; attempt < 6; attempt++) {
+-      const reply = await app.inject({ method: "POST", url: "/v1/account/backup-codes/replace", payload: { operationId: randomUUID(), code: "invalid" }, headers: { cookie: owner.cookie, origin: "http://localhost:3000", "x-csrf-token": csrf(owner.cookie) }, remoteAddress: "192.0.2.20" });
+-      expect(reply.statusCode).toBe(attempt < 5 ? 400 : 429);
+-    }
+-  });
+-
++import { expect, it } from "vitest";
++import Fastify from "fastify";
++import { registerAccountRecoveryRoutes } from "./account-recovery-routes.js";
++it("retires every legacy recovery endpoint with a clear transition response", async()=>{
++ const app=Fastify();
++ await registerAccountRecoveryRoutes(app);
++ for(const action of ["read","replace","acknowledge"]) {
++  const response=await app.inject({method:"POST",url:`/v1/account/backup-codes/${action}`,payload:{}});
++  expect(response.statusCode).toBe(410);
++  expect(response.json().error.code).toBe("ACCOUNT_METHOD_CHANGED");
++ }
++ await app.close();
+ });
+diff --git a/services/core-api/src/account-recovery-routes.ts b/services/core-api/src/account-recovery-routes.ts
+index f4c3fad..80c7bbc 100644
+--- a/services/core-api/src/account-recovery-routes.ts
++++ b/services/core-api/src/account-recovery-routes.ts
+@@ -1,80 +1,10 @@
+-import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
+-import { z } from "zod";
+-import { hashSecret, randomToken, type Database } from "@tablenow/provider-adapters";
+-import { authGuard, cookieNames } from "./auth.js";
+-import { getConfig } from "./environment.js";
+-import { seal, unseal, validTotpStep } from "./account-crypto.js";
+-
+-type Escrow = { userId: string; sessionHash: string; backupCodes?: string[]; acknowledged?: boolean };
+-type RecoveryRow = { payload: string; consumed_at: Date | string | null; expired: boolean; expires_at: Date | string; expires_in_seconds: number };
+-const operationSchema = z.object({ operationId: z.uuid() }).strict();
+-const replaceSchema = operationSchema.extend({ code: z.string().trim().regex(/^\d{6}$/) });
+-
+-/** Escrow belongs to a proved operation and session, never to the public tn_auth flow. */
+-export async function registerAccountRecoveryRoutes(app: FastifyInstance, database: Database) {
+-  const secret = getConfig().SESSION_SECRET;
+-  const digest = (value: string) => hashSecret(value, secret);
+-  const protectedRoute = { preHandler: authGuard(database), config: { rateLimit: { max: 5, timeWindow: "15 minutes" } } };
+-  const readRoute = { ...protectedRoute, config: { rateLimit: { max: 30, timeWindow: "15 minutes" } } };
+-
+-  async function handle(action: "replace" | "read" | "acknowledge", request: FastifyRequest, reply: FastifyReply) {
+-    const input = action === "replace" ? replaceSchema.parse(request.body) : operationSchema.parse(request.body);
+-    const actor = request.actor!;
+-    const sessionToken = request.cookies[cookieNames.sessionCookie];
+-    if (actor.actorType !== "user" || !actor.userId || !actor.email || !sessionToken) {
+-      return reply.code(401).send({ error: { code: "UNAUTHENTICATED", message: "Connexion requise." } });
+-    }
+-    const userId = actor.userId;
+-    const sessionHash = digest(sessionToken);
+-    const operationHash = `backup:${digest(`${sessionToken}:${input.operationId}`)}`;
+-    const result = await database.begin(async tx => {
+-      await tx`select pg_advisory_xact_lock(hashtext(${actor.email!}))`;
+-      const [session] = await tx`select user_id from sessions where token_hash=${sessionHash} and user_id=${userId} and expires_at>now() for update`;
+-      if (!session) return { error: "unauthenticated" as const };
+-      const [credential] = await tx<{ totp_secret: string; last_totp_step: number; locked: boolean }[]>`select totp_secret,last_totp_step,(locked_until>now()) as locked from account_credentials where user_id=${userId} for update`;
+-      if (!credential?.totp_secret || credential.locked) return { error: "unavailable" as const };
+-      const [existing] = await tx<RecoveryRow[]>`select payload,consumed_at,expires_at,expires_at<=now() as expired,greatest(0,ceil(extract(epoch from (expires_at-now()))))::int as expires_in_seconds from account_challenges where token_hash=${operationHash} for update`;
+-      if (existing) {
+-        const escrow = unseal<Escrow>(existing.payload, secret);
+-        if (escrow.userId !== userId || escrow.sessionHash !== sessionHash) return { error: "unavailable" as const };
+-        if (existing.consumed_at) return escrow.acknowledged ? { state: "acknowledged" as const } : { error: "unavailable" as const };
+-        if (action === "acknowledge") {
+-          await tx`update account_challenges set consumed_at=now(),payload=${seal({ userId, sessionHash, acknowledged: true }, secret)} where token_hash=${operationHash}`;
+-          return { state: "acknowledged" as const };
+-        }
+-        if (existing.expired) {
+-          await tx`update account_challenges set payload=${seal({ userId, sessionHash }, secret)} where token_hash=${operationHash}`;
+-          return { error: "expired" as const };
+-        }
+-        if (!escrow.backupCodes) return { error: "unavailable" as const };
+-        return { state: "ready" as const, backupCodes: escrow.backupCodes, expiresAt: existing.expires_at, expiresInSeconds: Number(existing.expires_in_seconds) };
+-      }
+-      if (action !== "replace") return { state: "missing" as const };
+-      const code = "code" in input && typeof input.code === "string" ? input.code : "";
+-      const step = validTotpStep(unseal<string>(credential.totp_secret, secret), code, Number(credential.last_totp_step));
+-      if (step === null) {
+-        await tx`update account_credentials set failed_attempts=failed_attempts+1,locked_until=case when failed_attempts+1>=10 then now()+interval '15 minutes' else locked_until end where user_id=${userId}`;
+-        return { error: "invalid" as const };
+-      }
+-      const backupCodes = Array.from({ length: 8 }, () => randomToken(12));
+-      // Invalidate previous batches atomically, including their encrypted recovery copies.
+-      await tx`update account_challenges set consumed_at=now(),payload=${seal({ userId, sessionHash }, secret)} where email=${actor.email!} and token_hash like 'backup:%' and consumed_at is null`;
+-      await tx`update account_credentials set backup_hashes=${tx.json(backupCodes.map(digest))},last_totp_step=${step},failed_attempts=0,locked_until=null where user_id=${userId}`;
+-      const [created] = await tx<{ expires_at: Date | string; expires_in_seconds: number }[]>`insert into account_challenges(token_hash,email,stage,payload,expires_at) values (${operationHash},${actor.email!},'mfa',${seal({ userId, sessionHash, backupCodes }, secret)},now()+interval '10 minutes') returning expires_at,greatest(0,ceil(extract(epoch from (expires_at-now()))))::int as expires_in_seconds`;
+-      await tx`select set_config('app.tenant_id',${actor.tenantId},true)`;
+-      await tx`insert into audit_events(tenant_id,actor_id,actor_type,action,resource_type,resource_id) values (${actor.tenantId},${userId},'user','auth.backup_codes_replaced','user',${userId})`;
+-      return { state: "ready" as const, backupCodes, expiresAt: created!.expires_at, expiresInSeconds: Number(created!.expires_in_seconds) };
+-    });
+-    if ("error" in result) {
+-      if (result.error === "unauthenticated") return reply.code(401).send({ error: { code: "UNAUTHENTICATED", message: "Connexion requise." } });
+-      if (result.error === "expired") return reply.code(410).send({ error: { code: "ACCOUNT_BACKUP_RECOVERY_EXPIRED", message: "La reprise de ces codes a expiré. Saisissez un nouveau code de votre application pour les remplacer." } });
+-      if (result.error === "invalid") return reply.code(400).send({ error: { code: "ACCOUNT_CODE_INVALID", message: "Code incorrect ou déjà utilisé. Attendez le prochain code de votre application d’authentification." } });
+-      return reply.code(400).send({ error: { code: "ACCOUNT_CHALLENGE_UNAVAILABLE", message: "Cette vérification n’est plus disponible. Patientez puis reconnectez-vous." } });
+-    }
+-    return result;
++import type { FastifyInstance } from "fastify";
++
++/** Retire app-code recovery operations without deleting historic recovery hashes. */
++export async function registerAccountRecoveryRoutes(app: FastifyInstance) {
++  for (const action of ["replace", "read", "acknowledge"]) {
++    app.post(`/v1/account/backup-codes/${action}`, async (_request, reply) => reply.code(410).send({
++      error: { code: "ACCOUNT_METHOD_CHANGED", message: "Recommencez la connexion pour recevoir un code par e-mail." },
++    }));
+   }
+-
+-  app.post("/v1/account/backup-codes/replace", protectedRoute, (request, reply) => handle("replace", request, reply));
+-  app.post("/v1/account/backup-codes/read", readRoute, (request, reply) => handle("read", request, reply));
+-  app.post("/v1/account/backup-codes/acknowledge", readRoute, (request, reply) => handle("acknowledge", request, reply));
+ }
+diff --git a/services/core-api/src/account-routes.test.ts b/services/core-api/src/account-routes.test.ts
+index 47b2b3a..63aecde 100644
+--- a/services/core-api/src/account-routes.test.ts
++++ b/services/core-api/src/account-routes.test.ts
+@@ -3,13 +3,13 @@ import type { FastifyInstance } from "fastify";
+ import type { Database } from "@tablenow/provider-adapters";
+ import { createTestDatabase } from "./testing/pglite.js";
+ import { getConfig } from "./environment.js";
+-import { totpAt } from "./account-crypto.js";
++import { seal } from "./account-crypto.js";
+ 
+ let app: FastifyInstance, database: Database;
+ const inbox: string[] = [];
++let deliveryFailure = false;
+ let requestNumber = 1;
+ const email = "new-owner@tablenow.test", password = "Une longue phrase privée 123";
+-let backup: string[], sessionCookie: string, totpSecret: string;
+ const post = (path: string, payload: Record<string, unknown>, cookie = "") => app.inject({ method: "POST", url: `/v1/${path}`, payload, headers: { cookie, origin: "http://localhost:3000" }, remoteAddress: `127.0.0.${requestNumber++}` });
+ const continuation = (cookie = "") => app.inject({ method: "GET", url: "/v1/account/continuation", headers: { cookie, origin: "http://localhost:3000" }, remoteAddress: `127.0.0.${requestNumber++}` });
+ function authCookie(response: { cookies: { name: string; value: string }[] }) { return response.cookies.filter(c => c.value).map(c => `${c.name}=${c.value}`).join("; "); }
+@@ -25,211 +25,126 @@ beforeAll(async () => {
+   vi.stubEnv("LOG_LEVEL", "silent");
+   ({ sql: database } = await createTestDatabase());
+   const { buildApp } = await import("./app.js");
+-  app = await buildApp({ database, email: { send: async message => { inbox.push(message.text); } } });
++  app = await buildApp({ database, email: { send: async message => { if (deliveryFailure) throw new Error("fixture delivery failure"); inbox.push(message.text); } } });
+ }, 60000);
+ afterAll(async () => { await app?.close(); await database?.end(); vi.unstubAllEnvs(); });
+-describe("registration and recurring authentication", () => {
+-  it("resumes the same email and enrollment challenge without sending mail or renewing its lifetime", async () => {
+-    expect((await continuation()).statusCode).toBe(204);
+-    expect((await continuation("tn_auth=unknown-challenge")).statusCode).toBe(204);
+-    const recipient = "resume@tablenow.test";
+-    const signup = await post("account/signup", { email: recipient, name: "Owner", password, rememberMe: false });
+-    const cookie = authCookie(signup);
+-    expect(signup.cookies.find(c => c.name === "tn_auth")?.httpOnly).toBe(true);
+-    const mailCount = inbox.length;
+-    const emailResume = await continuation(cookie);
+-    expect(emailResume.statusCode).toBe(200);
+-    expect(emailResume.json()).toEqual({ stage: "email", purpose: "signup", email: recipient, rememberMe: false, expiresAt: signup.json().expiresAt, expiresInSeconds: expect.any(Number) });
+-    expect(emailResume.cookies).toHaveLength(0);
+-    expect(emailResume.headers["cache-control"]).toBe("no-store");
+-    const enrollment = await post("account/verify-email", { code: emailCode() }, cookie);
+-    const firstResume = await continuation(cookie);
+-    const reload = await continuation(cookie);
+-    expect(firstResume.json()).toEqual({ stage: "enroll", purpose: "signup", email: recipient, rememberMe: false, expiresAt: enrollment.json().expiresAt, expiresInSeconds: expect.any(Number), secret: enrollment.json().secret });
+-    expect(reload.json().secret === firstResume.json().secret).toBe(true);
+-    expect(reload.json().expiresAt).toBe(firstResume.json().expiresAt);
+-    expect(reload.json().expiresInSeconds).toBeLessThanOrEqual(firstResume.json().expiresInSeconds);
+-    expect(reload.cookies).toHaveLength(0);
+-    expect(inbox).toHaveLength(mailCount);
+-    const verified = await post("account/verify-mfa", { code: totpAt(firstResume.json().secret, Math.floor(Date.now()/30000)) }, cookie);
+-    expect(verified.statusCode).toBe(200);
+-    const consumed = await continuation(cookie);
+-    expect(consumed.statusCode).toBe(400);
+-    expect(consumed.json().error.code).toBe("ACCOUNT_CHALLENGE_UNAVAILABLE");
+-    expect(Object.keys(consumed.json())).toEqual(["error"]);
+-  });
+-  it("requires email ownership and TOTP before issuing an owner session", async () => {
+-    expect((await post("account/signup", { email, name: "Owner", password: "short" })).statusCode).toBe(400);
+-    const signup = await post("account/signup", { email, name: "Owner", password, rememberMe: false });
+-    expect(signup.statusCode).toBe(202);
+-    const cookie = authCookie(signup);
+-    expect(cookie).not.toContain("tn_session");
+-    expect(await database`select id from users where email=${email}`).toHaveLength(0);
+-    expect((await post("account/verify-email", { code: "abcdef" }, cookie)).json().error.code).toBe("ACCOUNT_CODE_INVALID");
+-    const enrollment = await post("account/verify-email", { code: emailCode() }, cookie);
+-    expect(enrollment.json()).toMatchObject({ stage: "enroll" });
+-    expect(enrollment.json()).toMatchObject({ expiresAt: expect.any(String), expiresInSeconds: expect.any(Number) });
+-    expect(enrollment.cookies.find(c => c.name === "tn_auth")?.maxAge).toBe(600);
+-    totpSecret = enrollment.json().secret;
+-    expect((await post("account/verify-mfa", { code: "abcdef" }, cookie)).json().error.code).toBe("ACCOUNT_CODE_INVALID");
+-    const verified = await post("account/verify-mfa", { code: totpAt(totpSecret, Math.floor(Date.now()/30000)) }, cookie);
+-    expect(verified.statusCode, verified.body).toBe(200);
+-    const transientCookies = verified.cookies.filter(c => ["tn_session", "tn_csrf"].includes(c.name));
+-    expect(transientCookies).toHaveLength(2);
+-    expect(transientCookies.every(c => c.maxAge === undefined && c.expires === undefined)).toBe(true);
+-    expect(transientCookies.find(c => c.name === "tn_session")?.httpOnly).toBe(true);
+-    backup = verified.json().backupCodes;
+-    expect(backup).toHaveLength(8);
+-    sessionCookie = authCookie(verified);
+-    const session = await app.inject({ method: "GET", url: "/v1/auth/session", headers: { cookie: sessionCookie } });
+-    expect(session.statusCode).toBe(200);
+-    expect(session.json().tenant.onboardingComplete).toBe(false);
+-    expect((await app.inject({ method: "GET", url: "/v1/onboarding", headers: { cookie: sessionCookie } })).statusCode).toBe(200);
+-    expect((await post("account/verify-mfa", { code: backup[0] }, cookie)).json().error.code).toBe("ACCOUNT_CHALLENGE_UNAVAILABLE");
+-  });
+-  it("does not allow password-only or legacy email-code access; backup codes are single-use", async () => {
+-    const login = await post("account/login", { email, password, rememberMe: true });
+-    expect(login.json()).toMatchObject({ stage: "mfa", expiresAt: expect.any(String), expiresInSeconds: expect.any(Number) });
+-    const cookie = authCookie(login);
+-    expect((await app.inject({ method: "GET", url: "/v1/auth/session", headers: { cookie } })).statusCode).toBe(401);
+-    const resumed = await continuation(cookie);
+-    expect(resumed.json()).toEqual({ stage: "mfa", purpose: "login", email, rememberMe: true, expiresAt: login.json().expiresAt, expiresInSeconds: expect.any(Number) });
+-    expect(resumed.cookies).toHaveLength(0);
+-    const [credential] = await database<{ last_totp_step: number }[]>`select c.last_totp_step from account_credentials c join users u on u.id=c.user_id where u.email=${email}`;
+-    expect((await post("account/verify-mfa", { code: totpAt(totpSecret, Number(credential!.last_totp_step)) }, cookie)).json().error.code).toBe("ACCOUNT_CODE_INVALID");
+-    const remembered = await post("account/verify-mfa", { code: backup[0] }, cookie);
+-    expect(remembered.statusCode).toBe(200);
+-    const persistentCookies = remembered.cookies.filter(c => ["tn_session", "tn_csrf"].includes(c.name));
+-    expect(persistentCookies).toHaveLength(2);
+-    expect(persistentCookies.every(c => Number(c.maxAge) === getConfig().SESSION_TTL_HOURS * 3600)).toBe(true);
+-    expect(persistentCookies.find(c => c.name === "tn_session")?.httpOnly).toBe(true);
+-    // Browser persistence must not extend the server-side lifetime of any session.
+-    const [sessionBounds] = await database<{ bounded: boolean }[]>`select bool_and(expires_at <= now() + (${getConfig().SESSION_TTL_HOURS} * interval '1 hour')) as bounded from sessions`;
+-    expect(sessionBounds?.bounded).toBe(true);
+-    const another = await post("account/login", { email, password });
+-    expect((await post("account/verify-mfa", { code: backup[0] }, authCookie(another))).statusCode).toBe(400);
+-    const count = inbox.length;
+-    await post("auth/request-code", { email });
+-    expect(inbox).toHaveLength(count);
+-    expect((await post("auth/verify-code", { email, code: "424242" })).statusCode).toBe(400);
+-  });
+-  it("keeps MFA during password recovery and revokes sessions and pending logins", async () => {
+-    const pending = await post("account/login", { email, password });
+-    const reset = await post("account/reset", { email, password: "Une nouvelle phrase privée 456" });
+-    const cookie = authCookie(reset);
+-    expect((await continuation(cookie)).json()).toEqual({ stage: "email", purpose: "reset", email, rememberMe: true, expiresAt: reset.json().expiresAt, expiresInSeconds: expect.any(Number) });
+-    const mfa = await post("account/verify-email", { code: emailCode() }, cookie);
+-    expect(mfa.json()).toMatchObject({ stage: "mfa", expiresAt: expect.any(String), expiresInSeconds: expect.any(Number) });
+-    expect((await continuation(cookie)).json()).toEqual({ stage: "mfa", purpose: "reset", email, rememberMe: true, expiresAt: mfa.json().expiresAt, expiresInSeconds: expect.any(Number) });
+-    expect((await post("account/verify-mfa", { code: "invalid-backup" }, cookie)).json().error.code).toBe("ACCOUNT_CODE_INVALID");
+-    expect((await post("account/login", { email, password: "Une nouvelle phrase privée 456" })).statusCode).toBe(400);
+-    const completed = await post("account/verify-mfa", { code: backup[1] }, cookie);
+-    expect(completed.statusCode, completed.body).toBe(200);
+-    expect((await app.inject({ method: "GET", url: "/v1/auth/session", headers: { cookie: sessionCookie } })).statusCode).toBe(401);
+-    expect((await post("account/verify-mfa", { code: backup[2] }, authCookie(pending))).statusCode).toBe(400);
+-    expect((await post("account/login", { email, password })).statusCode).toBe(400);
+-    expect((await post("account/login", { email, password: "Une nouvelle phrase privée 456" })).statusCode).toBe(200);
+-  });
+-  it("refuses expired challenges and unrelated browser origins", async () => {
+-    const signup = await post("account/signup", { email: "expired@tablenow.test", name: "Expired", password });
+-    await database`update account_challenges set expires_at=now()-interval '1 minute' where email='expired@tablenow.test'`;
+-    const expiredEmail = await post("account/verify-email", { code: emailCode() }, authCookie(signup));
+-    expect(expiredEmail.statusCode).toBe(410);
+-    expect(expiredEmail.json().error.code).toBe("ACCOUNT_CHALLENGE_EXPIRED");
+-    expect((await continuation(authCookie(signup))).json().error.code).toBe("ACCOUNT_CHALLENGE_EXPIRED");
+-    const [emailChallenge] = await database<{ attempts: number }[]>`select attempts from account_challenges where email='expired@tablenow.test'`;
+-    expect(emailChallenge?.attempts).toBe(0);
+ 
+-    const login = await post("account/login", { email, password: "Une nouvelle phrase privée 456" });
+-    const loginCookie = authCookie(login);
+-    await database`update account_challenges set expires_at=now()-interval '1 minute' where email=${email} and stage='mfa' and consumed_at is null`;
+-    const expiredMfa = await post("account/verify-mfa", { code: "000000" }, loginCookie);
+-    expect(expiredMfa.statusCode).toBe(410);
+-    expect(expiredMfa.json()).toEqual({ error: { code: "ACCOUNT_CHALLENGE_EXPIRED", message: "Cette vérification a expiré. Relancez la connexion pour continuer." } });
+-    const [expiredChallenge] = await database<{ attempts: number }[]>`select attempts from account_challenges where email=${email} and stage='mfa' and consumed_at is null order by created_at desc limit 1`;
+-    expect(expiredChallenge?.attempts).toBe(0);
+-    const resumed = await continuation(loginCookie);
+-    expect(resumed.statusCode).toBe(410);
+-    expect(Object.keys(resumed.json())).toEqual(["error"]);
+-    const crossSite = await app.inject({ method: "GET", url: "/v1/account/continuation", headers: { cookie: loginCookie, "sec-fetch-site": "cross-site" } });
+-    expect(crossSite.statusCode).toBe(403);
++async function owner(address: string, protectedAccount = false) {
++  const signup = await post("account/signup", { email: address, password });
++  const verified = await post("account/verify-email", { code: emailCode() }, authCookie(signup));
++  expect(verified.json()).toEqual({ authenticated: true });
++  const session = await app.inject({ url: "/v1/auth/session", headers: { cookie: authCookie(verified) } });
++  if (protectedAccount) await database`update account_credentials set totp_secret=${seal("historic-factor-fixture", "s".repeat(48))} where user_id=${session.json().user.id}`;
++  return { verified, userId: session.json().user.id, tenantId: session.json().tenant.id };
++}
++const wrongCode = () => emailCode() === "000000" ? "111111" : "000000";
+ 
+-    const response = await app.inject({ method: "POST", url: "/v1/account/login", payload: { email, password }, headers: { origin: "https://unrelated.example" } });
+-    expect(response.statusCode).toBe(403);
+-  });
+-  it("allows a recovery code to win only one simultaneous login", async () => {
+-    const credentials = { email, password: "Une nouvelle phrase privée 456" };
+-    const first = await post("account/login", credentials);
+-    const second = await post("account/login", credentials);
+-    const replies = await Promise.all([
+-      post("account/verify-mfa", { code: backup[3] }, authCookie(first)),
+-      post("account/verify-mfa", { code: backup[3] }, authCookie(second)),
+-    ]);
+-    expect(replies.map(r => r.statusCode).sort()).toEqual([200, 400]);
+-  });
+-  it("keeps the five-attempt limits and distinguishes unavailable challenges from incorrect codes", async () => {
+-    const recipient = "attempt-limits@tablenow.test";
+-    const signup = await post("account/signup", { email: recipient, name: "Owner", password });
+-    const cookie = authCookie(signup);
+-    for (let i = 0; i < 5; i++) {
+-      expect((await post("account/verify-email", { code: "abcdef" }, cookie)).json().error.code).toBe("ACCOUNT_CODE_INVALID");
+-    }
+-    expect((await continuation(cookie)).json().error.code).toBe("ACCOUNT_CHALLENGE_UNAVAILABLE");
++it("confirms signup without a name or extra factor and resumes an email without sending again", async () => {
++  expect((await continuation()).statusCode).toBe(204);
++  const address = "resume@tablenow.test";
++  const signup = await post("account/signup", { email: address, password, rememberMe: false });
++  const cookie = authCookie(signup), mailCount = inbox.length;
++  expect(await database`select id from users where email=${address}`).toHaveLength(0);
++  const first = await continuation(cookie), second = await continuation(cookie);
++  expect(first.json()).toMatchObject({ stage: "email", purpose: "signup", email: address });
++  expect(second.json().expiresAt).toBe(first.json().expiresAt);
++  expect(second.json().expiresInSeconds).toBeLessThanOrEqual(first.json().expiresInSeconds);
++  expect(second.cookies).toHaveLength(0);
++  expect(first.headers["cache-control"]).toBe("no-store");
++  expect(inbox.length).toBe(mailCount);
++  const verified = await post("account/verify-email", { code: emailCode() }, cookie);
++  expect(verified.json()).toEqual({ authenticated: true });
++  expect(verified.cookies.filter(c => ["tn_session", "tn_csrf"].includes(c.name)).every(c => c.maxAge === undefined)).toBe(true);
++  expect((await app.inject({ url: "/v1/onboarding", headers: { cookie: authCookie(verified) } })).statusCode).toBe(200);
++  expect((await post("account/verify-email", { code: emailCode() }, cookie)).json().error.code).toBe("ACCOUNT_CHALLENGE_UNAVAILABLE");
++});
++it("preserves password-only login and its existing session when no extra check was configured", async () => {
++  const address = "unchanged@tablenow.test";
++  const previous = await owner(address), count = inbox.length;
++  const login = await post("account/login", { email: address, password, rememberMe: true });
++  expect(login.json()).toEqual({ authenticated: true });
++  expect(inbox.length).toBe(count);
++  expect(login.cookies.filter(c => ["tn_session", "tn_csrf"].includes(c.name)).every(c => c.maxAge === getConfig().SESSION_TTL_HOURS * 3600)).toBe(true);
++  expect((await app.inject({ url: "/v1/auth/session", headers: { cookie: authCookie(previous.verified) } })).statusCode).toBe(200);
++});
++it("requires mailbox proof instead of an app code while keeping old credential data unchanged", async () => {
++  const address = "protected@tablenow.test", previous = await owner(address, true);
++  const [before] = await database`select password_hash,totp_secret,backup_hashes,last_totp_step from account_credentials where user_id=${previous.userId}`;
++  const count = inbox.length;
++  expect((await post("account/login", { email: address, password: "wrong" })).statusCode).toBe(400);
++  expect(inbox.length).toBe(count);
++  const login = await post("account/login", { email: address, password });
++  expect(login.statusCode).toBe(202);
++  expect(login.json().stage).toBe("email");
++  expect(authCookie(login)).not.toContain("tn_session");
++  const verified = await post("account/verify-email", { code: emailCode() }, authCookie(login));
++  expect(verified.json()).toEqual({ authenticated: true });
++  const [after] = await database`select password_hash,totp_secret,backup_hashes,last_totp_step from account_credentials where user_id=${previous.userId}`;
++  expect(JSON.stringify(after) === JSON.stringify(before)).toBe(true);
++});
++it("rejects expired proofs without counting an attempt and denies unrelated origins", async () => {
++  const signup = await post("account/signup", { email: "expired@tablenow.test", password });
++  await database`update account_challenges set expires_at=now()-interval '1 minute' where email='expired@tablenow.test'`;
++  expect((await post("account/verify-email", { code: emailCode() }, authCookie(signup))).statusCode).toBe(410);
++  const [row] = await database`select attempts from account_challenges where email='expired@tablenow.test'`;
++  expect(row!.attempts).toBe(0);
++  expect((await app.inject({ method: "POST", url: "/v1/account/login", payload: { email, password }, headers: { origin: "https://unrelated.example" } })).statusCode).toBe(403);
++  expect((await app.inject({ url: "/v1/account/continuation", headers: { "sec-fetch-site": "cross-site" } })).statusCode).toBe(403);
++});
++it("bounds wrong proofs to five per challenge without locking the victim's account", async () => {
++  const address = "victim@tablenow.test", victim = await owner(address, true);
++  for (const path of ["signup", "reset", "access"]) {
++    const challenge = await post(`account/${path}`, path === "access" ? { email: address } : { email: address, password });
++    const cookie = authCookie(challenge), incorrect = wrongCode();
++    for (let i = 0; i < 5; i++) expect((await post("account/verify-email", { code: incorrect }, cookie)).json().error.code).toBe("ACCOUNT_CODE_INVALID");
+     expect((await post("account/verify-email", { code: emailCode() }, cookie)).json().error.code).toBe("ACCOUNT_CHALLENGE_UNAVAILABLE");
+-    const [emailAttempts] = await database<{ attempts: number }[]>`select attempts from account_challenges where email=${recipient}`;
+-    expect(emailAttempts?.attempts).toBe(5);
+-    const login = await post("account/login", { email, password: "Une nouvelle phrase privée 456" });
+-    const loginCookie = authCookie(login);
+-    for (let i = 0; i < 5; i++) {
+-      expect((await post("account/verify-mfa", { code: "invalid-backup" }, loginCookie)).json().error.code).toBe("ACCOUNT_CODE_INVALID");
+-    }
+-    expect((await continuation(loginCookie)).json().error.code).toBe("ACCOUNT_CHALLENGE_UNAVAILABLE");
+-    expect((await post("account/verify-mfa", { code: backup[4] }, loginCookie)).json().error.code).toBe("ACCOUNT_CHALLENGE_UNAVAILABLE");
+-    for (const route of ["account/verify-email", "account/verify-mfa"]) {
+-      expect((await post(route, { code: "123456" })).json().error.code).toBe("ACCOUNT_CHALLENGE_UNAVAILABLE");
+-      expect((await post(route, { code: "123456" }, "tn_auth=unknown-challenge")).json().error.code).toBe("ACCOUNT_CHALLENGE_UNAVAILABLE");
+-    }
+-    // A new challenge still accepts an unused backup code; reading did not consume it.
+-    const retry = await post("account/login", { email, password: "Une nouvelle phrase privée 456" });
+-    expect((await continuation(authCookie(retry))).json().stage).toBe("mfa");
+-    expect((await post("account/verify-mfa", { code: backup[4] }, authCookie(retry))).statusCode).toBe(200);
+-  });
+-  it("limits recipient mail across different source addresses", async () => {
+-    const before = inbox.length;
+-    for (let i = 0; i < 5; i++) {
+-      expect((await post("account/reset", { email: "budget@tablenow.test", password })).statusCode).toBe(202);
+-    }
+-    expect((await post("account/reset", { email: "budget@tablenow.test", password })).statusCode).toBe(429);
+-    expect(inbox.length - before).toBe(5);
+-  });
+-  it("keeps verified email challenges in the recipient budget", async () => {
+-    const recipient = "verified-budget@tablenow.test";
+-    const before = inbox.length;
+-    for (let index = 0; index < 5; index++) {
+-      const signup = await post("account/signup", { email: recipient, name: "Owner", password });
+-      expect(signup.statusCode).toBe(202);
+-      const code = emailCode();
+-      expect((await post("account/verify-email", { code }, authCookie(signup))).json()).toMatchObject({ stage: "enroll" });
+-      expect((await post("account/verify-email", { code }, authCookie(signup))).statusCode).toBe(400);
+-    }
+-    expect((await post("account/signup", { email: recipient, name: "Owner", password })).statusCode).toBe(429);
+-    expect(inbox.length - before).toBe(5);
+-  });
+-  it("keeps verified recovery challenges in the budget without counting password logins", async () => {
+-    await database`update account_challenges set created_at=now()-interval '16 minutes' where email=${email}`;
+-    const before = inbox.length;
+-    const currentPassword = "Une nouvelle phrase privée 456";
+-    for (let index = 0; index < 5; index++) {
+-      expect((await post("account/login", { email, password: currentPassword })).statusCode).toBe(200);
+-    }
+-    for (let index = 0; index < 5; index++) {
+-      const reset = await post("account/reset", { email, password: currentPassword });
+-      expect(reset.statusCode).toBe(202);
+-      expect((await post("account/verify-email", { code: emailCode() }, authCookie(reset))).json()).toMatchObject({ stage: "mfa", expiresAt: expect.any(String), expiresInSeconds: expect.any(Number) });
+-    }
+-    expect((await post("account/reset", { email, password: currentPassword })).statusCode).toBe(429);
+-    expect(inbox.length - before).toBe(5);
+-    await database`update account_challenges set created_at=now()-interval '16 minutes' where email=${email}`;
+-    expect((await post("account/reset", { email, password: currentPassword })).statusCode).toBe(202);
+-  });
++  }
++  const [credentials] = await database`select failed_attempts,locked_until from account_credentials where user_id=${victim.userId}`;
++  expect(credentials).toMatchObject({ failed_attempts: 0, locked_until: null });
++  const legitimate = await post("account/login", { email: address, password });
++  expect(legitimate.statusCode).toBe(202);
++  expect((await post("account/verify-email", { code: emailCode() }, authCookie(legitimate))).json()).toEqual({ authenticated: true });
++});
++it("allows only one concurrent verification and invalidates other pending proofs", async () => {
++  const address = "concurrent@tablenow.test";
++  await owner(address, true);
++  const previous = await post("account/login", { email: address, password });
++  const login = await post("account/login", { email: address, password });
++  const code = emailCode(), cookie = authCookie(login);
++  const results = await Promise.all([post("account/verify-email", { code }, cookie), post("account/verify-email", { code }, cookie)]);
++  expect(results.map(r => r.statusCode).sort()).toEqual([200, 400]);
++  expect((await continuation(authCookie(previous))).statusCode).toBe(400);
++});
++it("enforces resend cooldown, invalidates the old code and persists the recipient budget", async () => {
++  const address = "budget@tablenow.test";
++  const start = await post("account/signup", { email: address, password }), original = emailCode();
++  expect((await post("account/resend", {}, authCookie(start))).statusCode).toBe(400);
++  await database`update account_challenges set created_at=now()-interval '61 seconds' where email=${address}`;
++  const next = await post("account/resend", {}, authCookie(start));
++  expect(next.statusCode).toBe(202);
++  expect((await post("account/verify-email", { code: original }, authCookie(start))).statusCode).toBe(400);
++  for (let i = 0; i < 3; i++) expect((await post("account/signup", { email: address, password })).statusCode).toBe(202);
++  expect((await post("account/signup", { email: address, password })).statusCode).toBe(429);
++});
++it("reports delivery failures, consumes failed challenges and never creates a session", async () => {
++  const address = "delivery@tablenow.test";
++  await owner(address, true);
++  deliveryFailure = true;
++  try {
++    const login = await post("account/login", { email: address, password });
++    expect(login.statusCode).toBe(503);
++    expect(login.json().error.code).toBe("ACCOUNT_EMAIL_UNAVAILABLE");
++    expect(login.cookies.some(c => c.name === "tn_session")).toBe(false);
++    const [row] = await database`select bool_and(consumed_at is not null) as consumed from account_challenges where email=${address}`;
++    expect(row!.consumed).toBe(true);
++  } finally { deliveryFailure = false; }
++});
++it("retires pending Authenticator challenges without revealing or accepting their secret", async () => {
++  const start = await post("account/signup", { email: "retired@tablenow.test", password });
++  await database`update account_challenges set stage='mfa' where email='retired@tablenow.test'`;
++  const resumed = await continuation(authCookie(start));
++  expect(resumed.statusCode).toBe(410);
++  expect(Object.keys(resumed.json())).toEqual(["error"]);
++  expect((await post("account/verify-mfa", { code: "123456" }, authCookie(start))).statusCode).toBe(410);
++  expect((await app.inject({ url: "/v1/account/google-continuation", headers: { cookie: authCookie(start) } })).statusCode).toBe(410);
+ });
+diff --git a/services/core-api/src/account-routes.ts b/services/core-api/src/account-routes.ts
+index af0ed33..3b9e142 100644
+--- a/services/core-api/src/account-routes.ts
++++ b/services/core-api/src/account-routes.ts
+@@ -4,12 +4,12 @@ import { z } from "zod";
+ import { constantTimeEqual, hashSecret, randomDigits, randomToken, type Database, type EmailSender, type Transaction } from "@tablenow/provider-adapters";
+ import { getConfig } from "./environment.js";
+ import { setSessionCookies } from "./auth.js";
+-import { newTotpSecret, passwordHash, passwordMatches, seal, unseal, validTotpStep } from "./account-crypto.js";
++import { passwordHash, passwordMatches, seal, unseal } from "./account-crypto.js";
+ import { registerGoogleRoutes } from "./google-routes.js";
+ import { registerAccountRecoveryRoutes } from "./account-recovery-routes.js";
+ import type { GoogleExchange } from "./google-identity.js";
+ 
+-type Payload = { delivery?: "link" | undefined; purpose: "signup" | "reset" | "login" | "google" | "access"; googleSubject?: string; passwordHash?: string; passwordless?: boolean; name?: string | undefined; userId?: string; tenantId?: string; secret?: string; rememberMe?: boolean };
++type Payload = { delivery?: "link" | undefined; purpose: "signup" | "reset" | "login" | "google" | "access"; googleSubject?: string; passwordHash?: string; passwordless?: boolean; name?: string | undefined; userId?: string; tenantId?: string; rememberMe?: boolean };
+ type Challenge = { token_hash: string; email: string; stage: string; payload: string; proof_hash: string | null; attempts: number; expires_at: Date | string; expires_in_seconds?: number };
+ type ChallengeState = Challenge & { expired: boolean; unavailable: boolean };
+ const emailSchema = z.string().trim().toLowerCase().email().max(254);
+@@ -119,10 +119,11 @@ export async function registerAccountRoutes(app: FastifyInstance, database: Data
+       await tx`update account_credentials set failed_attempts=0,locked_until=null where user_id=${row.user_id}`;
+       return issueSession(tx, row.user_id, request, input.rememberMe);
+     }
+-    return challenge(reply, input.email, "mfa", { purpose: "login", rememberMe: input.rememberMe, userId: row.user_id }, undefined, tx);
++    return { emailProofRequired: true as const, userId: row.user_id };
+     });
+     if (challengeExpiry && "sessionToken" in challengeExpiry) { setSessionCookies(reply, challengeExpiry); reply.clearCookie("tn_auth", { path: "/" }); return { authenticated: true }; }
+-    return challengeExpiry ? { stage: "mfa", expiresAt: challengeExpiry.expiresAt, expiresInSeconds: challengeExpiry.expiresInSeconds } : fail(reply);
++    if (challengeExpiry && "emailProofRequired" in challengeExpiry) return emailRequest(reply, input.email, { purpose: "login", passwordless: true, rememberMe: input.rememberMe, userId: challengeExpiry.userId });
++    return fail(reply);
+   });
+   app.post("/v1/account/resend", rate, async (request, reply) => {
+     const token = request.cookies.tn_auth;
+@@ -141,14 +142,13 @@ export async function registerAccountRoutes(app: FastifyInstance, database: Data
+       if (intent === "login" && !linked) return { destination: "/login?google=signup-required" as const };
+       // Google is authoritative only for Gmail / verified Workspace. Other addresses
+       // must prove mailbox ownership before account creation or linking.
+-      if (!linked && !identity.emailAuthoritative) return { verifyEmail: true as const };
++      if (!linked && !identity.emailAuthoritative) return { verifyEmail: true as const, email };
+       if (user && user.status !== "active") throw new Error("GOOGLE_ACCOUNT_UNAVAILABLE");
+       const [other] = user ? await tx<{ subject: string }[]>`select subject from google_identities where user_id=${user.id}` : [];
+       if (other && other.subject !== identity.sub) throw new Error("GOOGLE_ACCOUNT_UNAVAILABLE");
+       const [credential] = user ? await tx<{ totp_secret: string | null }[]>`select totp_secret from account_credentials where user_id=${user.id}` : [];
+       if (credential?.totp_secret) {
+-        await challenge(reply, email, "mfa", { purpose: "google", userId: user!.id, googleSubject: identity.sub, rememberMe }, undefined, tx);
+-        return { destination: "/login?google=continue" as const };
++        return { verifyEmail: true as const, email };
+       }
+       let userId = user?.id;
+       let tenantId: string | undefined;
+@@ -176,8 +176,8 @@ export async function registerAccountRoutes(app: FastifyInstance, database: Data
+       await tx`insert into audit_events(tenant_id,actor_id,actor_type,action,resource_type,resource_id) values (${tenantId},${userId},'user','auth.google_verified','user',${userId})`;
+       return { created: !user, sessionToken, csrfToken, maxAgeSeconds, rememberMe, destination: onboardingComplete ? "/dashboard" as const : "/onboarding" as const };
+     });
+-    if ("verifyEmail" in result) {
+-      await emailRequest(reply, identity.email, { purpose: "google", googleSubject: identity.sub, passwordless: true, rememberMe }, `${config.PUBLIC_ORIGIN}/login?google=continue`);
++    if ("verifyEmail" in result && result.verifyEmail === true) {
++      await emailRequest(reply, result.email, { purpose: "google", googleSubject: identity.sub, passwordless: true, rememberMe }, `${config.PUBLIC_ORIGIN}/login?google=continue`);
+       return null;
+     }
+     if (!result.sessionToken) return result.destination;
+@@ -197,30 +197,24 @@ export async function registerAccountRoutes(app: FastifyInstance, database: Data
+     if (!token) return reply.code(204).send();
+     const [row] = await database<ChallengeState[]>`select *,expires_at<=now() as expired,(consumed_at is not null or attempts>=5) as unavailable,greatest(0,ceil(extract(epoch from (expires_at-now()))))::int as expires_in_seconds from account_challenges where token_hash=${digest(token)}`;
+     if (!row) return reply.code(204).send();
+-    if (row.unavailable || !["email", "profile", "enroll", "mfa"].includes(row.stage)) return unavailable(reply);
++    if (["enroll", "mfa"].includes(row.stage)) return reply.code(410).send({ error: { code: "ACCOUNT_METHOD_CHANGED", message: "Recommencez la connexion pour recevoir un code par e-mail." } });
++    if (row.unavailable || !["email", "profile"].includes(row.stage)) return unavailable(reply);
+     if (row.expired) return expired(reply);
+     const payload = unseal<Payload>(row.payload, secret);
+-    // Reading a challenge never rotates its token, enrollment key or expiration.
++    // Reading a challenge never sends mail, rotates its token or extends expiration.
+     return { stage: row.stage, email: row.email, purpose: payload.purpose, rememberMe: payload.rememberMe ?? true,
+       expiresAt: row.expires_at, expiresInSeconds: Number(row.expires_in_seconds),
+-      ...(payload.delivery ? { delivery: payload.delivery } : {}), ...(row.stage === "enroll" ? { secret: payload.secret } : {}) };
+-  });
+-  app.get("/v1/account/google-continuation", rate, async (request, reply) => {
+-    const token = request.cookies.tn_auth;
+-    if (!token) return fail(reply);
+-    const [row] = await database<ChallengeState[]>`select *,expires_at<=now() as expired,(consumed_at is not null or attempts>=5) as unavailable,greatest(0,ceil(extract(epoch from (expires_at-now()))))::int as expires_in_seconds from account_challenges where token_hash=${digest(token)} and stage in ('enroll','mfa')`;
+-    if (!row) return fail(reply);
+-    if (row.unavailable) return fail(reply);
+-    if (row.expired) return expired(reply);
+-    const payload = unseal<Payload>(row.payload, secret);
+-    if (payload.purpose !== "google") return fail(reply);
+-    return { stage: row.stage, email: row.email, expiresAt: row.expires_at, expiresInSeconds: Number(row.expires_in_seconds), ...(row.stage === "enroll" ? { secret: payload.secret } : {}) };
++      ...(payload.delivery ? { delivery: payload.delivery } : {}) };
+   });
++  app.get("/v1/account/google-continuation", rate, async (_request, reply) => reply.code(410).send({ error: { code: "ACCOUNT_METHOD_CHANGED", message: "Recommencez la connexion pour recevoir un code par e-mail." } }));
+   app.post("/v1/account/verify-email", rate, async (request, reply) => {
+     const { code, challenge: linkToken } = emailProofSchema.parse(request.body);
+     const token = linkToken ?? request.cookies.tn_auth;
+     if (!token) return unavailable(reply);
+     const result = await database.begin(async tx => {
++      const [identity] = await tx<{ email: string }[]>`select email from account_challenges where token_hash=${digest(token)}`;
++      if (!identity) return null;
++      await tx`select pg_advisory_xact_lock(hashtext(${identity.email}))`;
+       const [row] = await tx<ChallengeState[]>`select *,expires_at<=now() as expired,(consumed_at is not null or attempts>=5) as unavailable from account_challenges where token_hash=${digest(token)} and stage='email' for update`;
+       if (!row || row.unavailable) return null;
+       if (row.expired) return { outcome: "expired" as const };
+@@ -228,7 +222,7 @@ export async function registerAccountRoutes(app: FastifyInstance, database: Data
+       if (!row.proof_hash || !constantTimeEqual(row.proof_hash, digest(code))) return { outcome: "invalid" as const };
+       const payload = unseal<Payload>(row.payload, secret);
+       if (linkToken && payload.delivery !== "link") return null;
+-      if (payload.passwordless || payload.delivery === "link") {
++      {
+         await tx`select pg_advisory_xact_lock(hashtext(${row.email}))`;
+         const [existingUser] = await tx<{ id: string; status: string }[]>`select id,status from users where email=${row.email}`;
+         if (existingUser?.status && existingUser.status !== "active") return null;
+@@ -242,13 +236,6 @@ export async function registerAccountRoutes(app: FastifyInstance, database: Data
+           return { signupRequired: true };
+         }
+ 
+-        const [credential] = existingUser ? await tx<{ totp_secret: string | null }[]>`select totp_secret from account_credentials where user_id=${existingUser.id}` : [];
+-        if (credential?.totp_secret) {
+-          const nextPayload = { ...payload, userId: existingUser!.id };
+-          const next = await challenge(reply, row.email, "mfa", nextPayload, undefined, tx);
+-          await tx`update account_challenges set consumed_at=now() where token_hash=${row.token_hash}`;
+-          return { stage: "mfa", rotatedToken: next.token, expiresAt: next.expiresAt, expiresInSeconds: next.expiresInSeconds };
+-        }
+         if (payload.googleSubject && existingUser) {
+           const [other] = await tx<{ subject: string }[]>`select subject from google_identities where user_id=${existingUser.id}`;
+           if (other && other.subject !== payload.googleSubject) return null;
+@@ -288,20 +275,6 @@ export async function registerAccountRoutes(app: FastifyInstance, database: Data
+         await tx`insert into audit_events(tenant_id,actor_id,actor_type,action,resource_type,resource_id) values (${tenantId},${userId},'user',${payload.purpose === 'signup' ? 'auth.registered' : 'auth.email_verified'},'user',${userId})`;
+         return { outcome: "authenticated" as const, sessionToken, csrfToken, maxAgeSeconds, rememberMe: payload.rememberMe ?? true };
+       }
+-      const [user] = await tx<{ id: string; status: string }[]>`select id,status from users where email=${row.email}`;
+-      if (user?.status && user.status !== "active") return null;
+-      const [credentials] = user ? await tx<{ user_id: string }[]>`select user_id from account_credentials where user_id=${user.id}` : [];
+-      if (payload.purpose === "signup" && user) {
+-        await tx`update account_challenges set consumed_at=now() where token_hash=${row.token_hash}`;
+-        return { existing: true };
+-      }
+-      if (payload.purpose === "reset" && !user) return null;
+-      if (user) payload.userId = user.id;
+-      const stage = credentials ? "mfa" : "enroll";
+-      if (stage === "enroll") payload.secret = newTotpSecret();
+-      // Retain the digest for the mail budget; only stage='email' accepts it.
+-      const [advanced] = await tx<{ expires_at: Date | string; expires_in_seconds: number }[]>`update account_challenges set stage=${stage},payload=${seal(payload,secret)},attempts=0,expires_at=now()+(${challengeMaxAgeSeconds} * interval '1 second') where token_hash=${row.token_hash} returning expires_at,greatest(0,ceil(extract(epoch from (expires_at-now()))))::int as expires_in_seconds`;
+-      return { stage, expiresAt: advanced!.expires_at, expiresInSeconds: Number(advanced!.expires_in_seconds), ...(payload.secret ? { secret: payload.secret } : {}) };
+     });
+     if (result && "signupRequired" in result) {
+       reply.clearCookie("tn_auth", { path: "/" });
+@@ -314,11 +287,6 @@ export async function registerAccountRoutes(app: FastifyInstance, database: Data
+       return { authenticated: true };
+     }
+     if (result && "outcome" in result) return result.outcome === "expired" ? expired(reply) : invalidCode(reply);
+-    if (result && "rotatedToken" in result) {
+-      reply.setCookie("tn_auth", result.rotatedToken, { ...cookieOptions, maxAge: result.expiresInSeconds });
+-      return { stage: result.stage, expiresAt: result.expiresAt, expiresInSeconds: result.expiresInSeconds };
+-    }
+-    if (result) reply.setCookie("tn_auth", token, { ...cookieOptions, maxAge: "expiresInSeconds" in result ? result.expiresInSeconds : challengeMaxAgeSeconds }).header("Cache-Control", "no-store");
+     return result || unavailable(reply);
+   });
+   app.post("/v1/account/complete-profile", rate, async (request, reply) => {
+@@ -335,10 +303,6 @@ export async function registerAccountRoutes(app: FastifyInstance, database: Data
+       await tx`select pg_advisory_xact_lock(hashtext(${row.email}))`;
+       const [existingUser] = await tx<{ id: string; status: string }[]>`select id,status from users where email=${row.email}`;
+       if (existingUser?.status && existingUser.status !== "active") return null;
+-      if (existingUser) {
+-        const [credential] = await tx<{ totp_secret: string | null }[]>`select totp_secret from account_credentials where user_id=${existingUser.id}`;
+-        if (credential?.totp_secret) return null;
+-      }
+       let userId = existingUser?.id;
+       let tenantId: string | undefined;
+       let created = false;
+@@ -372,86 +336,7 @@ export async function registerAccountRoutes(app: FastifyInstance, database: Data
+     reply.clearCookie("tn_auth", { path: "/" });
+     return { authenticated: true };
+   });
+-  app.post("/v1/account/verify-mfa", rate, async (request, reply) => {
+-    const { code } = proofSchema.parse(request.body);
+-    const token = request.cookies.tn_auth;
+-    if (!token) return unavailable(reply);
+-    const result = await database.begin(async tx => {
+-      const [identity] = await tx<{ email: string }[]>`select email from account_challenges where token_hash=${digest(token)}`;
+-      if (!identity) return null;
+-      // Serialize enrollment, recovery and legacy authentication for one identity.
+-      await tx`select pg_advisory_xact_lock(hashtext(${identity.email}))`;
+-      const [row] = await tx<ChallengeState[]>`select *,expires_at<=now() as expired,(consumed_at is not null or attempts>=5) as unavailable from account_challenges where token_hash=${digest(token)} and stage in ('enroll','mfa') for update`;
+-      if (!row) return null;
+-      if (row.unavailable) return null;
+-      if (row.expired) return { outcome: "expired" as const };
+-      await tx`update account_challenges set attempts=attempts+1 where token_hash=${row.token_hash}`;
+-      const payload = unseal<Payload>(row.payload, secret);
+-      const [credential] = payload.userId ? await tx<{ totp_secret: string; last_totp_step: number; backup_hashes: string[]; locked: boolean }[]>`select totp_secret,last_totp_step,backup_hashes,(locked_until>now()) as locked from account_credentials where user_id=${payload.userId} for update` : [];
+-      if (payload.googleSubject) {
+-        await tx`select pg_advisory_xact_lock(hashtext(${`google:${payload.googleSubject}`}))`;
+-        const [linked] = await tx<{ user_id: string }[]>`select user_id from google_identities where subject=${payload.googleSubject}`;
+-        if (linked && linked.user_id !== payload.userId) return null;
+-      }
+-      if (credential?.locked) return null;
+-      if (row.stage === "mfa" && !credential?.totp_secret) return null;
+-      if (row.stage === "enroll" && credential) return null;
+-      const totpSecret = credential ? unseal<string>(credential.totp_secret, secret) : payload.secret!;
+-      const step = validTotpStep(totpSecret, code, Number(credential?.last_totp_step ?? -1));
+-      const backupIndex = credential?.backup_hashes.indexOf(digest(code)) ?? -1;
+-      if (step === null && backupIndex < 0) {
+-        if (credential) await tx`update account_credentials set failed_attempts=failed_attempts+1,locked_until=case when failed_attempts+1>=10 then now()+interval '15 minutes' else locked_until end where user_id=${payload.userId!}`;
+-        return { outcome: "invalid" as const };
+-      }
+-      let userId = payload.userId;
+-      let tenantId: string | undefined;
+-      if (!userId) {
+-        const [existing] = await tx`select id from users where email=${row.email}`;
+-        if (existing) return null;
+-        const [user] = await tx<{ id: string }[]>`insert into users(email,display_name) values (${row.email},${payload.name!}) returning id`;
+-        userId = user!.id;
+-        const [tenant] = await tx<{ id: string }[]>`insert into tenants(name,slug) values ('Mon établissement',${`restaurant-${crypto.randomUUID()}`}) returning id`;
+-        tenantId = tenant!.id;
+-        await tx`insert into memberships(tenant_id,user_id,role) values (${tenantId},${userId},'owner')`;
+-        await tx`select set_config('app.tenant_id',${tenantId},true)`;
+-        await tx`insert into restaurants(tenant_id,name,slug,is_demo) values (${tenantId},'Mon établissement','principal',false)`;
+-      } else {
+-        const [membership] = await tx<{ tenant_id: string }[]>`select m.tenant_id from memberships m join tenants t on t.id=m.tenant_id and t.status in ('pilot','active') join users u on u.id=m.user_id and u.status='active' where m.user_id=${userId} order by m.created_at limit 1`;
+-        if (!membership) return null;
+-        tenantId = membership.tenant_id;
+-      }
+-      const backupCodes = credential ? [] : Array.from({ length: 8 }, () => randomToken(12));
+-      if (!credential) {
+-        await tx`insert into account_credentials(user_id,password_hash,totp_secret,last_totp_step,backup_hashes) values (${userId},${payload.passwordHash || null},${seal(totpSecret,secret)},${step!},${tx.json(backupCodes.map(digest))})`;
+-      } else {
+-        const hashes = credential.backup_hashes.filter((_, i) => i !== backupIndex);
+-        await tx`update account_credentials set last_totp_step=${step ?? Number(credential.last_totp_step)},backup_hashes=${tx.json(hashes)},password_hash=coalesce(${payload.passwordHash || null},password_hash),failed_attempts=0,locked_until=null where user_id=${userId}`;
+-      }
+-      if (payload.googleSubject) {
+-        const [other] = await tx<{ subject: string }[]>`select subject from google_identities where user_id=${userId}`;
+-        if (other && other.subject !== payload.googleSubject) throw new Error("GOOGLE_ACCOUNT_UNAVAILABLE");
+-        await tx`insert into google_identities(subject,user_id) values (${payload.googleSubject},${userId}) on conflict (subject) do nothing`;
+-      }
+-      if (payload.purpose === "reset" || !credential) {
+-        await tx`delete from sessions where user_id=${userId}`;
+-        await tx`update account_challenges set consumed_at=now() where email=${row.email} and token_hash<>${row.token_hash}`;
+-      }
+-      await tx`update account_challenges set consumed_at=now() where token_hash=${row.token_hash}`;
+-      await tx`update otp_challenges set consumed_at=now() where email=${row.email} and consumed_at is null`;
+-      const sessionToken = randomToken(32), csrfToken = randomToken(24);
+-      const maxAgeSeconds = config.SESSION_TTL_HOURS * 3600;
+-      await tx`insert into sessions(token_hash,user_id,tenant_id,csrf_hash,ip_hash,user_agent,expires_at) values (${digest(sessionToken)},${userId},${tenantId},${digest(csrfToken)},${digest(request.ip)},${request.headers['user-agent'] || null},${new Date(Date.now()+maxAgeSeconds*1000)})`;
+-      await tx`select set_config('app.tenant_id',${tenantId},true)`;
+-      await tx`insert into privacy_preferences(tenant_id,user_id) values (${tenantId},${userId}) on conflict do nothing`;
+-      await tx`insert into audit_events(tenant_id,actor_id,actor_type,action,resource_type,resource_id) values (${tenantId},${userId},'user',${payload.purpose === 'signup' ? 'auth.registered' : 'auth.mfa_verified'},'user',${userId})`;
+-      return { outcome: "authenticated" as const,sessionToken,csrfToken,maxAgeSeconds,backupCodes,rememberMe: payload.rememberMe ?? true };
+-    });
+-    if (result?.outcome === "expired") return expired(reply);
+-    if (result?.outcome === "invalid") return invalidCode(reply);
+-    if (!result) return unavailable(reply);
+-    setSessionCookies(reply, result);
+-    reply.clearCookie("tn_auth", { path: "/" });
+-    return { authenticated: true, backupCodes: result.backupCodes };
+-  });
+-  await registerAccountRecoveryRoutes(app, database);
++  // Retire old authenticator proofs without deleting encrypted historical factors.
++  app.post("/v1/account/verify-mfa", rate, async (_request, reply) => reply.code(410).send({ error: { code: "ACCOUNT_METHOD_CHANGED", message: "Recommencez la connexion pour recevoir un code par e-mail." } }));
++  await registerAccountRecoveryRoutes(app);
+ }
+diff --git a/services/core-api/src/google-routes.test.ts b/services/core-api/src/google-routes.test.ts
+index f5489e0..e9a1b79 100644
+--- a/services/core-api/src/google-routes.test.ts
++++ b/services/core-api/src/google-routes.test.ts
+@@ -122,7 +122,7 @@ describe("Google authentication", () => {
+     const callback = await get(`/v1/oauth/google/callback?state=${attempt.state}&code=fixture`, attempt.cookie);
+     expect(callback.headers.location).toBe("http://localhost:3000/login?google=continue");
+     expect((await get("/v1/auth/session", cookieOf(callback))).statusCode).toBe(401);
+-    const mfa = await post("/v1/account/verify-mfa", {code: totpAt(totpSecret, Math.floor(Date.now()/30000))}, cookieOf(callback));
++    const mfa = await post("/v1/account/verify-email", {code: send.mock.calls.at(-1)![0].text.match(/\b\d{6}\b/)![0]}, cookieOf(callback));
+     expect(mfa.statusCode).toBe(200);
+     const flow = { session: await get("/v1/auth/session", cookieOf(mfa)) };
+     const [credential] = await database<{ password_hash: string; totp_secret: string }[]>`select password_hash,totp_secret from account_credentials where user_id=${fixture.userId}`;
+diff --git a/services/core-api/src/simple-account-access.test.ts b/services/core-api/src/simple-account-access.test.ts
+index 99b6957..1c9dd16 100644
+--- a/services/core-api/src/simple-account-access.test.ts
++++ b/services/core-api/src/simple-account-access.test.ts
+@@ -165,7 +165,7 @@ describe("simple account access", () => {
+     expect(await database`select id from users where email=${email}`).toHaveLength(1);
+   });
+ 
+-  it("requires the existing TOTP after an email code instead of bypassing it", async () => {
++  it("uses the proven mailbox instead of the existing TOTP without modifying credentials", async () => {
+     const { seedOwnerFixture } = await import("./testing/owner-fixture.js");
+     const fixture = await seedOwnerFixture(database);
+     const email = "legacy-owner@tablenow.test";
+@@ -177,8 +177,8 @@ describe("simple account access", () => {
+     const verified = await post("account/verify-email", { code: latestCode(email) }, cookies(login));
+ 
+     expect(verified.statusCode, verified.body).toBe(200);
+-    expect(verified.json().stage).toBe("mfa");
++    expect(verified.json()).toEqual({ authenticated: true });
+     const session = await app.inject({ method: "GET", url: "/v1/auth/session", headers: { cookie: cookies(verified) } });
+-    expect(session.statusCode).toBe(401);
++    expect(session.statusCode).toBe(200);
+   });
+ });
+diff --git a/services/core-api/src/split-account-access.test.ts b/services/core-api/src/split-account-access.test.ts
+index b767388..0bc086d 100644
+--- a/services/core-api/src/split-account-access.test.ts
++++ b/services/core-api/src/split-account-access.test.ts
+@@ -79,7 +79,7 @@ it("changes a password only after a fresh reset link and revokes older sessions"
+  expect((await post("login",{email,password})).json()).toEqual({authenticated:true});
+ });
+ 
+-it("keeps TOTP mandatory when a protected owner follows a password-reset link in another browser",async()=>{
++it("accepts the reset mailbox proof once without an additional app code",async()=>{
+  const {seedOwnerFixture}=await import("./testing/owner-fixture.js");
+  const owner=await seedOwnerFixture(db),email="protected-link@tablenow.test",secret=newTotpSecret();
+  await db`update users set email=${email} where id=${owner.userId}`;
+@@ -87,10 +87,24 @@ it("keeps TOTP mandatory when a protected owner follows a password-reset link in
+  const password="Nouvelle phrase de test 2026!";
+  await post("reset",{email,password,delivery:"link"});
+  const verified=await post("verify-email",proof(email));
+- expect(verified.json().stage).toBe("mfa");
+- expect((await app.inject({url:"/v1/auth/session",headers:{cookie:cookies(verified)}})).statusCode).toBe(401);
+- expect((await post("verify-mfa",{code:"invalid"},cookies(verified))).json().error.code).toBe("ACCOUNT_CODE_INVALID");
+- const mfa=await post("verify-mfa",{code:totpAt(secret,Math.floor(Date.now()/30000))},cookies(verified));
+- expect(mfa.json().authenticated).toBe(true);
+- expect((await post("login",{email,password})).json().stage).toBe("mfa");
++ expect(verified.json()).toEqual({authenticated:true});
++ expect((await app.inject({url:"/v1/auth/session",headers:{cookie:cookies(verified)}})).statusCode).toBe(200);
++ expect((await post("verify-email",proof(email))).statusCode).toBe(400);
++ expect((await post("login",{email,password})).json().stage).toBe("email");
++});
++
++it("replaces the existing Authenticator check with an email code only for a protected login",async()=>{
++ const email="returning-otp@tablenow.test",password="Une phrase de test 2026!";
++ await post("signup",{email,password,delivery:"link"});
++ const signup=await post("verify-email",proof(email));
++ const session=await app.inject({url:"/v1/auth/session",headers:{cookie:cookies(signup)}});
++ await db`update account_credentials set totp_secret=${seal(newTotpSecret(),"s".repeat(48))} where user_id=${session.json().user.id}`;
++ const login=await post("login",{email,password});
++ expect(login.statusCode).toBe(202);
++ expect(login.json().stage).toBe("email");
++ expect(cookies(login)).not.toContain("tn_session");
++ const code=inbox.findLast(m=>m.to===email)!.text.match(/\b\d{6}\b/)![0];
++ const verified=await post("verify-email",{code},cookies(login));
++ expect(verified.json()).toEqual({authenticated:true});
++ expect((await app.inject({url:"/v1/auth/session",headers:{cookie:cookies(verified)}})).statusCode).toBe(200);
+ });

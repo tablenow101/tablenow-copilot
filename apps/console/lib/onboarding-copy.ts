@@ -101,7 +101,7 @@ export const onboardingCopy: Record<LocaleMode, OnboardingCopy> = {
     labels: labelsFr,
     common: {
       brand: "Onboarding", language: "Langue", clearTheme: "Passer en clair", darkTheme: "Passer en sombre", loading: "Préparation de votre brouillon d'onboarding",
-      loadFailed: "Impossible de charger votre brouillon.", retry: "Réessayer", dirty: "Modifications non enregistrées", saving: "Enregistrement…", saved: "Enregistré",
+      loadFailed: "Impossible de charger votre brouillon.", retry: "Réessayer", dirty: "Modifications non enregistrées", saving: "Enregistrement…", saved: "Votre progression a été enregistrée.",
       saveFailed: "Enregistrement impossible. Vos réponses restent dans cet écran.", conflict: "Ces réponses ont été modifiées dans une autre session.", compare: "Comparer les réponses",
       back: "Retour", continue: "Continuer", done: "J’ai terminé", finish: "Voir mon premier résultat", preparing: "Préparation de votre plan…", saveForReview: "Enregistrer pour validation",
       composerPlaceholder: "Écrivez ou parlez…", send: "Envoyer", dictate: "Dicter", stop: "Arrêter", listen: "Écouter la question", stopReading: "Arrêter la lecture",

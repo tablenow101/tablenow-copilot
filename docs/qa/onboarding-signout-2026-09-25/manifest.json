@@ -1,0 +1,73 @@
+{
+  "base": "a11834385e3e835e3842f1a24eccb32d3b43d764",
+  "main": "665ca205111c7937b1e7507137e0af2b3c161c54",
+  "localOnly": true,
+  "committed": false,
+  "deployed": false,
+  "incrementalDiffSha256": "57296a9a30204e70382332350beb1d5115acf6c35a5f543cfc5bff3999684c8f",
+  "tests": {
+    "apiPassed": 8,
+    "consolePassed": 33,
+    "apiBuild": "PASS",
+    "consoleTypecheck": "PASS",
+    "nextBuild": "PASS"
+  },
+  "browsers": [
+    {
+      "device": "mobile",
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "result": "PASS",
+      "sessionRevoked": true,
+      "newBrowserResume": true,
+      "allSixSteps": true,
+      "saveDuringLogout": true,
+      "latestEditsPreserved": true,
+      "formAndComposerPersisted": true,
+      "saveFailureAndConflictRetainSession": true,
+      "logoutFailureAndLostResponse": true,
+      "physicalDevice": false,
+      "realEmail": false,
+      "realGoogle": false,
+      "captures": [
+        "mobile-01-priorities-menu.png",
+        "mobile-02-priorities-resumed.png",
+        "mobile-03-establishment-resumed.png",
+        "mobile-04-save-error.png",
+        "mobile-05-review-clear.png"
+      ]
+    },
+    {
+      "device": "desktop",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "result": "PASS",
+      "sessionRevoked": true,
+      "newBrowserResume": true,
+      "allSixSteps": true,
+      "saveDuringLogout": true,
+      "latestEditsPreserved": true,
+      "formAndComposerPersisted": true,
+      "saveFailureAndConflictRetainSession": true,
+      "logoutFailureAndLostResponse": true,
+      "physicalDevice": false,
+      "realEmail": false,
+      "realGoogle": false,
+      "captures": [
+        "desktop-01-priorities-menu.png",
+        "desktop-02-priorities-resumed.png",
+        "desktop-03-establishment-resumed.png",
+        "desktop-04-save-error.png",
+        "desktop-05-review-clear.png"
+      ]
+    }
+  ],
+  "externalEmail": "NOT_RUN",
+  "googleLive": "NOT_RUN",
+  "physicalPhone": "NOT_RUN",
+  "canonicalMemorySync": "BLOCKED_CONNECTOR"
+}

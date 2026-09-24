@@ -4,12 +4,12 @@ import { z } from "zod";
 import { constantTimeEqual, hashSecret, randomDigits, randomToken, type Database, type EmailSender, type Transaction } from "@tablenow/provider-adapters";
 import { getConfig } from "./environment.js";
 import { setSessionCookies } from "./auth.js";
-import { newTotpSecret, passwordHash, passwordMatches, seal, unseal, validTotpStep } from "./account-crypto.js";
+import { passwordHash, passwordMatches, seal, unseal } from "./account-crypto.js";
 import { registerGoogleRoutes } from "./google-routes.js";
 import { registerAccountRecoveryRoutes } from "./account-recovery-routes.js";
 import type { GoogleExchange } from "./google-identity.js";
 
-type Payload = { delivery?: "link" | undefined; purpose: "signup" | "reset" | "login" | "google" | "access"; googleSubject?: string; passwordHash?: string; passwordless?: boolean; name?: string | undefined; userId?: string; tenantId?: string; secret?: string; rememberMe?: boolean };
+type Payload = { delivery?: "link" | undefined; purpose: "signup" | "reset" | "login" | "google" | "access"; googleSubject?: string; passwordHash?: string; passwordless?: boolean; name?: string | undefined; userId?: string; tenantId?: string; rememberMe?: boolean };
 type Challenge = { token_hash: string; email: string; stage: string; payload: string; proof_hash: string | null; attempts: number; expires_at: Date | string; expires_in_seconds?: number };
 type ChallengeState = Challenge & { expired: boolean; unavailable: boolean };
 const emailSchema = z.string().trim().toLowerCase().email().max(254);
@@ -119,10 +119,11 @@ export async function registerAccountRoutes(app: FastifyInstance, database: Data
       await tx`update account_credentials set failed_attempts=0,locked_until=null where user_id=${row.user_id}`;
       return issueSession(tx, row.user_id, request, input.rememberMe);
     }
-    return challenge(reply, input.email, "mfa", { purpose: "login", rememberMe: input.rememberMe, userId: row.user_id }, undefined, tx);
+    return { emailProofRequired: true as const, userId: row.user_id };
     });
     if (challengeExpiry && "sessionToken" in challengeExpiry) { setSessionCookies(reply, challengeExpiry); reply.clearCookie("tn_auth", { path: "/" }); return { authenticated: true }; }
-    return challengeExpiry ? { stage: "mfa", expiresAt: challengeExpiry.expiresAt, expiresInSeconds: challengeExpiry.expiresInSeconds } : fail(reply);
+    if (challengeExpiry && "emailProofRequired" in challengeExpiry) return emailRequest(reply, input.email, { purpose: "login", passwordless: true, rememberMe: input.rememberMe, userId: challengeExpiry.userId });
+    return fail(reply);
   });
   app.post("/v1/account/resend", rate, async (request, reply) => {
     const token = request.cookies.tn_auth;
@@ -141,14 +142,13 @@ export async function registerAccountRoutes(app: FastifyInstance, database: Data
       if (intent === "login" && !linked) return { destination: "/login?google=signup-required" as const };
       // Google is authoritative only for Gmail / verified Workspace. Other addresses
       // must prove mailbox ownership before account creation or linking.
-      if (!linked && !identity.emailAuthoritative) return { verifyEmail: true as const };
+      if (!linked && !identity.emailAuthoritative) return { verifyEmail: true as const, email };
       if (user && user.status !== "active") throw new Error("GOOGLE_ACCOUNT_UNAVAILABLE");
       const [other] = user ? await tx<{ subject: string }[]>`select subject from google_identities where user_id=${user.id}` : [];
       if (other && other.subject !== identity.sub) throw new Error("GOOGLE_ACCOUNT_UNAVAILABLE");
       const [credential] = user ? await tx<{ totp_secret: string | null }[]>`select totp_secret from account_credentials where user_id=${user.id}` : [];
       if (credential?.totp_secret) {
-        await challenge(reply, email, "mfa", { purpose: "google", userId: user!.id, googleSubject: identity.sub, rememberMe }, undefined, tx);
-        return { destination: "/login?google=continue" as const };
+        return { verifyEmail: true as const, email };
       }
       let userId = user?.id;
       let tenantId: string | undefined;
@@ -176,8 +176,8 @@ export async function registerAccountRoutes(app: FastifyInstance, database: Data
       await tx`insert into audit_events(tenant_id,actor_id,actor_type,action,resource_type,resource_id) values (${tenantId},${userId},'user','auth.google_verified','user',${userId})`;
       return { created: !user, sessionToken, csrfToken, maxAgeSeconds, rememberMe, destination: onboardingComplete ? "/dashboard" as const : "/onboarding" as const };
     });
-    if ("verifyEmail" in result) {
-      await emailRequest(reply, identity.email, { purpose: "google", googleSubject: identity.sub, passwordless: true, rememberMe }, `${config.PUBLIC_ORIGIN}/login?google=continue`);
+    if ("verifyEmail" in result && result.verifyEmail === true) {
+      await emailRequest(reply, result.email, { purpose: "google", googleSubject: identity.sub, passwordless: true, rememberMe }, `${config.PUBLIC_ORIGIN}/login?google=continue`);
       return null;
     }
     if (!result.sessionToken) return result.destination;
@@ -197,30 +197,24 @@ export async function registerAccountRoutes(app: FastifyInstance, database: Data
     if (!token) return reply.code(204).send();
     const [row] = await database<ChallengeState[]>`select *,expires_at<=now() as expired,(consumed_at is not null or attempts>=5) as unavailable,greatest(0,ceil(extract(epoch from (expires_at-now()))))::int as expires_in_seconds from account_challenges where token_hash=${digest(token)}`;
     if (!row) return reply.code(204).send();
-    if (row.unavailable || !["email", "profile", "enroll", "mfa"].includes(row.stage)) return unavailable(reply);
+    if (["enroll", "mfa"].includes(row.stage)) return reply.code(410).send({ error: { code: "ACCOUNT_METHOD_CHANGED", message: "Recommencez la connexion pour recevoir un code par e-mail." } });
+    if (row.unavailable || !["email", "profile"].includes(row.stage)) return unavailable(reply);
     if (row.expired) return expired(reply);
     const payload = unseal<Payload>(row.payload, secret);
-    // Reading a challenge never rotates its token, enrollment key or expiration.
+    // Reading a challenge never sends mail, rotates its token or extends expiration.
     return { stage: row.stage, email: row.email, purpose: payload.purpose, rememberMe: payload.rememberMe ?? true,
       expiresAt: row.expires_at, expiresInSeconds: Number(row.expires_in_seconds),
-      ...(payload.delivery ? { delivery: payload.delivery } : {}), ...(row.stage === "enroll" ? { secret: payload.secret } : {}) };
+      ...(payload.delivery ? { delivery: payload.delivery } : {}) };
   });
-  app.get("/v1/account/google-continuation", rate, async (request, reply) => {
-    const token = request.cookies.tn_auth;
-    if (!token) return fail(reply);
-    const [row] = await database<ChallengeState[]>`select *,expires_at<=now() as expired,(consumed_at is not null or attempts>=5) as unavailable,greatest(0,ceil(extract(epoch from (expires_at-now()))))::int as expires_in_seconds from account_challenges where token_hash=${digest(token)} and stage in ('enroll','mfa')`;
-    if (!row) return fail(reply);
-    if (row.unavailable) return fail(reply);
-    if (row.expired) return expired(reply);
-    const payload = unseal<Payload>(row.payload, secret);
-    if (payload.purpose !== "google") return fail(reply);
-    return { stage: row.stage, email: row.email, expiresAt: row.expires_at, expiresInSeconds: Number(row.expires_in_seconds), ...(row.stage === "enroll" ? { secret: payload.secret } : {}) };
-  });
+  app.get("/v1/account/google-continuation", rate, async (_request, reply) => reply.code(410).send({ error: { code: "ACCOUNT_METHOD_CHANGED", message: "Recommencez la connexion pour recevoir un code par e-mail." } }));
   app.post("/v1/account/verify-email", rate, async (request, reply) => {
     const { code, challenge: linkToken } = emailProofSchema.parse(request.body);
     const token = linkToken ?? request.cookies.tn_auth;
     if (!token) return unavailable(reply);
     const result = await database.begin(async tx => {
+      const [identity] = await tx<{ email: string }[]>`select email from account_challenges where token_hash=${digest(token)}`;
+      if (!identity) return null;
+      await tx`select pg_advisory_xact_lock(hashtext(${identity.email}))`;
       const [row] = await tx<ChallengeState[]>`select *,expires_at<=now() as expired,(consumed_at is not null or attempts>=5) as unavailable from account_challenges where token_hash=${digest(token)} and stage='email' for update`;
       if (!row || row.unavailable) return null;
       if (row.expired) return { outcome: "expired" as const };
@@ -228,7 +222,7 @@ export async function registerAccountRoutes(app: FastifyInstance, database: Data
       if (!row.proof_hash || !constantTimeEqual(row.proof_hash, digest(code))) return { outcome: "invalid" as const };
       const payload = unseal<Payload>(row.payload, secret);
       if (linkToken && payload.delivery !== "link") return null;
-      if (payload.passwordless || payload.delivery === "link") {
+      {
         await tx`select pg_advisory_xact_lock(hashtext(${row.email}))`;
         const [existingUser] = await tx<{ id: string; status: string }[]>`select id,status from users where email=${row.email}`;
         if (existingUser?.status && existingUser.status !== "active") return null;
@@ -242,13 +236,6 @@ export async function registerAccountRoutes(app: FastifyInstance, database: Data
           return { signupRequired: true };
         }
 
-        const [credential] = existingUser ? await tx<{ totp_secret: string | null }[]>`select totp_secret from account_credentials where user_id=${existingUser.id}` : [];
-        if (credential?.totp_secret) {
-          const nextPayload = { ...payload, userId: existingUser!.id };
-          const next = await challenge(reply, row.email, "mfa", nextPayload, undefined, tx);
-          await tx`update account_challenges set consumed_at=now() where token_hash=${row.token_hash}`;
-          return { stage: "mfa", rotatedToken: next.token, expiresAt: next.expiresAt, expiresInSeconds: next.expiresInSeconds };
-        }
         if (payload.googleSubject && existingUser) {
           const [other] = await tx<{ subject: string }[]>`select subject from google_identities where user_id=${existingUser.id}`;
           if (other && other.subject !== payload.googleSubject) return null;
@@ -288,20 +275,6 @@ export async function registerAccountRoutes(app: FastifyInstance, database: Data
         await tx`insert into audit_events(tenant_id,actor_id,actor_type,action,resource_type,resource_id) values (${tenantId},${userId},'user',${payload.purpose === 'signup' ? 'auth.registered' : 'auth.email_verified'},'user',${userId})`;
         return { outcome: "authenticated" as const, sessionToken, csrfToken, maxAgeSeconds, rememberMe: payload.rememberMe ?? true };
       }
-      const [user] = await tx<{ id: string; status: string }[]>`select id,status from users where email=${row.email}`;
-      if (user?.status && user.status !== "active") return null;
-      const [credentials] = user ? await tx<{ user_id: string }[]>`select user_id from account_credentials where user_id=${user.id}` : [];
-      if (payload.purpose === "signup" && user) {
-        await tx`update account_challenges set consumed_at=now() where token_hash=${row.token_hash}`;
-        return { existing: true };
-      }
-      if (payload.purpose === "reset" && !user) return null;
-      if (user) payload.userId = user.id;
-      const stage = credentials ? "mfa" : "enroll";
-      if (stage === "enroll") payload.secret = newTotpSecret();
-      // Retain the digest for the mail budget; only stage='email' accepts it.
-      const [advanced] = await tx<{ expires_at: Date | string; expires_in_seconds: number }[]>`update account_challenges set stage=${stage},payload=${seal(payload,secret)},attempts=0,expires_at=now()+(${challengeMaxAgeSeconds} * interval '1 second') where token_hash=${row.token_hash} returning expires_at,greatest(0,ceil(extract(epoch from (expires_at-now()))))::int as expires_in_seconds`;
-      return { stage, expiresAt: advanced!.expires_at, expiresInSeconds: Number(advanced!.expires_in_seconds), ...(payload.secret ? { secret: payload.secret } : {}) };
     });
     if (result && "signupRequired" in result) {
       reply.clearCookie("tn_auth", { path: "/" });
@@ -314,11 +287,6 @@ export async function registerAccountRoutes(app: FastifyInstance, database: Data
       return { authenticated: true };
     }
     if (result && "outcome" in result) return result.outcome === "expired" ? expired(reply) : invalidCode(reply);
-    if (result && "rotatedToken" in result) {
-      reply.setCookie("tn_auth", result.rotatedToken, { ...cookieOptions, maxAge: result.expiresInSeconds });
-      return { stage: result.stage, expiresAt: result.expiresAt, expiresInSeconds: result.expiresInSeconds };
-    }
-    if (result) reply.setCookie("tn_auth", token, { ...cookieOptions, maxAge: "expiresInSeconds" in result ? result.expiresInSeconds : challengeMaxAgeSeconds }).header("Cache-Control", "no-store");
     return result || unavailable(reply);
   });
   app.post("/v1/account/complete-profile", rate, async (request, reply) => {
@@ -335,10 +303,6 @@ export async function registerAccountRoutes(app: FastifyInstance, database: Data
       await tx`select pg_advisory_xact_lock(hashtext(${row.email}))`;
       const [existingUser] = await tx<{ id: string; status: string }[]>`select id,status from users where email=${row.email}`;
       if (existingUser?.status && existingUser.status !== "active") return null;
-      if (existingUser) {
-        const [credential] = await tx<{ totp_secret: string | null }[]>`select totp_secret from account_credentials where user_id=${existingUser.id}`;
-        if (credential?.totp_secret) return null;
-      }
       let userId = existingUser?.id;
       let tenantId: string | undefined;
       let created = false;
@@ -372,86 +336,7 @@ export async function registerAccountRoutes(app: FastifyInstance, database: Data
     reply.clearCookie("tn_auth", { path: "/" });
     return { authenticated: true };
   });
-  app.post("/v1/account/verify-mfa", rate, async (request, reply) => {
-    const { code } = proofSchema.parse(request.body);
-    const token = request.cookies.tn_auth;
-    if (!token) return unavailable(reply);
-    const result = await database.begin(async tx => {
-      const [identity] = await tx<{ email: string }[]>`select email from account_challenges where token_hash=${digest(token)}`;
-      if (!identity) return null;
-      // Serialize enrollment, recovery and legacy authentication for one identity.
-      await tx`select pg_advisory_xact_lock(hashtext(${identity.email}))`;
-      const [row] = await tx<ChallengeState[]>`select *,expires_at<=now() as expired,(consumed_at is not null or attempts>=5) as unavailable from account_challenges where token_hash=${digest(token)} and stage in ('enroll','mfa') for update`;
-      if (!row) return null;
-      if (row.unavailable) return null;
-      if (row.expired) return { outcome: "expired" as const };
-      await tx`update account_challenges set attempts=attempts+1 where token_hash=${row.token_hash}`;
-      const payload = unseal<Payload>(row.payload, secret);
-      const [credential] = payload.userId ? await tx<{ totp_secret: string; last_totp_step: number; backup_hashes: string[]; locked: boolean }[]>`select totp_secret,last_totp_step,backup_hashes,(locked_until>now()) as locked from account_credentials where user_id=${payload.userId} for update` : [];
-      if (payload.googleSubject) {
-        await tx`select pg_advisory_xact_lock(hashtext(${`google:${payload.googleSubject}`}))`;
-        const [linked] = await tx<{ user_id: string }[]>`select user_id from google_identities where subject=${payload.googleSubject}`;
-        if (linked && linked.user_id !== payload.userId) return null;
-      }
-      if (credential?.locked) return null;
-      if (row.stage === "mfa" && !credential?.totp_secret) return null;
-      if (row.stage === "enroll" && credential) return null;
-      const totpSecret = credential ? unseal<string>(credential.totp_secret, secret) : payload.secret!;
-      const step = validTotpStep(totpSecret, code, Number(credential?.last_totp_step ?? -1));
-      const backupIndex = credential?.backup_hashes.indexOf(digest(code)) ?? -1;
-      if (step === null && backupIndex < 0) {
-        if (credential) await tx`update account_credentials set failed_attempts=failed_attempts+1,locked_until=case when failed_attempts+1>=10 then now()+interval '15 minutes' else locked_until end where user_id=${payload.userId!}`;
-        return { outcome: "invalid" as const };
-      }
-      let userId = payload.userId;
-      let tenantId: string | undefined;
-      if (!userId) {
-        const [existing] = await tx`select id from users where email=${row.email}`;
-        if (existing) return null;
-        const [user] = await tx<{ id: string }[]>`insert into users(email,display_name) values (${row.email},${payload.name!}) returning id`;
-        userId = user!.id;
-        const [tenant] = await tx<{ id: string }[]>`insert into tenants(name,slug) values ('Mon établissement',${`restaurant-${crypto.randomUUID()}`}) returning id`;
-        tenantId = tenant!.id;
-        await tx`insert into memberships(tenant_id,user_id,role) values (${tenantId},${userId},'owner')`;
-        await tx`select set_config('app.tenant_id',${tenantId},true)`;
-        await tx`insert into restaurants(tenant_id,name,slug,is_demo) values (${tenantId},'Mon établissement','principal',false)`;
-      } else {
-        const [membership] = await tx<{ tenant_id: string }[]>`select m.tenant_id from memberships m join tenants t on t.id=m.tenant_id and t.status in ('pilot','active') join users u on u.id=m.user_id and u.status='active' where m.user_id=${userId} order by m.created_at limit 1`;
-        if (!membership) return null;
-        tenantId = membership.tenant_id;
-      }
-      const backupCodes = credential ? [] : Array.from({ length: 8 }, () => randomToken(12));
-      if (!credential) {
-        await tx`insert into account_credentials(user_id,password_hash,totp_secret,last_totp_step,backup_hashes) values (${userId},${payload.passwordHash || null},${seal(totpSecret,secret)},${step!},${tx.json(backupCodes.map(digest))})`;
-      } else {
-        const hashes = credential.backup_hashes.filter((_, i) => i !== backupIndex);
-        await tx`update account_credentials set last_totp_step=${step ?? Number(credential.last_totp_step)},backup_hashes=${tx.json(hashes)},password_hash=coalesce(${payload.passwordHash || null},password_hash),failed_attempts=0,locked_until=null where user_id=${userId}`;
-      }
-      if (payload.googleSubject) {
-        const [other] = await tx<{ subject: string }[]>`select subject from google_identities where user_id=${userId}`;
-        if (other && other.subject !== payload.googleSubject) throw new Error("GOOGLE_ACCOUNT_UNAVAILABLE");
-        await tx`insert into google_identities(subject,user_id) values (${payload.googleSubject},${userId}) on conflict (subject) do nothing`;
-      }
-      if (payload.purpose === "reset" || !credential) {
-        await tx`delete from sessions where user_id=${userId}`;
-        await tx`update account_challenges set consumed_at=now() where email=${row.email} and token_hash<>${row.token_hash}`;
-      }
-      await tx`update account_challenges set consumed_at=now() where token_hash=${row.token_hash}`;
-      await tx`update otp_challenges set consumed_at=now() where email=${row.email} and consumed_at is null`;
-      const sessionToken = randomToken(32), csrfToken = randomToken(24);
-      const maxAgeSeconds = config.SESSION_TTL_HOURS * 3600;
-      await tx`insert into sessions(token_hash,user_id,tenant_id,csrf_hash,ip_hash,user_agent,expires_at) values (${digest(sessionToken)},${userId},${tenantId},${digest(csrfToken)},${digest(request.ip)},${request.headers['user-agent'] || null},${new Date(Date.now()+maxAgeSeconds*1000)})`;
-      await tx`select set_config('app.tenant_id',${tenantId},true)`;
-      await tx`insert into privacy_preferences(tenant_id,user_id) values (${tenantId},${userId}) on conflict do nothing`;
-      await tx`insert into audit_events(tenant_id,actor_id,actor_type,action,resource_type,resource_id) values (${tenantId},${userId},'user',${payload.purpose === 'signup' ? 'auth.registered' : 'auth.mfa_verified'},'user',${userId})`;
-      return { outcome: "authenticated" as const,sessionToken,csrfToken,maxAgeSeconds,backupCodes,rememberMe: payload.rememberMe ?? true };
-    });
-    if (result?.outcome === "expired") return expired(reply);
-    if (result?.outcome === "invalid") return invalidCode(reply);
-    if (!result) return unavailable(reply);
-    setSessionCookies(reply, result);
-    reply.clearCookie("tn_auth", { path: "/" });
-    return { authenticated: true, backupCodes: result.backupCodes };
-  });
-  await registerAccountRecoveryRoutes(app, database);
+  // Retire old authenticator proofs without deleting encrypted historical factors.
+  app.post("/v1/account/verify-mfa", rate, async (_request, reply) => reply.code(410).send({ error: { code: "ACCOUNT_METHOD_CHANGED", message: "Recommencez la connexion pour recevoir un code par e-mail." } }));
+  await registerAccountRecoveryRoutes(app);
 }

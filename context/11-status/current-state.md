@@ -1,3 +1,15 @@
+# 25 septembre 2026 — publication Preview autorisée
+
+Le propriétaire autorise la publication de la dernière version locale : remplacement ciblé TOTP par code e-mail et déconnexion/reprise de l’onboarding. Contrôles locaux réussis, diff présenté. Publication sur `product/onboarding-owner` uniquement ; `main` et production exclus. Déploiement et contrôle du commit servi en cours, avant recette privée du propriétaire.
+
+# 25 septembre 2026 — déconnexion et reprise onboarding, local uniquement
+
+Menu de profil sur les six étapes ; sauvegarde serveur avant révocation de session, reprise des réponses, position et texte non envoyé. Échec de sauvegarde : page et saisies conservées, aucune fermeture forcée. 8 tests API, 33 tests Console, types et recette Chrome locale mobile/ordinateur réussis. Aucun nouveau déclenchement OTP, aucune réinitialisation. Aucun commit/push/déploiement. Mémoire PostgreSQL distante en attente (erreur du connecteur). [Diff, captures et limites](../../docs/qa/onboarding-signout-local-2026-09-25.md).
+
+# 25 septembre 2026 — remplacement TOTP par code e-mail, local uniquement
+
+Base `a118343`, branche `product/onboarding-owner`. Seules les demandes Authenticator existantes deviennent des codes e-mail ; aucun nouveau déclenchement, nom personnel ou écran d’activation. Inscription, Google, onboarding et design conservés. 43 tests API, 14 Console, compilations et recette Chrome locale 390×844 / 1440×900 réussis avec une boîte simulée. Aucun e-mail réel, Google réel ou téléphone physique testé. Aucun commit, push ou déploiement. [Diff, captures et limites](../../docs/qa/otp-replacement-local-2026-09-25.md).
+
 # Authentification — 24 septembre 2026, correction SMTP
 
 Mise à jour après l'essai de 15:35 : code reçu et correct, mais adresse sans compte dans Preview. Le test avait été lancé dans la connexion, pas l'inscription. Correction ciblée : proposer explicitement « S’inscrire » après la preuve d'adresse, sans créer automatiquement un compte. 26 tests ciblés réussis ; parcours navigateur local vers l'inscription vérifié aux formats mobile/ordinateur. Déploiement de cette seconde correction et inscription réelle restent à vérifier. [Diagnostic](../../docs/qa/auth-consolidation-2026-09-24.md).

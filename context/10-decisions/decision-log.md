@@ -1,3 +1,15 @@
+# 25 septembre 2026 — publication Preview autorisée
+
+Le propriétaire autorise la publication de la dernière version locale : remplacement ciblé TOTP par code e-mail et déconnexion/reprise de l’onboarding. Contrôles locaux réussis, diff présenté. Publication sur `product/onboarding-owner` uniquement ; `main` et production exclus. Déploiement et contrôle du commit servi en cours, avant recette privée du propriétaire.
+
+# 25 septembre 2026 — déconnexion et reprise onboarding, local uniquement
+
+Menu de profil sur les six étapes ; sauvegarde serveur avant révocation de session, reprise des réponses, position et texte non envoyé. Échec de sauvegarde : page et saisies conservées, aucune fermeture forcée. 8 tests API, 33 tests Console, types et recette Chrome locale mobile/ordinateur réussis. Aucun nouveau déclenchement OTP, aucune réinitialisation. Aucun commit/push/déploiement. Mémoire PostgreSQL distante en attente (erreur du connecteur). [Diff, captures et limites](../../docs/qa/onboarding-signout-local-2026-09-25.md).
+
+## 25 septembre 2026 — substitution ciblée du facteur, sans nouveau déclenchement
+
+Source : confirmations successives du propriétaire « La version actuelle sur preview est parfaite. Change-moi juste le TOTP par le OTP », « ne change rien sans demander », puis « parfait, go » et autorisation explicite de recette macOS locale avec boîte fictive. La référence est `a118343`. Cette décision remplace uniquement la partie TOTP de la décision d’authentification séparée du 23 septembre : une demande Authenticator déjà prévue devient un code e-mail. Aucun nouveau contrôle systématique à la reconnexion, aucun nom personnel, aucune activation facultative ajoutée. Google Connect, les pages, les modes clair/sombre, l’inscription par confirmation e-mail, l’onboarding et les autres fonctions sont conservés. Aucun commit, push ou déploiement autorisé. Les anciennes données chiffrées restent intactes ; aucun nouveau moteur de risque n’est introduit. Enregistrement canonique PostgreSQL en attente ; ceci est une trace locale. [Diff et preuves](../../docs/qa/otp-replacement-local-2026-09-25.md).
+
 ## 23 septembre 2026 — Connexion et inscription séparées, validation explicite du propriétaire
 
 Source : « Applique tout ce que tu viens de mettre dans moment et parcours », après validation du tableau dans cette conversation. Cette décision remplace l’entrée unifiée et le nom demandé avant onboarding. Connexion e-mail/mot de passe ou Google existant ; inscription e-mail/mot de passe avec lien à usage unique ou Google ; code e-mail alternatif pour les comptes existants ; récupération distincte ; TOTP actif et données conservés. Google garanti : pas de confirmation e-mail redondante, bienvenue envoyée. Authentification seule, main/production intacts, présentation validée et thème compact conservés. Mémoire canonique inaccessible : enregistrement PostgreSQL en attente. [Preuves et limites](../../docs/qa/auth-split-2026-09-23.md).

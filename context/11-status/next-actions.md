@@ -1,3 +1,15 @@
+# 25 septembre 2026 — publication Preview autorisée
+
+Le propriétaire autorise la publication de la dernière version locale : remplacement ciblé TOTP par code e-mail et déconnexion/reprise de l’onboarding. Contrôles locaux réussis, diff présenté. Publication sur `product/onboarding-owner` uniquement ; `main` et production exclus. Déploiement et contrôle du commit servi en cours, avant recette privée du propriétaire.
+
+# 25 septembre 2026 — déconnexion et reprise onboarding, local uniquement
+
+Menu de profil sur les six étapes ; sauvegarde serveur avant révocation de session, reprise des réponses, position et texte non envoyé. Échec de sauvegarde : page et saisies conservées, aucune fermeture forcée. 8 tests API, 33 tests Console, types et recette Chrome locale mobile/ordinateur réussis. Aucun nouveau déclenchement OTP, aucune réinitialisation. Aucun commit/push/déploiement. Mémoire PostgreSQL distante en attente (erreur du connecteur). [Diff, captures et limites](../../docs/qa/onboarding-signout-local-2026-09-25.md).
+
+# 25 septembre 2026 — prochaine action autorisée
+
+Faire relire le [diff du remplacement TOTP → code e-mail](../../docs/qa/otp-replacement-local-2026-09-25.md). Attendre l’accord explicite avant publication ; aucun autre lot, changement de déclenchement ou refonte ne découle de la recette locale. Après autorisation distincte, effectuer les essais externes restants. `main` et la production restent intacts.
+
 # Prochaine action — confirmer la réparation SMTP
 
 Priorité après le code refusé à 15:35 : publier la correction du compte absent, puis laisser le propriétaire démarrer l'inscription sur `/register` (e-mail + mot de passe → lien de confirmation). Ne plus lui faire essayer une connexion tant que son compte n'existe pas. Ne pas réutiliser le code consommé, ni déclencher d'envoi automatique.

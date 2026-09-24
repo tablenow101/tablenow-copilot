@@ -21,21 +21,21 @@ describe("account progress reconciliation", () => {
     expect(await readAccountProgress()).toEqual({ kind: "challenge", challenge });
     expect(fetchMock.mock.calls.every(call => call[1].method === undefined)).toBe(true);
   });
-  it("resumes the short profile step after the address has been verified", async () => {
+  it("recognizes a legacy verified profile for completion without a new name screen", async () => {
     const challenge = { stage: "profile", purpose: "access", email: "new@tablenow.test" };
     const fetchMock = vi.fn().mockResolvedValueOnce(unauthorized()).mockResolvedValueOnce(response(challenge));
     vi.stubGlobal("fetch", fetchMock);
     expect(await readAccountProgress()).toEqual({ kind: "challenge", challenge });
     expect(fetchMock.mock.calls.every(call => call[1].method === undefined)).toBe(true);
   });
-  it("resumes the required second factor of a protected account", async () => {
-    vi.stubGlobal("fetch", vi.fn().mockResolvedValueOnce(unauthorized()).mockResolvedValueOnce(response({ stage: "mfa", purpose: "login" })));
-    expect(await readAccountProgress()).toEqual({ kind: "challenge", challenge: { stage: "mfa", purpose: "login" } });
+  it("resumes email verification of a protected account", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValueOnce(unauthorized()).mockResolvedValueOnce(response({ stage: "email", purpose: "login" })));
+    expect(await readAccountProgress()).toEqual({ kind: "challenge", challenge: { stage: "email", purpose: "login" } });
   });
-  it("preserves an enrollment already started before deployment", async () => {
+  it("does not reopen a retired authenticator enrollment", async () => {
     const challenge = { stage: "enroll", purpose: "google" };
     vi.stubGlobal("fetch", vi.fn().mockResolvedValueOnce(unauthorized()).mockResolvedValueOnce(response(challenge)));
-    expect(await readAccountProgress()).toEqual({ kind: "challenge", challenge });
+    expect(await readAccountProgress()).toEqual({ kind: "none" });
   });
   it("keeps an unavailable server distinct from an absent session", async () => {
     const fetchMock = vi.fn().mockResolvedValue(response({ error: { message: "Unavailable" } }, 503));

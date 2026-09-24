@@ -1,0 +1,10 @@
+.profile { position: relative; flex: 0 0 auto; }
+.profile summary { display: flex; align-items: center; justify-content: center; width: 36px; height: 36px; list-style: none; cursor: pointer; color: inherit; border-radius: 50%; }
+.profile summary::-webkit-details-marker { display: none; }
+.profile summary:focus-visible, .popover button:focus-visible { outline: 2px solid currentColor; outline-offset: 3px; }
+.popover { position: absolute; z-index: 50; inset-inline-end: 0; top: calc(100% + 8px); width: min(280px, calc(100vw - 32px)); padding: 14px; border: 1px solid var(--border, #394158); border-radius: 12px; background: var(--panel, #151b2a); color: var(--text, #f4f6ff); box-shadow: 0 12px 32px #0003; }
+:global(.theme-clear) .popover { background: #fff; color: #172341; border-color: #d1d9e9; }
+.popover > span { display: block; overflow-wrap: anywhere; font-size: 12px; margin-bottom: 12px; }
+.popover button { display: flex; align-items: center; gap: 8px; width: 100%; min-height: 44px; padding: 8px; color: inherit; background: transparent; border: 0; text-align: start; cursor: pointer; }
+.popover button:disabled { cursor: wait; opacity: .65; }
+.popover p { margin: 10px 0 0; font-size: 13px; line-height: 1.5; }

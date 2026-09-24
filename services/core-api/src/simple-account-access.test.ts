@@ -165,7 +165,7 @@ describe("simple account access", () => {
     expect(await database`select id from users where email=${email}`).toHaveLength(1);
   });
 
-  it("requires the existing TOTP after an email code instead of bypassing it", async () => {
+  it("uses the proven mailbox instead of the existing TOTP without modifying credentials", async () => {
     const { seedOwnerFixture } = await import("./testing/owner-fixture.js");
     const fixture = await seedOwnerFixture(database);
     const email = "legacy-owner@tablenow.test";
@@ -177,8 +177,8 @@ describe("simple account access", () => {
     const verified = await post("account/verify-email", { code: latestCode(email) }, cookies(login));
 
     expect(verified.statusCode, verified.body).toBe(200);
-    expect(verified.json().stage).toBe("mfa");
+    expect(verified.json()).toEqual({ authenticated: true });
     const session = await app.inject({ method: "GET", url: "/v1/auth/session", headers: { cookie: cookies(verified) } });
-    expect(session.statusCode).toBe(401);
+    expect(session.statusCode).toBe(200);
   });
 });

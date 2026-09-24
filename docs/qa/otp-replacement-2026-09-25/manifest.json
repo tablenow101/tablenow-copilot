@@ -1,0 +1,21 @@
+{
+  "base": "a11834385e3e835e3842f1a24eccb32d3b43d764",
+  "branch": "product/onboarding-owner",
+  "patchSha256": "81b3be0a9822cc68935706fced6c4c253d632c787d9e9cc6328010785c102809",
+  "files": [
+    "apps/console/auth-flow-boundary.test.ts",
+    "apps/console/components/account/AccountFlow.tsx",
+    "apps/console/lib/account-continuation.test.ts",
+    "apps/console/lib/account-continuation.ts",
+    "apps/console/lib/account-feedback.test.ts",
+    "apps/console/lib/account-feedback.ts",
+    "services/core-api/src/account-recovery-routes.test.ts",
+    "services/core-api/src/account-recovery-routes.ts",
+    "services/core-api/src/account-routes.test.ts",
+    "services/core-api/src/account-routes.ts",
+    "services/core-api/src/google-routes.test.ts",
+    "services/core-api/src/simple-account-access.test.ts",
+    "services/core-api/src/split-account-access.test.ts"
+  ],
+  "scope": "local only; no commit, push or deployment"
+}

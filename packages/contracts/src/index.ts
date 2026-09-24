@@ -129,6 +129,8 @@ const unknownableInstant = z.union([isoInstant, z.literal("unknown"), z.literal(
 export const onboardingAnswersSchema = z.object({
   // Presentation metadata never replaces or reinterprets historical answers.
   presentationStep: z.enum(onboardingPresentationSteps).optional(),
+  // Unsent text is a draft, never a confirmed restaurant answer or a sent request.
+  conversationDraft: z.string().max(2000).optional(),
   systems: z.object({
     pointOfSale: z.object({
       status: z.enum(["declared", "none", "unknown"]),

@@ -1,0 +1,54 @@
+[
+  {
+    "device": "mobile",
+    "viewport": {
+      "width": 390,
+      "height": 844
+    },
+    "result": "PASS",
+    "sessionRevoked": true,
+    "newBrowserResume": true,
+    "allSixSteps": true,
+    "saveDuringLogout": true,
+    "latestEditsPreserved": true,
+    "formAndComposerPersisted": true,
+    "saveFailureAndConflictRetainSession": true,
+    "logoutFailureAndLostResponse": true,
+    "physicalDevice": false,
+    "realEmail": false,
+    "realGoogle": false,
+    "captures": [
+      "mobile-01-priorities-menu.png",
+      "mobile-02-priorities-resumed.png",
+      "mobile-03-establishment-resumed.png",
+      "mobile-04-save-error.png",
+      "mobile-05-review-clear.png"
+    ]
+  },
+  {
+    "device": "desktop",
+    "viewport": {
+      "width": 1440,
+      "height": 900
+    },
+    "result": "PASS",
+    "sessionRevoked": true,
+    "newBrowserResume": true,
+    "allSixSteps": true,
+    "saveDuringLogout": true,
+    "latestEditsPreserved": true,
+    "formAndComposerPersisted": true,
+    "saveFailureAndConflictRetainSession": true,
+    "logoutFailureAndLostResponse": true,
+    "physicalDevice": false,
+    "realEmail": false,
+    "realGoogle": false,
+    "captures": [
+      "desktop-01-priorities-menu.png",
+      "desktop-02-priorities-resumed.png",
+      "desktop-03-establishment-resumed.png",
+      "desktop-04-save-error.png",
+      "desktop-05-review-clear.png"
+    ]
+  }
+]

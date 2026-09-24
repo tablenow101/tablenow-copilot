@@ -1,0 +1,38 @@
+[
+  {
+    "device": "mobile",
+    "viewport": {
+      "width": 390,
+      "height": 844
+    },
+    "result": "PASS",
+    "newSignup": "email confirmation link → session → onboarding; no name or extra code",
+    "unprotectedReturn": "unchanged password login",
+    "protectedReturn": "password → email code → session → onboarding",
+    "reload": true,
+    "fullCodePaste": true,
+    "wrongCodePreserved": true,
+    "lostResponseReconciled": "PASS",
+    "physicalDevice": false,
+    "realEmail": false,
+    "realGoogle": false
+  },
+  {
+    "device": "desktop",
+    "viewport": {
+      "width": 1440,
+      "height": 900
+    },
+    "result": "PASS",
+    "newSignup": "email confirmation link → session → onboarding; no name or extra code",
+    "unprotectedReturn": "unchanged password login",
+    "protectedReturn": "password → email code → session → onboarding",
+    "reload": true,
+    "fullCodePaste": true,
+    "wrongCodePreserved": true,
+    "lostResponseReconciled": "NOT_RUN",
+    "physicalDevice": false,
+    "realEmail": false,
+    "realGoogle": false
+  }
+]

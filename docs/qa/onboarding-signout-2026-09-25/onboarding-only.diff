@@ -1,0 +1,370 @@
+diff --git a/apps/console/components/OnboardingFlow.tsx b/apps/console/components/OnboardingFlow.tsx
+--- a/apps/console/components/OnboardingFlow.tsx
++++ b/apps/console/components/OnboardingFlow.tsx
+@@ -27,6 +27,8 @@
+   Sun,
+   Volume2,
+   X,
++  UserRound,
++  LogOut,
+ } from "lucide-react";
+ import { api, ApiError } from "@/lib/api";
+ import { allPrioritiesSelected, priorityActivities, priorityOutcomes, toggleAllPriorities } from "@/lib/priority-selection";
+@@ -69,6 +71,7 @@
+ import { useSession } from "@/hooks/useSession";
+ import { LoadingScreen } from "./LoadingScreen";
+ import { Brand } from "./Brand";
++import profileStyles from "./OnboardingProfile.module.css";
+ import {
+   adjacentPresentationStep,
+   requestedPresentationStep,
+@@ -111,7 +114,7 @@
+   const [saveState, setSaveState] = useState<SaveState>("idle");
+   const [error, setError] = useState("");
+   const [notice, setNotice] = useState("");
+-  const [composer, setComposer] = useState("");
++  const composer = answers.conversationDraft ?? "";
+   const [chatBusy, setChatBusy] = useState(false);
+   const [replies, setReplies] = useState<Array<CopilotRun & { restaurantId: string; savedAsNote?: boolean }>>([]);
+   const [historyError, setHistoryError] = useState("");
+@@ -123,6 +126,9 @@
+   const [searchUnavailable, setSearchUnavailable] = useState(false);
+   const [manualOpen, setManualOpen] = useState(false);
+   const [busy, setBusy] = useState(false);
++  const [loggingOut, setLoggingOut] = useState(false);
++  const [logoutError, setLogoutError] = useState("");
++  const logoutRef = useRef(false);
+   const [acceptTerms, setAcceptTerms] = useState(false);
+   const [acceptDpa, setAcceptDpa] = useState(false);
+   const [idempotencyKey, setIdempotencyKey] = useState(() => safeIdempotencyKey());
+@@ -136,10 +142,11 @@
+   const dirtyRef = useRef(false);
+   const changeVersionRef = useRef(0);
+   const savingRef = useRef(false);
++  const saveTaskRef = useRef<Promise<boolean> | null>(null);
+   const completingRef = useRef(false);
+   const loadRequestRef = useRef(0);
+   const initialNavigationUsedRef = useRef(false);
+-  const saveNowRef = useRef<(target?: SectionKey) => Promise<OnboardingDraftView | null>>(async () => null);
++  const saveNowRef = useRef<(target?: SectionKey, step?: OnboardingPresentationStep) => Promise<OnboardingDraftView | null>>(async () => null);
+   const headingRef = useRef<HTMLHeadingElement>(null);
+ 
+   const locale = answers.interaction.locale;
+@@ -193,7 +200,7 @@
+       setSection(nextSection);
+       setSaveState("saved");
+       setSearchUnavailable(false);
+-      setManualOpen(!!loadedAnswers.establishment.cityCountry || loadedAnswers.establishment.identityConfirmed);
++      setManualOpen(loadedAnswers.establishment.identificationMode === "manual" || !!loadedAnswers.establishment.cityCountry || loadedAnswers.establishment.identityConfirmed);
+       setAcceptTerms(false);
+       setAcceptDpa(false);
+       setIdempotencyKey(safeIdempotencyKey());
+@@ -211,6 +218,8 @@
+   }, [initialRestaurantId, loadDraft, session]);
+ 
+   const saveNow = useCallback(async (target = sectionRef.current, presentationStep?: OnboardingPresentationStep): Promise<OnboardingDraftView | null> => {
++    // Regular autosaves coalesce; logout explicitly drains the in-flight request.
++    if (saveTaskRef.current) return null;
+     const currentDraft = draftRef.current;
+     if (!currentDraft) return null;
+     const shouldSave = dirtyRef.current || target !== currentDraft.currentSection || (presentationStep !== undefined && presentationStep !== currentDraft.answers.presentationStep);
+@@ -230,12 +239,16 @@
+     const capturedAnswers = structuredClone(answersRef.current);
+     if (presentationStep) capturedAnswers.presentationStep = presentationStep;
+     const capturedProvenance = provenanceFor(capturedAnswers, provenanceRef.current);
++    let finishSave!: (succeeded: boolean) => void;
++    let succeeded = false;
++    saveTaskRef.current = new Promise(resolve => { finishSave = resolve; });
+     savingRef.current = true;
+     setSaveState("saving");
+     setError("");
+     try {
+       const saved = await api<OnboardingDraftView>("/v1/onboarding", {
+         method: "PATCH",
++        signal: AbortSignal.timeout(15_000),
+         body: JSON.stringify({
+           restaurantId: currentDraft.restaurantId,
+           expectedRevision: currentDraft.revision,
+@@ -246,6 +259,8 @@
+       });
+       draftRef.current = saved;
+       setDraft(saved);
++      // Keep the cursor consistent before a waiting logout resumes.
++      if (presentationStep) { sectionRef.current = target; setSection(target); }
+       setConflictComparison(null);
+       if (capturedVersion === changeVersionRef.current) {
+         const normalized = mergeOnboardingAnswers(saved.answers);
+@@ -265,6 +280,7 @@
+         window.setTimeout(() => { void saveNowRef.current(); }, 0);
+       }
+       syncSavedOnboardingAddress(saved);
++      succeeded = true;
+       return saved;
+     } catch (caught) {
+       if (caught instanceof ApiError && caught.status === 409) {
+@@ -277,15 +293,48 @@
+       return null;
+     } finally {
+       savingRef.current = false;
++      saveTaskRef.current = null;
++      finishSave(succeeded);
+     }
+   }, []);
+   saveNowRef.current = saveNow;
+ 
++  const logout = async () => {
++    if (logoutRef.current || completingRef.current) return;
++    logoutRef.current = true;
++    setLoggingOut(true);
++    setLogoutError("");
++    try {
++      // Edits made while an autosave was running must also reach the server.
++      if (saveTaskRef.current && !await saveTaskRef.current) throw new Error("SAVE_FAILED");
++      if (draftRef.current && !await saveNow(sectionRef.current, answersRef.current.presentationStep)) throw new Error("SAVE_FAILED");
++      await api("/v1/auth/logout", { method: "POST", signal: AbortSignal.timeout(15_000) });
++      // Full navigation discards the authenticated UI and its in-memory state.
++      window.location.assign("/login?onboarding=saved");
++    } catch (caught) {
++      // A lost logout response may still have revoked the session. Read, never replay.
++      if (!dirtyRef.current) {
++        try { await api("/v1/auth/session", { signal: AbortSignal.timeout(8_000) }); }
++        catch (sessionError) {
++          if (sessionError instanceof ApiError && sessionError.status === 401) {
++            window.location.assign("/login?onboarding=saved");
++            return;
++          }
++        }
++      }
++      setLogoutError(caught instanceof Error && caught.message === "SAVE_FAILED"
++        ? locale === "fr" ? "La sauvegarde n’a pas abouti. Cette page reste ouverte et vos réponses sont conservées sur cet écran. Réessayez." : "Saving failed. This page stays open and your answers remain on this screen. Try again."
++        : locale === "fr" ? "La déconnexion n’a pas pu être confirmée. Vos réponses sont conservées. Réessayez." : "Sign-out could not be confirmed. Your answers are kept. Try again.");
++      setLoggingOut(false);
++      logoutRef.current = false;
++    }
++  };
++
+   useEffect(() => {
+-    if (!draft || !dirtyRef.current || saveState !== "dirty") return;
++    if (!draft || !dirtyRef.current || saveState !== "dirty" || loggingOut) return;
+     const timeout = window.setTimeout(() => { void saveNow(); }, 800);
+     return () => window.clearTimeout(timeout);
+-  }, [answers, draft, saveNow, saveState, section]);
++  }, [answers, draft, saveNow, saveState, section, loggingOut]);
+ 
+   useEffect(() => {
+     const handler = (event: BeforeUnloadEvent) => {
+@@ -304,6 +353,7 @@
+ 
+ 
+   const updateAnswers = useCallback((mutate: (current: OnboardingAnswers) => OnboardingAnswers, meta: UpdateMeta = {}) => {
++    if (logoutRef.current) return;
+     const current = answersRef.current;
+     const next = mutate(structuredClone(current));
+     const currentSection = sectionRef.current;
+@@ -330,6 +380,13 @@
+     setError("");
+     setNotice("");
+   }, []);
++
++  const setComposer = (value: string | ((previous: string) => string)) => {
++    updateAnswers(next => {
++      next.conversationDraft = typeof value === "function" ? value(next.conversationDraft ?? "") : value;
++      return next;
++    });
++  };
+ 
+   const moveTo = (target: SectionKey, step = presentationStepForSection(target)) => {
+     updateAnswers(next => { next.presentationStep = step; return next; });
+@@ -518,9 +575,21 @@
+     setReplies(previous => previous.map(item => item.id === id ? { ...item, savedAsNote: true } : item));
+   };
+ 
++  const profileMenu = session && <details className={profileStyles.profile} onKeyDown={event => {
++    if (event.key === "Escape") { event.currentTarget.open = false; event.currentTarget.querySelector("summary")?.focus(); }
++  }}>
++    <summary role="button" aria-label={locale === "fr" ? "Menu du profil" : "Profile menu"}><UserRound size={18} /></summary>
++    <div className={profileStyles.popover}>
++      <span>{session.user.email}</span>
++      <button type="button" disabled={loggingOut || busy || chatBusy || dictation.listening || dictation.busy} onClick={() => void logout()}><LogOut size={16} />{loggingOut ? locale === "fr" ? "Enregistrement et déconnexion…" : "Saving and signing out…" : locale === "fr" ? "Se déconnecter" : "Sign out"}</button>
++      {(dictation.listening || dictation.busy) && <p role="status">{locale === "fr" ? "Terminez la dictée avant de vous déconnecter." : "Finish dictation before signing out."}</p>}
++      {logoutError && <p role="alert">{logoutError}</p>}
++    </div>
++  </details>;
++
+   if (sessionLoading) return <LoadingScreen label={copy.common.loading} />;
+   if (!session) return <LoadFailure message={sessionError || copy.common.loadFailed} retry={() => void refreshSession()} copy={copy} />;
+-  if (loadState === "failed") return <LoadFailure message={error || copy.common.loadFailed} retry={() => void loadDraft(draftRef.current?.restaurantId || initialRestaurantId)} copy={copy} />;
++  if (loadState === "failed") return <><header className="onboarding-header"><Brand />{profileMenu}</header><LoadFailure message={error || copy.common.loadFailed} retry={() => void loadDraft(draftRef.current?.restaurantId || initialRestaurantId)} copy={copy} /></>;
+   if (loadState !== "ready" || !draft) return <LoadingScreen label={copy.common.loading} />;
+ 
+   const visibleStep = answers.presentationStep ?? presentationStepForSection(section);
+@@ -537,7 +606,9 @@
+   const isWelcome = visibleStep === "establishment";
+   const identityOpen = manualOpen || !!answers.establishment.cityCountry || answers.establishment.identityConfirmed;
+ 
+-  return <main className={`onboarding-layout final-onboarding theme-${answers.interaction.theme}${isWelcome ? " welcome-onboarding" : ""}`} dir={copy.direction} lang={locale}>
++  return <main className={`onboarding-layout final-onboarding theme-${answers.interaction.theme}${isWelcome ? " welcome-onboarding" : ""}`} dir={copy.direction} lang={locale} onClickCapture={event => {
++    if (logoutRef.current) { event.preventDefault(); event.stopPropagation(); }
++  }}>
+     <div className={isWelcome ? "welcome-frame" : undefined}>
+     <header className="onboarding-header final-onboarding-header">
+       <Link href="/dashboard" aria-label="TableNow"><Brand /></Link>
+@@ -546,11 +617,24 @@
+       <div className="onboarding-top-controls">
+         <label><span className="sr-only">{copy.common.language}</span><select aria-label={copy.common.language} value={locale} onChange={(event) => updateAnswers((next) => { next.interaction.locale = event.target.value as LocaleMode; return next; })}><option value="fr">FR</option><option value="en">EN</option></select></label>
+         <button type="button" className="icon-button tiny" aria-label={answers.interaction.theme === "dark" ? copy.common.clearTheme : copy.common.darkTheme} title={answers.interaction.theme === "dark" ? copy.common.clearTheme : copy.common.darkTheme} onClick={() => updateAnswers((next) => { next.interaction.theme = next.interaction.theme === "dark" ? "clear" : "dark"; return next; })}>{answers.interaction.theme === "dark" ? <Sun size={14} /> : <Moon size={14} />}</button>
++        {profileMenu}
+       </div>
+       <div className="onboarding-progress-line" aria-hidden="true">{progressGroups.map((group, index) => <span key={group.key} className={index <= currentGroupIndex ? "active" : ""} />)}</div>
+     </header>
+ 
+-    <div className="onboarding-shell">
++    <div className="onboarding-shell" inert={loggingOut} aria-busy={loggingOut} onBlurCapture={event => {
++      if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement) {
++        window.setTimeout(() => { if (dirtyRef.current && !logoutRef.current && !savingRef.current) void saveNowRef.current(); }, 0);
++      }
++    }} onChangeCapture={event => {
++      if (event.target instanceof HTMLSelectElement || (event.target instanceof HTMLInputElement && ["checkbox", "radio"].includes(event.target.type))) {
++        window.setTimeout(() => { if (dirtyRef.current && !logoutRef.current && !savingRef.current) void saveNowRef.current(); }, 0);
++      }
++    }} onClickCapture={event => {
++      if (event.target instanceof Element && event.target.closest("button")) {
++        window.setTimeout(() => { if (dirtyRef.current && !logoutRef.current && !savingRef.current) void saveNowRef.current(); }, 0);
++      }
++    }}>
+       {!isWelcome && <aside className="onboarding-rail" aria-label={copy.common.brand}>
+         {progressGroups.map((group, index) => {
+           const label = copy.steps[group.key];
+diff --git a/apps/console/components/OnboardingProfile.module.css b/apps/console/components/OnboardingProfile.module.css
+--- /dev/null
++++ b/apps/console/components/OnboardingProfile.module.css
+@@ -0,0 +1,10 @@
++.profile { position: relative; flex: 0 0 auto; }
++.profile summary { display: flex; align-items: center; justify-content: center; width: 36px; height: 36px; list-style: none; cursor: pointer; color: inherit; border-radius: 50%; }
++.profile summary::-webkit-details-marker { display: none; }
++.profile summary:focus-visible, .popover button:focus-visible { outline: 2px solid currentColor; outline-offset: 3px; }
++.popover { position: absolute; z-index: 50; inset-inline-end: 0; top: calc(100% + 8px); width: min(280px, calc(100vw - 32px)); padding: 14px; border: 1px solid var(--border, #394158); border-radius: 12px; background: var(--panel, #151b2a); color: var(--text, #f4f6ff); box-shadow: 0 12px 32px #0003; }
++:global(.theme-clear) .popover { background: #fff; color: #172341; border-color: #d1d9e9; }
++.popover > span { display: block; overflow-wrap: anywhere; font-size: 12px; margin-bottom: 12px; }
++.popover button { display: flex; align-items: center; gap: 8px; width: 100%; min-height: 44px; padding: 8px; color: inherit; background: transparent; border: 0; text-align: start; cursor: pointer; }
++.popover button:disabled { cursor: wait; opacity: .65; }
++.popover p { margin: 10px 0 0; font-size: 13px; line-height: 1.5; }
+diff --git a/apps/console/components/account/AccountFlow.tsx b/apps/console/components/account/AccountFlow.tsx
+--- a/apps/console/components/account/AccountFlow.tsx
++++ b/apps/console/components/account/AccountFlow.tsx
+@@ -38,6 +38,7 @@
+   const [errorAction, setErrorAction] = useState<"signup" | undefined>();
+   const [theme, setTheme] = useState("dark");
+   const [googleStart, setGoogleStart] = useState<string | null>(null);
++  const [progressSaved, setProgressSaved] = useState(false);
+ 
+   async function enterApp() {
+     const session = await api<{ tenant: { onboardingComplete: boolean } }>("/v1/auth/session");
+@@ -68,6 +69,7 @@
+ 
+   useEffect(() => {
+     let live = true;
++    setProgressSaved(mode === "login" && new URLSearchParams(window.location.search).get("onboarding") === "saved");
+     try { setTheme(localStorage.getItem("tn-theme") || (matchMedia("(prefers-color-scheme: light)").matches ? "clear" : "dark")); } catch { /* Optional preference persistence. */ }
+     void api<{ enabled: boolean; startUrl: string | null }>("/v1/oauth/google/config")
+       .then(result => { if (live) setGoogleStart(result.enabled ? result.startUrl : null); })
+@@ -259,6 +261,7 @@
+       </div>
+       <h1 id="auth-title">{title}</h1>
+       {initializing ? <p role="status">Vérification de votre accès…</p> : <p>{description}</p>}
++      {progressSaved && stage === "credentials" && <small role="status">Votre progression a été enregistrée.</small>}
+ 
+ 
+       <form key={stage} onSubmit={submit}>
+diff --git a/apps/console/lib/onboarding-copy.ts b/apps/console/lib/onboarding-copy.ts
+--- a/apps/console/lib/onboarding-copy.ts
++++ b/apps/console/lib/onboarding-copy.ts
+@@ -101,7 +101,7 @@
+     labels: labelsFr,
+     common: {
+       brand: "Onboarding", language: "Langue", clearTheme: "Passer en clair", darkTheme: "Passer en sombre", loading: "Préparation de votre brouillon d'onboarding",
+-      loadFailed: "Impossible de charger votre brouillon.", retry: "Réessayer", dirty: "Modifications non enregistrées", saving: "Enregistrement…", saved: "Enregistré",
++      loadFailed: "Impossible de charger votre brouillon.", retry: "Réessayer", dirty: "Modifications non enregistrées", saving: "Enregistrement…", saved: "Votre progression a été enregistrée.",
+       saveFailed: "Enregistrement impossible. Vos réponses restent dans cet écran.", conflict: "Ces réponses ont été modifiées dans une autre session.", compare: "Comparer les réponses",
+       back: "Retour", continue: "Continuer", done: "J’ai terminé", finish: "Voir mon premier résultat", preparing: "Préparation de votre plan…", saveForReview: "Enregistrer pour validation",
+       composerPlaceholder: "Écrivez ou parlez…", send: "Envoyer", dictate: "Dicter", stop: "Arrêter", listen: "Écouter la question", stopReading: "Arrêter la lecture",
+diff --git a/packages/contracts/src/index.ts b/packages/contracts/src/index.ts
+--- a/packages/contracts/src/index.ts
++++ b/packages/contracts/src/index.ts
+@@ -129,6 +129,8 @@
+ export const onboardingAnswersSchema = z.object({
+   // Presentation metadata never replaces or reinterprets historical answers.
+   presentationStep: z.enum(onboardingPresentationSteps).optional(),
++  // Unsent text is a draft, never a confirmed restaurant answer or a sent request.
++  conversationDraft: z.string().max(2000).optional(),
+   systems: z.object({
+     pointOfSale: z.object({
+       status: z.enum(["declared", "none", "unknown"]),
+diff --git a/services/core-api/src/repository.ts b/services/core-api/src/repository.ts
+--- a/services/core-api/src/repository.ts
++++ b/services/core-api/src/repository.ts
+@@ -219,12 +219,12 @@
+       const answers = normalizeOnboardingAnswers(input.answers);
+       await validateApprovalAssignee(transaction, actor.tenantId, answers);
+       const previousAnswers = normalizeOnboardingAnswers(onboardingAnswersSchema.parse(current.answers));
+-      const { presentationStep: previousStep, ...previousBusinessAnswers } = previousAnswers;
+-      const { presentationStep, ...businessAnswers } = answers;
++      const { presentationStep: previousStep, conversationDraft: previousDraft, ...previousBusinessAnswers } = previousAnswers;
++      const { presentationStep, conversationDraft, ...businessAnswers } = answers;
+       const answersChanged = !isDeepStrictEqual(previousBusinessAnswers, businessAnswers);
+       const provenance = trustedOnboardingProvenance(input.provenance, current.provenance, actor.userId);
+       if (!answersChanged && current.status === "completed") {
+-        if (previousStep === presentationStep) return onboardingDraftView(current, restaurants, answers.interaction);
++        if (previousStep === presentationStep && previousDraft === conversationDraft) return onboardingDraftView(current, restaurants, answers.interaction);
+         // Navigation is persisted, but does not change the certified answer revision or its result.
+         const [navigated] = await transaction<OnboardingDraftRow[]>`
+           update onboarding_drafts set answers = ${transaction.json(answers as JSONValue)}, current_section = ${input.currentSection}
+diff --git a/services/core-api/src/onboarding-session.test.ts b/services/core-api/src/onboarding-session.test.ts
+--- /dev/null
++++ b/services/core-api/src/onboarding-session.test.ts
+@@ -0,0 +1,45 @@
++import { afterAll, beforeAll, expect, it, vi } from "vitest";
++import type { FastifyInstance } from "fastify";
++import type { Database } from "@tablenow/provider-adapters";
++import { createTestDatabase } from "./testing/pglite.js";
++
++let app: FastifyInstance;
++let database: Database;
++const inbox: string[] = [];
++const origin = "http://localhost:3000";
++const password = "Local recipe passphrase only!";
++const email = "onboarding-session@tablenow.test";
++const cookies = (response: { cookies: { name: string; value: string }[] }) => response.cookies.filter(c => c.value).map(c => `${c.name}=${c.value}`).join("; ");
++beforeAll(async () => {
++  for (const [key, value] of Object.entries({ NODE_ENV: "test", APP_ENV: "test", DATABASE_URL: "postgres://test:test@localhost/test", PUBLIC_ORIGIN: origin, SESSION_SECRET: "s".repeat(48), OTP_PEPPER: "p".repeat(48), PLATFORM_ADMIN_EMAIL: "admin@tablenow.test", EMAIL_TRANSPORT: "smtp", SMTP_HOST: "test.invalid", SMTP_USER: "test", SMTP_PASSWORD: "test", LOG_LEVEL: "silent" })) vi.stubEnv(key, value);
++  ({ sql: database } = await createTestDatabase());
++  const { buildApp } = await import("./app.js");
++  app = await buildApp({ database, email: { send: async message => { inbox.push(message.text); } } });
++}, 60_000);
++afterAll(async () => { await app?.close(); await database?.end(); vi.unstubAllEnvs(); });
++
++it("revokes the session, retains the exact draft, and resumes without an extra OTP or browser storage", async () => {
++  const signup = await app.inject({ method: "POST", url: "/v1/account/signup", payload: { email, password }, headers: { origin } });
++  const verification = await app.inject({ method: "POST", url: "/v1/account/verify-email", payload: { code: inbox.at(-1)!.match(/\b\d{6}\b/)![0] }, headers: { origin, cookie: cookies(signup) } });
++  expect(verification.statusCode).toBe(200);
++  let cookie = cookies(verification);
++  const session = await app.inject({ method: "GET", url: "/v1/auth/session", headers: { cookie } });
++  expect(session.statusCode).toBe(200);
++  const csrf = verification.cookies.find(c => c.name === "tn_csrf")!.value;
++  let draft = (await app.inject({ method: "GET", url: "/v1/onboarding", headers: { cookie } })).json();
++  const answers = { ...draft.answers, presentationStep: "priorities", conversationDraft: "Question à terminer, sans envoi", priorities: { ...draft.answers.priorities, scope: "targeted", primaryFocus: "team", timeConsumers: ["team"], otherText: "Mon texte en cours" } };
++  const save = await app.inject({ method: "PATCH", url: "/v1/onboarding", headers: { cookie, origin, "x-csrf-token": csrf }, payload: { restaurantId: draft.restaurantId, expectedRevision: draft.revision, currentSection: "priorities", answers, provenance: draft.provenance } });
++  expect(save.statusCode, save.body).toBe(200);
++  draft = save.json();
++  const logout = await app.inject({ method: "POST", url: "/v1/auth/logout", headers: { cookie, origin, "x-csrf-token": csrf } });
++  expect(logout.statusCode).toBe(200);
++  expect((await app.inject({ method: "GET", url: "/v1/auth/session", headers: { cookie } })).statusCode).toBe(401);
++  expect((await app.inject({ method: "GET", url: "/v1/onboarding", headers: { cookie } })).statusCode).toBe(401);
++  const sent = inbox.length;
++  const login = await app.inject({ method: "POST", url: "/v1/account/login", payload: { email, password }, headers: { origin } });
++  expect(login.statusCode).toBe(200);
++  expect(inbox.length).toBe(sent);
++  cookie = cookies(login);
++  const resumed = (await app.inject({ method: "GET", url: "/v1/onboarding", headers: { cookie } })).json();
++  expect(resumed).toMatchObject({ id: draft.id, revision: draft.revision, currentSection: "priorities", status: "draft", answers });
++});

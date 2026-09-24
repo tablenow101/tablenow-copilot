@@ -3,13 +3,13 @@ import type { FastifyInstance } from "fastify";
 import type { Database } from "@tablenow/provider-adapters";
 import { createTestDatabase } from "./testing/pglite.js";
 import { getConfig } from "./environment.js";
-import { totpAt } from "./account-crypto.js";
+import { seal } from "./account-crypto.js";
 
 let app: FastifyInstance, database: Database;
 const inbox: string[] = [];
+let deliveryFailure = false;
 let requestNumber = 1;
 const email = "new-owner@tablenow.test", password = "Une longue phrase privée 123";
-let backup: string[], sessionCookie: string, totpSecret: string;
 const post = (path: string, payload: Record<string, unknown>, cookie = "") => app.inject({ method: "POST", url: `/v1/${path}`, payload, headers: { cookie, origin: "http://localhost:3000" }, remoteAddress: `127.0.0.${requestNumber++}` });
 const continuation = (cookie = "") => app.inject({ method: "GET", url: "/v1/account/continuation", headers: { cookie, origin: "http://localhost:3000" }, remoteAddress: `127.0.0.${requestNumber++}` });
 function authCookie(response: { cookies: { name: string; value: string }[] }) { return response.cookies.filter(c => c.value).map(c => `${c.name}=${c.value}`).join("; "); }
@@ -25,211 +25,126 @@ beforeAll(async () => {
   vi.stubEnv("LOG_LEVEL", "silent");
   ({ sql: database } = await createTestDatabase());
   const { buildApp } = await import("./app.js");
-  app = await buildApp({ database, email: { send: async message => { inbox.push(message.text); } } });
+  app = await buildApp({ database, email: { send: async message => { if (deliveryFailure) throw new Error("fixture delivery failure"); inbox.push(message.text); } } });
 }, 60000);
 afterAll(async () => { await app?.close(); await database?.end(); vi.unstubAllEnvs(); });
-describe("registration and recurring authentication", () => {
-  it("resumes the same email and enrollment challenge without sending mail or renewing its lifetime", async () => {
-    expect((await continuation()).statusCode).toBe(204);
-    expect((await continuation("tn_auth=unknown-challenge")).statusCode).toBe(204);
-    const recipient = "resume@tablenow.test";
-    const signup = await post("account/signup", { email: recipient, name: "Owner", password, rememberMe: false });
-    const cookie = authCookie(signup);
-    expect(signup.cookies.find(c => c.name === "tn_auth")?.httpOnly).toBe(true);
-    const mailCount = inbox.length;
-    const emailResume = await continuation(cookie);
-    expect(emailResume.statusCode).toBe(200);
-    expect(emailResume.json()).toEqual({ stage: "email", purpose: "signup", email: recipient, rememberMe: false, expiresAt: signup.json().expiresAt, expiresInSeconds: expect.any(Number) });
-    expect(emailResume.cookies).toHaveLength(0);
-    expect(emailResume.headers["cache-control"]).toBe("no-store");
-    const enrollment = await post("account/verify-email", { code: emailCode() }, cookie);
-    const firstResume = await continuation(cookie);
-    const reload = await continuation(cookie);
-    expect(firstResume.json()).toEqual({ stage: "enroll", purpose: "signup", email: recipient, rememberMe: false, expiresAt: enrollment.json().expiresAt, expiresInSeconds: expect.any(Number), secret: enrollment.json().secret });
-    expect(reload.json().secret === firstResume.json().secret).toBe(true);
-    expect(reload.json().expiresAt).toBe(firstResume.json().expiresAt);
-    expect(reload.json().expiresInSeconds).toBeLessThanOrEqual(firstResume.json().expiresInSeconds);
-    expect(reload.cookies).toHaveLength(0);
-    expect(inbox).toHaveLength(mailCount);
-    const verified = await post("account/verify-mfa", { code: totpAt(firstResume.json().secret, Math.floor(Date.now()/30000)) }, cookie);
-    expect(verified.statusCode).toBe(200);
-    const consumed = await continuation(cookie);
-    expect(consumed.statusCode).toBe(400);
-    expect(consumed.json().error.code).toBe("ACCOUNT_CHALLENGE_UNAVAILABLE");
-    expect(Object.keys(consumed.json())).toEqual(["error"]);
-  });
-  it("requires email ownership and TOTP before issuing an owner session", async () => {
-    expect((await post("account/signup", { email, name: "Owner", password: "short" })).statusCode).toBe(400);
-    const signup = await post("account/signup", { email, name: "Owner", password, rememberMe: false });
-    expect(signup.statusCode).toBe(202);
-    const cookie = authCookie(signup);
-    expect(cookie).not.toContain("tn_session");
-    expect(await database`select id from users where email=${email}`).toHaveLength(0);
-    expect((await post("account/verify-email", { code: "abcdef" }, cookie)).json().error.code).toBe("ACCOUNT_CODE_INVALID");
-    const enrollment = await post("account/verify-email", { code: emailCode() }, cookie);
-    expect(enrollment.json()).toMatchObject({ stage: "enroll" });
-    expect(enrollment.json()).toMatchObject({ expiresAt: expect.any(String), expiresInSeconds: expect.any(Number) });
-    expect(enrollment.cookies.find(c => c.name === "tn_auth")?.maxAge).toBe(600);
-    totpSecret = enrollment.json().secret;
-    expect((await post("account/verify-mfa", { code: "abcdef" }, cookie)).json().error.code).toBe("ACCOUNT_CODE_INVALID");
-    const verified = await post("account/verify-mfa", { code: totpAt(totpSecret, Math.floor(Date.now()/30000)) }, cookie);
-    expect(verified.statusCode, verified.body).toBe(200);
-    const transientCookies = verified.cookies.filter(c => ["tn_session", "tn_csrf"].includes(c.name));
-    expect(transientCookies).toHaveLength(2);
-    expect(transientCookies.every(c => c.maxAge === undefined && c.expires === undefined)).toBe(true);
-    expect(transientCookies.find(c => c.name === "tn_session")?.httpOnly).toBe(true);
-    backup = verified.json().backupCodes;
-    expect(backup).toHaveLength(8);
-    sessionCookie = authCookie(verified);
-    const session = await app.inject({ method: "GET", url: "/v1/auth/session", headers: { cookie: sessionCookie } });
-    expect(session.statusCode).toBe(200);
-    expect(session.json().tenant.onboardingComplete).toBe(false);
-    expect((await app.inject({ method: "GET", url: "/v1/onboarding", headers: { cookie: sessionCookie } })).statusCode).toBe(200);
-    expect((await post("account/verify-mfa", { code: backup[0] }, cookie)).json().error.code).toBe("ACCOUNT_CHALLENGE_UNAVAILABLE");
-  });
-  it("does not allow password-only or legacy email-code access; backup codes are single-use", async () => {
-    const login = await post("account/login", { email, password, rememberMe: true });
-    expect(login.json()).toMatchObject({ stage: "mfa", expiresAt: expect.any(String), expiresInSeconds: expect.any(Number) });
-    const cookie = authCookie(login);
-    expect((await app.inject({ method: "GET", url: "/v1/auth/session", headers: { cookie } })).statusCode).toBe(401);
-    const resumed = await continuation(cookie);
-    expect(resumed.json()).toEqual({ stage: "mfa", purpose: "login", email, rememberMe: true, expiresAt: login.json().expiresAt, expiresInSeconds: expect.any(Number) });
-    expect(resumed.cookies).toHaveLength(0);
-    const [credential] = await database<{ last_totp_step: number }[]>`select c.last_totp_step from account_credentials c join users u on u.id=c.user_id where u.email=${email}`;
-    expect((await post("account/verify-mfa", { code: totpAt(totpSecret, Number(credential!.last_totp_step)) }, cookie)).json().error.code).toBe("ACCOUNT_CODE_INVALID");
-    const remembered = await post("account/verify-mfa", { code: backup[0] }, cookie);
-    expect(remembered.statusCode).toBe(200);
-    const persistentCookies = remembered.cookies.filter(c => ["tn_session", "tn_csrf"].includes(c.name));
-    expect(persistentCookies).toHaveLength(2);
-    expect(persistentCookies.every(c => Number(c.maxAge) === getConfig().SESSION_TTL_HOURS * 3600)).toBe(true);
-    expect(persistentCookies.find(c => c.name === "tn_session")?.httpOnly).toBe(true);
-    // Browser persistence must not extend the server-side lifetime of any session.
-    const [sessionBounds] = await database<{ bounded: boolean }[]>`select bool_and(expires_at <= now() + (${getConfig().SESSION_TTL_HOURS} * interval '1 hour')) as bounded from sessions`;
-    expect(sessionBounds?.bounded).toBe(true);
-    const another = await post("account/login", { email, password });
-    expect((await post("account/verify-mfa", { code: backup[0] }, authCookie(another))).statusCode).toBe(400);
-    const count = inbox.length;
-    await post("auth/request-code", { email });
-    expect(inbox).toHaveLength(count);
-    expect((await post("auth/verify-code", { email, code: "424242" })).statusCode).toBe(400);
-  });
-  it("keeps MFA during password recovery and revokes sessions and pending logins", async () => {
-    const pending = await post("account/login", { email, password });
-    const reset = await post("account/reset", { email, password: "Une nouvelle phrase privée 456" });
-    const cookie = authCookie(reset);
-    expect((await continuation(cookie)).json()).toEqual({ stage: "email", purpose: "reset", email, rememberMe: true, expiresAt: reset.json().expiresAt, expiresInSeconds: expect.any(Number) });
-    const mfa = await post("account/verify-email", { code: emailCode() }, cookie);
-    expect(mfa.json()).toMatchObject({ stage: "mfa", expiresAt: expect.any(String), expiresInSeconds: expect.any(Number) });
-    expect((await continuation(cookie)).json()).toEqual({ stage: "mfa", purpose: "reset", email, rememberMe: true, expiresAt: mfa.json().expiresAt, expiresInSeconds: expect.any(Number) });
-    expect((await post("account/verify-mfa", { code: "invalid-backup" }, cookie)).json().error.code).toBe("ACCOUNT_CODE_INVALID");
-    expect((await post("account/login", { email, password: "Une nouvelle phrase privée 456" })).statusCode).toBe(400);
-    const completed = await post("account/verify-mfa", { code: backup[1] }, cookie);
-    expect(completed.statusCode, completed.body).toBe(200);
-    expect((await app.inject({ method: "GET", url: "/v1/auth/session", headers: { cookie: sessionCookie } })).statusCode).toBe(401);
-    expect((await post("account/verify-mfa", { code: backup[2] }, authCookie(pending))).statusCode).toBe(400);
-    expect((await post("account/login", { email, password })).statusCode).toBe(400);
-    expect((await post("account/login", { email, password: "Une nouvelle phrase privée 456" })).statusCode).toBe(200);
-  });
-  it("refuses expired challenges and unrelated browser origins", async () => {
-    const signup = await post("account/signup", { email: "expired@tablenow.test", name: "Expired", password });
-    await database`update account_challenges set expires_at=now()-interval '1 minute' where email='expired@tablenow.test'`;
-    const expiredEmail = await post("account/verify-email", { code: emailCode() }, authCookie(signup));
-    expect(expiredEmail.statusCode).toBe(410);
-    expect(expiredEmail.json().error.code).toBe("ACCOUNT_CHALLENGE_EXPIRED");
-    expect((await continuation(authCookie(signup))).json().error.code).toBe("ACCOUNT_CHALLENGE_EXPIRED");
-    const [emailChallenge] = await database<{ attempts: number }[]>`select attempts from account_challenges where email='expired@tablenow.test'`;
-    expect(emailChallenge?.attempts).toBe(0);
 
-    const login = await post("account/login", { email, password: "Une nouvelle phrase privée 456" });
-    const loginCookie = authCookie(login);
-    await database`update account_challenges set expires_at=now()-interval '1 minute' where email=${email} and stage='mfa' and consumed_at is null`;
-    const expiredMfa = await post("account/verify-mfa", { code: "000000" }, loginCookie);
-    expect(expiredMfa.statusCode).toBe(410);
-    expect(expiredMfa.json()).toEqual({ error: { code: "ACCOUNT_CHALLENGE_EXPIRED", message: "Cette vérification a expiré. Relancez la connexion pour continuer." } });
-    const [expiredChallenge] = await database<{ attempts: number }[]>`select attempts from account_challenges where email=${email} and stage='mfa' and consumed_at is null order by created_at desc limit 1`;
-    expect(expiredChallenge?.attempts).toBe(0);
-    const resumed = await continuation(loginCookie);
-    expect(resumed.statusCode).toBe(410);
-    expect(Object.keys(resumed.json())).toEqual(["error"]);
-    const crossSite = await app.inject({ method: "GET", url: "/v1/account/continuation", headers: { cookie: loginCookie, "sec-fetch-site": "cross-site" } });
-    expect(crossSite.statusCode).toBe(403);
+async function owner(address: string, protectedAccount = false) {
+  const signup = await post("account/signup", { email: address, password });
+  const verified = await post("account/verify-email", { code: emailCode() }, authCookie(signup));
+  expect(verified.json()).toEqual({ authenticated: true });
+  const session = await app.inject({ url: "/v1/auth/session", headers: { cookie: authCookie(verified) } });
+  if (protectedAccount) await database`update account_credentials set totp_secret=${seal("historic-factor-fixture", "s".repeat(48))} where user_id=${session.json().user.id}`;
+  return { verified, userId: session.json().user.id, tenantId: session.json().tenant.id };
+}
+const wrongCode = () => emailCode() === "000000" ? "111111" : "000000";
 
-    const response = await app.inject({ method: "POST", url: "/v1/account/login", payload: { email, password }, headers: { origin: "https://unrelated.example" } });
-    expect(response.statusCode).toBe(403);
-  });
-  it("allows a recovery code to win only one simultaneous login", async () => {
-    const credentials = { email, password: "Une nouvelle phrase privée 456" };
-    const first = await post("account/login", credentials);
-    const second = await post("account/login", credentials);
-    const replies = await Promise.all([
-      post("account/verify-mfa", { code: backup[3] }, authCookie(first)),
-      post("account/verify-mfa", { code: backup[3] }, authCookie(second)),
-    ]);
-    expect(replies.map(r => r.statusCode).sort()).toEqual([200, 400]);
-  });
-  it("keeps the five-attempt limits and distinguishes unavailable challenges from incorrect codes", async () => {
-    const recipient = "attempt-limits@tablenow.test";
-    const signup = await post("account/signup", { email: recipient, name: "Owner", password });
-    const cookie = authCookie(signup);
-    for (let i = 0; i < 5; i++) {
-      expect((await post("account/verify-email", { code: "abcdef" }, cookie)).json().error.code).toBe("ACCOUNT_CODE_INVALID");
-    }
-    expect((await continuation(cookie)).json().error.code).toBe("ACCOUNT_CHALLENGE_UNAVAILABLE");
+it("confirms signup without a name or extra factor and resumes an email without sending again", async () => {
+  expect((await continuation()).statusCode).toBe(204);
+  const address = "resume@tablenow.test";
+  const signup = await post("account/signup", { email: address, password, rememberMe: false });
+  const cookie = authCookie(signup), mailCount = inbox.length;
+  expect(await database`select id from users where email=${address}`).toHaveLength(0);
+  const first = await continuation(cookie), second = await continuation(cookie);
+  expect(first.json()).toMatchObject({ stage: "email", purpose: "signup", email: address });
+  expect(second.json().expiresAt).toBe(first.json().expiresAt);
+  expect(second.json().expiresInSeconds).toBeLessThanOrEqual(first.json().expiresInSeconds);
+  expect(second.cookies).toHaveLength(0);
+  expect(first.headers["cache-control"]).toBe("no-store");
+  expect(inbox.length).toBe(mailCount);
+  const verified = await post("account/verify-email", { code: emailCode() }, cookie);
+  expect(verified.json()).toEqual({ authenticated: true });
+  expect(verified.cookies.filter(c => ["tn_session", "tn_csrf"].includes(c.name)).every(c => c.maxAge === undefined)).toBe(true);
+  expect((await app.inject({ url: "/v1/onboarding", headers: { cookie: authCookie(verified) } })).statusCode).toBe(200);
+  expect((await post("account/verify-email", { code: emailCode() }, cookie)).json().error.code).toBe("ACCOUNT_CHALLENGE_UNAVAILABLE");
+});
+it("preserves password-only login and its existing session when no extra check was configured", async () => {
+  const address = "unchanged@tablenow.test";
+  const previous = await owner(address), count = inbox.length;
+  const login = await post("account/login", { email: address, password, rememberMe: true });
+  expect(login.json()).toEqual({ authenticated: true });
+  expect(inbox.length).toBe(count);
+  expect(login.cookies.filter(c => ["tn_session", "tn_csrf"].includes(c.name)).every(c => c.maxAge === getConfig().SESSION_TTL_HOURS * 3600)).toBe(true);
+  expect((await app.inject({ url: "/v1/auth/session", headers: { cookie: authCookie(previous.verified) } })).statusCode).toBe(200);
+});
+it("requires mailbox proof instead of an app code while keeping old credential data unchanged", async () => {
+  const address = "protected@tablenow.test", previous = await owner(address, true);
+  const [before] = await database`select password_hash,totp_secret,backup_hashes,last_totp_step from account_credentials where user_id=${previous.userId}`;
+  const count = inbox.length;
+  expect((await post("account/login", { email: address, password: "wrong" })).statusCode).toBe(400);
+  expect(inbox.length).toBe(count);
+  const login = await post("account/login", { email: address, password });
+  expect(login.statusCode).toBe(202);
+  expect(login.json().stage).toBe("email");
+  expect(authCookie(login)).not.toContain("tn_session");
+  const verified = await post("account/verify-email", { code: emailCode() }, authCookie(login));
+  expect(verified.json()).toEqual({ authenticated: true });
+  const [after] = await database`select password_hash,totp_secret,backup_hashes,last_totp_step from account_credentials where user_id=${previous.userId}`;
+  expect(JSON.stringify(after) === JSON.stringify(before)).toBe(true);
+});
+it("rejects expired proofs without counting an attempt and denies unrelated origins", async () => {
+  const signup = await post("account/signup", { email: "expired@tablenow.test", password });
+  await database`update account_challenges set expires_at=now()-interval '1 minute' where email='expired@tablenow.test'`;
+  expect((await post("account/verify-email", { code: emailCode() }, authCookie(signup))).statusCode).toBe(410);
+  const [row] = await database`select attempts from account_challenges where email='expired@tablenow.test'`;
+  expect(row!.attempts).toBe(0);
+  expect((await app.inject({ method: "POST", url: "/v1/account/login", payload: { email, password }, headers: { origin: "https://unrelated.example" } })).statusCode).toBe(403);
+  expect((await app.inject({ url: "/v1/account/continuation", headers: { "sec-fetch-site": "cross-site" } })).statusCode).toBe(403);
+});
+it("bounds wrong proofs to five per challenge without locking the victim's account", async () => {
+  const address = "victim@tablenow.test", victim = await owner(address, true);
+  for (const path of ["signup", "reset", "access"]) {
+    const challenge = await post(`account/${path}`, path === "access" ? { email: address } : { email: address, password });
+    const cookie = authCookie(challenge), incorrect = wrongCode();
+    for (let i = 0; i < 5; i++) expect((await post("account/verify-email", { code: incorrect }, cookie)).json().error.code).toBe("ACCOUNT_CODE_INVALID");
     expect((await post("account/verify-email", { code: emailCode() }, cookie)).json().error.code).toBe("ACCOUNT_CHALLENGE_UNAVAILABLE");
-    const [emailAttempts] = await database<{ attempts: number }[]>`select attempts from account_challenges where email=${recipient}`;
-    expect(emailAttempts?.attempts).toBe(5);
-    const login = await post("account/login", { email, password: "Une nouvelle phrase privée 456" });
-    const loginCookie = authCookie(login);
-    for (let i = 0; i < 5; i++) {
-      expect((await post("account/verify-mfa", { code: "invalid-backup" }, loginCookie)).json().error.code).toBe("ACCOUNT_CODE_INVALID");
-    }
-    expect((await continuation(loginCookie)).json().error.code).toBe("ACCOUNT_CHALLENGE_UNAVAILABLE");
-    expect((await post("account/verify-mfa", { code: backup[4] }, loginCookie)).json().error.code).toBe("ACCOUNT_CHALLENGE_UNAVAILABLE");
-    for (const route of ["account/verify-email", "account/verify-mfa"]) {
-      expect((await post(route, { code: "123456" })).json().error.code).toBe("ACCOUNT_CHALLENGE_UNAVAILABLE");
-      expect((await post(route, { code: "123456" }, "tn_auth=unknown-challenge")).json().error.code).toBe("ACCOUNT_CHALLENGE_UNAVAILABLE");
-    }
-    // A new challenge still accepts an unused backup code; reading did not consume it.
-    const retry = await post("account/login", { email, password: "Une nouvelle phrase privée 456" });
-    expect((await continuation(authCookie(retry))).json().stage).toBe("mfa");
-    expect((await post("account/verify-mfa", { code: backup[4] }, authCookie(retry))).statusCode).toBe(200);
-  });
-  it("limits recipient mail across different source addresses", async () => {
-    const before = inbox.length;
-    for (let i = 0; i < 5; i++) {
-      expect((await post("account/reset", { email: "budget@tablenow.test", password })).statusCode).toBe(202);
-    }
-    expect((await post("account/reset", { email: "budget@tablenow.test", password })).statusCode).toBe(429);
-    expect(inbox.length - before).toBe(5);
-  });
-  it("keeps verified email challenges in the recipient budget", async () => {
-    const recipient = "verified-budget@tablenow.test";
-    const before = inbox.length;
-    for (let index = 0; index < 5; index++) {
-      const signup = await post("account/signup", { email: recipient, name: "Owner", password });
-      expect(signup.statusCode).toBe(202);
-      const code = emailCode();
-      expect((await post("account/verify-email", { code }, authCookie(signup))).json()).toMatchObject({ stage: "enroll" });
-      expect((await post("account/verify-email", { code }, authCookie(signup))).statusCode).toBe(400);
-    }
-    expect((await post("account/signup", { email: recipient, name: "Owner", password })).statusCode).toBe(429);
-    expect(inbox.length - before).toBe(5);
-  });
-  it("keeps verified recovery challenges in the budget without counting password logins", async () => {
-    await database`update account_challenges set created_at=now()-interval '16 minutes' where email=${email}`;
-    const before = inbox.length;
-    const currentPassword = "Une nouvelle phrase privée 456";
-    for (let index = 0; index < 5; index++) {
-      expect((await post("account/login", { email, password: currentPassword })).statusCode).toBe(200);
-    }
-    for (let index = 0; index < 5; index++) {
-      const reset = await post("account/reset", { email, password: currentPassword });
-      expect(reset.statusCode).toBe(202);
-      expect((await post("account/verify-email", { code: emailCode() }, authCookie(reset))).json()).toMatchObject({ stage: "mfa", expiresAt: expect.any(String), expiresInSeconds: expect.any(Number) });
-    }
-    expect((await post("account/reset", { email, password: currentPassword })).statusCode).toBe(429);
-    expect(inbox.length - before).toBe(5);
-    await database`update account_challenges set created_at=now()-interval '16 minutes' where email=${email}`;
-    expect((await post("account/reset", { email, password: currentPassword })).statusCode).toBe(202);
-  });
+  }
+  const [credentials] = await database`select failed_attempts,locked_until from account_credentials where user_id=${victim.userId}`;
+  expect(credentials).toMatchObject({ failed_attempts: 0, locked_until: null });
+  const legitimate = await post("account/login", { email: address, password });
+  expect(legitimate.statusCode).toBe(202);
+  expect((await post("account/verify-email", { code: emailCode() }, authCookie(legitimate))).json()).toEqual({ authenticated: true });
+});
+it("allows only one concurrent verification and invalidates other pending proofs", async () => {
+  const address = "concurrent@tablenow.test";
+  await owner(address, true);
+  const previous = await post("account/login", { email: address, password });
+  const login = await post("account/login", { email: address, password });
+  const code = emailCode(), cookie = authCookie(login);
+  const results = await Promise.all([post("account/verify-email", { code }, cookie), post("account/verify-email", { code }, cookie)]);
+  expect(results.map(r => r.statusCode).sort()).toEqual([200, 400]);
+  expect((await continuation(authCookie(previous))).statusCode).toBe(400);
+});
+it("enforces resend cooldown, invalidates the old code and persists the recipient budget", async () => {
+  const address = "budget@tablenow.test";
+  const start = await post("account/signup", { email: address, password }), original = emailCode();
+  expect((await post("account/resend", {}, authCookie(start))).statusCode).toBe(400);
+  await database`update account_challenges set created_at=now()-interval '61 seconds' where email=${address}`;
+  const next = await post("account/resend", {}, authCookie(start));
+  expect(next.statusCode).toBe(202);
+  expect((await post("account/verify-email", { code: original }, authCookie(start))).statusCode).toBe(400);
+  for (let i = 0; i < 3; i++) expect((await post("account/signup", { email: address, password })).statusCode).toBe(202);
+  expect((await post("account/signup", { email: address, password })).statusCode).toBe(429);
+});
+it("reports delivery failures, consumes failed challenges and never creates a session", async () => {
+  const address = "delivery@tablenow.test";
+  await owner(address, true);
+  deliveryFailure = true;
+  try {
+    const login = await post("account/login", { email: address, password });
+    expect(login.statusCode).toBe(503);
+    expect(login.json().error.code).toBe("ACCOUNT_EMAIL_UNAVAILABLE");
+    expect(login.cookies.some(c => c.name === "tn_session")).toBe(false);
+    const [row] = await database`select bool_and(consumed_at is not null) as consumed from account_challenges where email=${address}`;
+    expect(row!.consumed).toBe(true);
+  } finally { deliveryFailure = false; }
+});
+it("retires pending Authenticator challenges without revealing or accepting their secret", async () => {
+  const start = await post("account/signup", { email: "retired@tablenow.test", password });
+  await database`update account_challenges set stage='mfa' where email='retired@tablenow.test'`;
+  const resumed = await continuation(authCookie(start));
+  expect(resumed.statusCode).toBe(410);
+  expect(Object.keys(resumed.json())).toEqual(["error"]);
+  expect((await post("account/verify-mfa", { code: "123456" }, authCookie(start))).statusCode).toBe(410);
+  expect((await app.inject({ url: "/v1/account/google-continuation", headers: { cookie: authCookie(start) } })).statusCode).toBe(410);
 });

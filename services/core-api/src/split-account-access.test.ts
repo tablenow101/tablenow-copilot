@@ -79,7 +79,7 @@ it("changes a password only after a fresh reset link and revokes older sessions"
  expect((await post("login",{email,password})).json()).toEqual({authenticated:true});
 });
 
-it("keeps TOTP mandatory when a protected owner follows a password-reset link in another browser",async()=>{
+it("accepts the reset mailbox proof once without an additional app code",async()=>{
  const {seedOwnerFixture}=await import("./testing/owner-fixture.js");
  const owner=await seedOwnerFixture(db),email="protected-link@tablenow.test",secret=newTotpSecret();
  await db`update users set email=${email} where id=${owner.userId}`;
@@ -87,10 +87,24 @@ it("keeps TOTP mandatory when a protected owner follows a password-reset link in
  const password="Nouvelle phrase de test 2026!";
  await post("reset",{email,password,delivery:"link"});
  const verified=await post("verify-email",proof(email));
- expect(verified.json().stage).toBe("mfa");
- expect((await app.inject({url:"/v1/auth/session",headers:{cookie:cookies(verified)}})).statusCode).toBe(401);
- expect((await post("verify-mfa",{code:"invalid"},cookies(verified))).json().error.code).toBe("ACCOUNT_CODE_INVALID");
- const mfa=await post("verify-mfa",{code:totpAt(secret,Math.floor(Date.now()/30000))},cookies(verified));
- expect(mfa.json().authenticated).toBe(true);
- expect((await post("login",{email,password})).json().stage).toBe("mfa");
+ expect(verified.json()).toEqual({authenticated:true});
+ expect((await app.inject({url:"/v1/auth/session",headers:{cookie:cookies(verified)}})).statusCode).toBe(200);
+ expect((await post("verify-email",proof(email))).statusCode).toBe(400);
+ expect((await post("login",{email,password})).json().stage).toBe("email");
+});
+
+it("replaces the existing Authenticator check with an email code only for a protected login",async()=>{
+ const email="returning-otp@tablenow.test",password="Une phrase de test 2026!";
+ await post("signup",{email,password,delivery:"link"});
+ const signup=await post("verify-email",proof(email));
+ const session=await app.inject({url:"/v1/auth/session",headers:{cookie:cookies(signup)}});
+ await db`update account_credentials set totp_secret=${seal(newTotpSecret(),"s".repeat(48))} where user_id=${session.json().user.id}`;
+ const login=await post("login",{email,password});
+ expect(login.statusCode).toBe(202);
+ expect(login.json().stage).toBe("email");
+ expect(cookies(login)).not.toContain("tn_session");
+ const code=inbox.findLast(m=>m.to===email)!.text.match(/\b\d{6}\b/)![0];
+ const verified=await post("verify-email",{code},cookies(login));
+ expect(verified.json()).toEqual({authenticated:true});
+ expect((await app.inject({url:"/v1/auth/session",headers:{cookie:cookies(verified)}})).statusCode).toBe(200);
 });

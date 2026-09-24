@@ -1,3 +1,15 @@
+# 25 septembre 2026 — publication Preview autorisée
+
+Le propriétaire autorise la publication de la dernière version locale : remplacement ciblé TOTP par code e-mail et déconnexion/reprise de l’onboarding. Contrôles locaux réussis, diff présenté. Publication sur `product/onboarding-owner` uniquement ; `main` et production exclus. Déploiement et contrôle du commit servi en cours, avant recette privée du propriétaire.
+
+# 25 septembre 2026 — déconnexion et reprise onboarding, local uniquement
+
+Menu de profil sur les six étapes ; sauvegarde serveur avant révocation de session, reprise des réponses, position et texte non envoyé. Échec de sauvegarde : page et saisies conservées, aucune fermeture forcée. 8 tests API, 33 tests Console, types et recette Chrome locale mobile/ordinateur réussis. Aucun nouveau déclenchement OTP, aucune réinitialisation. Aucun commit/push/déploiement. Mémoire PostgreSQL distante en attente (erreur du connecteur). [Diff, captures et limites](../../docs/qa/onboarding-signout-local-2026-09-25.md).
+
+# 25 septembre 2026 — porte de publication du correctif OTP
+
+Correctif vérifié localement. Publication non autorisée : présenter le diff avant commit, push ou déploiement. Recette Preview, réception d’e-mail réel, Google réel et téléphone physique non exécutés. Mise à jour de la mémoire PostgreSQL en attente ; décision consignée localement. [Preuves](../../docs/qa/otp-replacement-local-2026-09-25.md).
+
 # Blocage SMTP — 24 septembre 2026
 
 Blocage suivant établi à 15:35 : adresse sans compte, code valide consommé par un parcours de connexion. Ancien message trompeur. Correction vers l'inscription testée localement ; recette privée d'inscription par lien encore attendue. Aucun facteur ni compte existant modifié.

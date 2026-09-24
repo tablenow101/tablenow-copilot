@@ -27,6 +27,8 @@ import {
   Sun,
   Volume2,
   X,
+  UserRound,
+  LogOut,
 } from "lucide-react";
 import { api, ApiError } from "@/lib/api";
 import { allPrioritiesSelected, priorityActivities, priorityOutcomes, toggleAllPriorities } from "@/lib/priority-selection";
@@ -69,6 +71,7 @@ import { useDictation } from "@/hooks/useDictation";
 import { useSession } from "@/hooks/useSession";
 import { LoadingScreen } from "./LoadingScreen";
 import { Brand } from "./Brand";
+import profileStyles from "./OnboardingProfile.module.css";
 import {
   adjacentPresentationStep,
   requestedPresentationStep,
@@ -111,7 +114,7 @@ export function OnboardingFlow({ initialRestaurantId, initialSection }: { initia
   const [saveState, setSaveState] = useState<SaveState>("idle");
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
-  const [composer, setComposer] = useState("");
+  const composer = answers.conversationDraft ?? "";
   const [chatBusy, setChatBusy] = useState(false);
   const [replies, setReplies] = useState<Array<CopilotRun & { restaurantId: string; savedAsNote?: boolean }>>([]);
   const [historyError, setHistoryError] = useState("");
@@ -123,6 +126,9 @@ export function OnboardingFlow({ initialRestaurantId, initialSection }: { initia
   const [searchUnavailable, setSearchUnavailable] = useState(false);
   const [manualOpen, setManualOpen] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [loggingOut, setLoggingOut] = useState(false);
+  const [logoutError, setLogoutError] = useState("");
+  const logoutRef = useRef(false);
   const [acceptTerms, setAcceptTerms] = useState(false);
   const [acceptDpa, setAcceptDpa] = useState(false);
   const [idempotencyKey, setIdempotencyKey] = useState(() => safeIdempotencyKey());
@@ -136,10 +142,11 @@ export function OnboardingFlow({ initialRestaurantId, initialSection }: { initia
   const dirtyRef = useRef(false);
   const changeVersionRef = useRef(0);
   const savingRef = useRef(false);
+  const saveTaskRef = useRef<Promise<boolean> | null>(null);
   const completingRef = useRef(false);
   const loadRequestRef = useRef(0);
   const initialNavigationUsedRef = useRef(false);
-  const saveNowRef = useRef<(target?: SectionKey) => Promise<OnboardingDraftView | null>>(async () => null);
+  const saveNowRef = useRef<(target?: SectionKey, step?: OnboardingPresentationStep) => Promise<OnboardingDraftView | null>>(async () => null);
   const headingRef = useRef<HTMLHeadingElement>(null);
 
   const locale = answers.interaction.locale;
@@ -193,7 +200,7 @@ export function OnboardingFlow({ initialRestaurantId, initialSection }: { initia
       setSection(nextSection);
       setSaveState("saved");
       setSearchUnavailable(false);
-      setManualOpen(!!loadedAnswers.establishment.cityCountry || loadedAnswers.establishment.identityConfirmed);
+      setManualOpen(loadedAnswers.establishment.identificationMode === "manual" || !!loadedAnswers.establishment.cityCountry || loadedAnswers.establishment.identityConfirmed);
       setAcceptTerms(false);
       setAcceptDpa(false);
       setIdempotencyKey(safeIdempotencyKey());
@@ -211,6 +218,8 @@ export function OnboardingFlow({ initialRestaurantId, initialSection }: { initia
   }, [initialRestaurantId, loadDraft, session]);
 
   const saveNow = useCallback(async (target = sectionRef.current, presentationStep?: OnboardingPresentationStep): Promise<OnboardingDraftView | null> => {
+    // Regular autosaves coalesce; logout explicitly drains the in-flight request.
+    if (saveTaskRef.current) return null;
     const currentDraft = draftRef.current;
     if (!currentDraft) return null;
     const shouldSave = dirtyRef.current || target !== currentDraft.currentSection || (presentationStep !== undefined && presentationStep !== currentDraft.answers.presentationStep);
@@ -230,12 +239,16 @@ export function OnboardingFlow({ initialRestaurantId, initialSection }: { initia
     const capturedAnswers = structuredClone(answersRef.current);
     if (presentationStep) capturedAnswers.presentationStep = presentationStep;
     const capturedProvenance = provenanceFor(capturedAnswers, provenanceRef.current);
+    let finishSave!: (succeeded: boolean) => void;
+    let succeeded = false;
+    saveTaskRef.current = new Promise(resolve => { finishSave = resolve; });
     savingRef.current = true;
     setSaveState("saving");
     setError("");
     try {
       const saved = await api<OnboardingDraftView>("/v1/onboarding", {
         method: "PATCH",
+        signal: AbortSignal.timeout(15_000),
         body: JSON.stringify({
           restaurantId: currentDraft.restaurantId,
           expectedRevision: currentDraft.revision,
@@ -246,6 +259,8 @@ export function OnboardingFlow({ initialRestaurantId, initialSection }: { initia
       });
       draftRef.current = saved;
       setDraft(saved);
+      // Keep the cursor consistent before a waiting logout resumes.
+      if (presentationStep) { sectionRef.current = target; setSection(target); }
       setConflictComparison(null);
       if (capturedVersion === changeVersionRef.current) {
         const normalized = mergeOnboardingAnswers(saved.answers);
@@ -265,6 +280,7 @@ export function OnboardingFlow({ initialRestaurantId, initialSection }: { initia
         window.setTimeout(() => { void saveNowRef.current(); }, 0);
       }
       syncSavedOnboardingAddress(saved);
+      succeeded = true;
       return saved;
     } catch (caught) {
       if (caught instanceof ApiError && caught.status === 409) {
@@ -277,15 +293,48 @@ export function OnboardingFlow({ initialRestaurantId, initialSection }: { initia
       return null;
     } finally {
       savingRef.current = false;
+      saveTaskRef.current = null;
+      finishSave(succeeded);
     }
   }, []);
   saveNowRef.current = saveNow;
 
+  const logout = async () => {
+    if (logoutRef.current || completingRef.current) return;
+    logoutRef.current = true;
+    setLoggingOut(true);
+    setLogoutError("");
+    try {
+      // Edits made while an autosave was running must also reach the server.
+      if (saveTaskRef.current && !await saveTaskRef.current) throw new Error("SAVE_FAILED");
+      if (draftRef.current && !await saveNow(sectionRef.current, answersRef.current.presentationStep)) throw new Error("SAVE_FAILED");
+      await api("/v1/auth/logout", { method: "POST", signal: AbortSignal.timeout(15_000) });
+      // Full navigation discards the authenticated UI and its in-memory state.
+      window.location.assign("/login?onboarding=saved");
+    } catch (caught) {
+      // A lost logout response may still have revoked the session. Read, never replay.
+      if (!dirtyRef.current) {
+        try { await api("/v1/auth/session", { signal: AbortSignal.timeout(8_000) }); }
+        catch (sessionError) {
+          if (sessionError instanceof ApiError && sessionError.status === 401) {
+            window.location.assign("/login?onboarding=saved");
+            return;
+          }
+        }
+      }
+      setLogoutError(caught instanceof Error && caught.message === "SAVE_FAILED"
+        ? locale === "fr" ? "La sauvegarde n’a pas abouti. Cette page reste ouverte et vos réponses sont conservées sur cet écran. Réessayez." : "Saving failed. This page stays open and your answers remain on this screen. Try again."
+        : locale === "fr" ? "La déconnexion n’a pas pu être confirmée. Vos réponses sont conservées. Réessayez." : "Sign-out could not be confirmed. Your answers are kept. Try again.");
+      setLoggingOut(false);
+      logoutRef.current = false;
+    }
+  };
+
   useEffect(() => {
-    if (!draft || !dirtyRef.current || saveState !== "dirty") return;
+    if (!draft || !dirtyRef.current || saveState !== "dirty" || loggingOut) return;
     const timeout = window.setTimeout(() => { void saveNow(); }, 800);
     return () => window.clearTimeout(timeout);
-  }, [answers, draft, saveNow, saveState, section]);
+  }, [answers, draft, saveNow, saveState, section, loggingOut]);
 
   useEffect(() => {
     const handler = (event: BeforeUnloadEvent) => {
@@ -304,6 +353,7 @@ export function OnboardingFlow({ initialRestaurantId, initialSection }: { initia
 
 
   const updateAnswers = useCallback((mutate: (current: OnboardingAnswers) => OnboardingAnswers, meta: UpdateMeta = {}) => {
+    if (logoutRef.current) return;
     const current = answersRef.current;
     const next = mutate(structuredClone(current));
     const currentSection = sectionRef.current;
@@ -330,6 +380,13 @@ export function OnboardingFlow({ initialRestaurantId, initialSection }: { initia
     setError("");
     setNotice("");
   }, []);
+
+  const setComposer = (value: string | ((previous: string) => string)) => {
+    updateAnswers(next => {
+      next.conversationDraft = typeof value === "function" ? value(next.conversationDraft ?? "") : value;
+      return next;
+    });
+  };
 
   const moveTo = (target: SectionKey, step = presentationStepForSection(target)) => {
     updateAnswers(next => { next.presentationStep = step; return next; });
@@ -518,9 +575,21 @@ export function OnboardingFlow({ initialRestaurantId, initialSection }: { initia
     setReplies(previous => previous.map(item => item.id === id ? { ...item, savedAsNote: true } : item));
   };
 
+  const profileMenu = session && <details className={profileStyles.profile} onKeyDown={event => {
+    if (event.key === "Escape") { event.currentTarget.open = false; event.currentTarget.querySelector("summary")?.focus(); }
+  }}>
+    <summary role="button" aria-label={locale === "fr" ? "Menu du profil" : "Profile menu"}><UserRound size={18} /></summary>
+    <div className={profileStyles.popover}>
+      <span>{session.user.email}</span>
+      <button type="button" disabled={loggingOut || busy || chatBusy || dictation.listening || dictation.busy} onClick={() => void logout()}><LogOut size={16} />{loggingOut ? locale === "fr" ? "Enregistrement et déconnexion…" : "Saving and signing out…" : locale === "fr" ? "Se déconnecter" : "Sign out"}</button>
+      {(dictation.listening || dictation.busy) && <p role="status">{locale === "fr" ? "Terminez la dictée avant de vous déconnecter." : "Finish dictation before signing out."}</p>}
+      {logoutError && <p role="alert">{logoutError}</p>}
+    </div>
+  </details>;
+
   if (sessionLoading) return <LoadingScreen label={copy.common.loading} />;
   if (!session) return <LoadFailure message={sessionError || copy.common.loadFailed} retry={() => void refreshSession()} copy={copy} />;
-  if (loadState === "failed") return <LoadFailure message={error || copy.common.loadFailed} retry={() => void loadDraft(draftRef.current?.restaurantId || initialRestaurantId)} copy={copy} />;
+  if (loadState === "failed") return <><header className="onboarding-header"><Brand />{profileMenu}</header><LoadFailure message={error || copy.common.loadFailed} retry={() => void loadDraft(draftRef.current?.restaurantId || initialRestaurantId)} copy={copy} /></>;
   if (loadState !== "ready" || !draft) return <LoadingScreen label={copy.common.loading} />;
 
   const visibleStep = answers.presentationStep ?? presentationStepForSection(section);
@@ -537,7 +606,9 @@ export function OnboardingFlow({ initialRestaurantId, initialSection }: { initia
   const isWelcome = visibleStep === "establishment";
   const identityOpen = manualOpen || !!answers.establishment.cityCountry || answers.establishment.identityConfirmed;
 
-  return <main className={`onboarding-layout final-onboarding theme-${answers.interaction.theme}${isWelcome ? " welcome-onboarding" : ""}`} dir={copy.direction} lang={locale}>
+  return <main className={`onboarding-layout final-onboarding theme-${answers.interaction.theme}${isWelcome ? " welcome-onboarding" : ""}`} dir={copy.direction} lang={locale} onClickCapture={event => {
+    if (logoutRef.current) { event.preventDefault(); event.stopPropagation(); }
+  }}>
     <div className={isWelcome ? "welcome-frame" : undefined}>
     <header className="onboarding-header final-onboarding-header">
       <Link href="/dashboard" aria-label="TableNow"><Brand /></Link>
@@ -546,11 +617,24 @@ export function OnboardingFlow({ initialRestaurantId, initialSection }: { initia
       <div className="onboarding-top-controls">
         <label><span className="sr-only">{copy.common.language}</span><select aria-label={copy.common.language} value={locale} onChange={(event) => updateAnswers((next) => { next.interaction.locale = event.target.value as LocaleMode; return next; })}><option value="fr">FR</option><option value="en">EN</option></select></label>
         <button type="button" className="icon-button tiny" aria-label={answers.interaction.theme === "dark" ? copy.common.clearTheme : copy.common.darkTheme} title={answers.interaction.theme === "dark" ? copy.common.clearTheme : copy.common.darkTheme} onClick={() => updateAnswers((next) => { next.interaction.theme = next.interaction.theme === "dark" ? "clear" : "dark"; return next; })}>{answers.interaction.theme === "dark" ? <Sun size={14} /> : <Moon size={14} />}</button>
+        {profileMenu}
       </div>
       <div className="onboarding-progress-line" aria-hidden="true">{progressGroups.map((group, index) => <span key={group.key} className={index <= currentGroupIndex ? "active" : ""} />)}</div>
     </header>
 
-    <div className="onboarding-shell">
+    <div className="onboarding-shell" inert={loggingOut} aria-busy={loggingOut} onBlurCapture={event => {
+      if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement) {
+        window.setTimeout(() => { if (dirtyRef.current && !logoutRef.current && !savingRef.current) void saveNowRef.current(); }, 0);
+      }
+    }} onChangeCapture={event => {
+      if (event.target instanceof HTMLSelectElement || (event.target instanceof HTMLInputElement && ["checkbox", "radio"].includes(event.target.type))) {
+        window.setTimeout(() => { if (dirtyRef.current && !logoutRef.current && !savingRef.current) void saveNowRef.current(); }, 0);
+      }
+    }} onClickCapture={event => {
+      if (event.target instanceof Element && event.target.closest("button")) {
+        window.setTimeout(() => { if (dirtyRef.current && !logoutRef.current && !savingRef.current) void saveNowRef.current(); }, 0);
+      }
+    }}>
       {!isWelcome && <aside className="onboarding-rail" aria-label={copy.common.brand}>
         {progressGroups.map((group, index) => {
           const label = copy.steps[group.key];

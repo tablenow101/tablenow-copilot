@@ -15,7 +15,7 @@ describe("separate authentication screens", () => {
     expect(flow).toContain('href="/login/email"');
     expect(flow).not.toContain('name="name"');
     expect(flow).toContain("Code reçu par e-mail");
-    expect(flow).toContain("Code de votre application d’authentification");
+    expect(flow).not.toContain("Code de votre application d’authentification");
     expect(login).toContain("<AccountFlow />");
     expect(register).toContain('<AccountFlow mode="signup" />');
   });

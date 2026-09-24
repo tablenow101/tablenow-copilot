@@ -122,7 +122,7 @@ describe("Google authentication", () => {
     const callback = await get(`/v1/oauth/google/callback?state=${attempt.state}&code=fixture`, attempt.cookie);
     expect(callback.headers.location).toBe("http://localhost:3000/login?google=continue");
     expect((await get("/v1/auth/session", cookieOf(callback))).statusCode).toBe(401);
-    const mfa = await post("/v1/account/verify-mfa", {code: totpAt(totpSecret, Math.floor(Date.now()/30000))}, cookieOf(callback));
+    const mfa = await post("/v1/account/verify-email", {code: send.mock.calls.at(-1)![0].text.match(/\b\d{6}\b/)![0]}, cookieOf(callback));
     expect(mfa.statusCode).toBe(200);
     const flow = { session: await get("/v1/auth/session", cookieOf(mfa)) };
     const [credential] = await database<{ password_hash: string; totp_secret: string }[]>`select password_hash,totp_secret from account_credentials where user_id=${fixture.userId}`;

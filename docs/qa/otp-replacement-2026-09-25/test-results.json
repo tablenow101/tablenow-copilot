@@ -1,0 +1,308 @@
+{
+  "api": {
+    "success": true,
+    "passed": 43,
+    "failed": 0,
+    "pending": 0,
+    "tests": [
+      {
+        "file": "account-recovery-routes.test.ts",
+        "name": "retires every legacy recovery endpoint with a clear transition response",
+        "status": "passed"
+      },
+      {
+        "file": "account-routes.test.ts",
+        "name": "confirms signup without a name or extra factor and resumes an email without sending again",
+        "status": "passed"
+      },
+      {
+        "file": "account-routes.test.ts",
+        "name": "preserves password-only login and its existing session when no extra check was configured",
+        "status": "passed"
+      },
+      {
+        "file": "account-routes.test.ts",
+        "name": "requires mailbox proof instead of an app code while keeping old credential data unchanged",
+        "status": "passed"
+      },
+      {
+        "file": "account-routes.test.ts",
+        "name": "rejects expired proofs without counting an attempt and denies unrelated origins",
+        "status": "passed"
+      },
+      {
+        "file": "account-routes.test.ts",
+        "name": "bounds wrong proofs to five per challenge without locking the victim's account",
+        "status": "passed"
+      },
+      {
+        "file": "account-routes.test.ts",
+        "name": "allows only one concurrent verification and invalidates other pending proofs",
+        "status": "passed"
+      },
+      {
+        "file": "account-routes.test.ts",
+        "name": "enforces resend cooldown, invalidates the old code and persists the recipient budget",
+        "status": "passed"
+      },
+      {
+        "file": "account-routes.test.ts",
+        "name": "reports delivery failures, consumes failed challenges and never creates a session",
+        "status": "passed"
+      },
+      {
+        "file": "account-routes.test.ts",
+        "name": "retires pending Authenticator challenges without revealing or accepting their secret",
+        "status": "passed"
+      },
+      {
+        "file": "google-identity.test.ts",
+        "name": "Google identity verification with the official JWT verifier accepts a signed, intended, verified identity",
+        "status": "passed"
+      },
+      {
+        "file": "google-identity.test.ts",
+        "name": "Google identity verification with the official JWT verifier rejects invalid claims {\"aud\":\"other-client\"}",
+        "status": "passed"
+      },
+      {
+        "file": "google-identity.test.ts",
+        "name": "Google identity verification with the official JWT verifier rejects invalid claims {\"iss\":\"https://attacker.test\"}",
+        "status": "passed"
+      },
+      {
+        "file": "google-identity.test.ts",
+        "name": "Google identity verification with the official JWT verifier rejects invalid claims {\"exp\":1}",
+        "status": "passed"
+      },
+      {
+        "file": "google-identity.test.ts",
+        "name": "Google identity verification with the official JWT verifier rejects invalid claims {\"nonce\":\"other-nonce\"}",
+        "status": "passed"
+      },
+      {
+        "file": "google-identity.test.ts",
+        "name": "Google identity verification with the official JWT verifier rejects invalid claims {\"email_verified\":false}",
+        "status": "passed"
+      },
+      {
+        "file": "google-identity.test.ts",
+        "name": "Google identity verification with the official JWT verifier rejects invalid claims {\"sub\":\"\"}",
+        "status": "passed"
+      },
+      {
+        "file": "google-identity.test.ts",
+        "name": "Google identity verification with the official JWT verifier rejects invalid claims {\"azp\":\"other-client\"}",
+        "status": "passed"
+      },
+      {
+        "file": "google-identity.test.ts",
+        "name": "Google identity verification with the official JWT verifier rejects a tampered signature and never exposes upstream credentials in its error",
+        "status": "passed"
+      },
+      {
+        "file": "google-routes.test.ts",
+        "name": "Google authentication uses only the stable Preview and production domains",
+        "status": "passed"
+      },
+      {
+        "file": "google-routes.test.ts",
+        "name": "Google authentication accepts only the configured Preview callback host",
+        "status": "passed"
+      },
+      {
+        "file": "google-routes.test.ts",
+        "name": "Google authentication accepts only the production host for a production callback",
+        "status": "passed"
+      },
+      {
+        "file": "google-routes.test.ts",
+        "name": "Google authentication rejects missing browser binding, forged state, cancellation, expiry and replay before exchanging codes",
+        "status": "passed"
+      },
+      {
+        "file": "google-routes.test.ts",
+        "name": "Google authentication rejects an attempt returned on an origin different from its sealed redirect",
+        "status": "passed"
+      },
+      {
+        "file": "google-routes.test.ts",
+        "name": "Google authentication creates the new Google owner and a transient session without TOTP or recovery codes",
+        "status": "passed"
+      },
+      {
+        "file": "google-routes.test.ts",
+        "name": "Google authentication keeps the existing credentials, membership and completed profile when linking Google",
+        "status": "passed"
+      },
+      {
+        "file": "google-routes.test.ts",
+        "name": "does not create an account from the Google login screen",
+        "status": "passed"
+      },
+      {
+        "file": "google-routes.test.ts",
+        "name": "requires mailbox proof before creating an identity whose email Google does not own",
+        "status": "passed"
+      },
+      {
+        "file": "google-routes.test.ts",
+        "name": "signs a linked Google account in through login without creating a second user",
+        "status": "passed"
+      },
+      {
+        "file": "google-routes.test.ts",
+        "name": "returns a readable login error when additional mailbox verification cannot be delivered",
+        "status": "passed"
+      },
+      {
+        "file": "simple-account-access.test.ts",
+        "name": "simple account access uses one email entry point and signs an existing owner in after the code",
+        "status": "passed"
+      },
+      {
+        "file": "simple-account-access.test.ts",
+        "name": "simple account access creates a new owner only through explicit signup, then reuses it at login",
+        "status": "passed"
+      },
+      {
+        "file": "simple-account-access.test.ts",
+        "name": "simple account access finishes an already verified legacy profile challenge without asking for a name",
+        "status": "passed"
+      },
+      {
+        "file": "simple-account-access.test.ts",
+        "name": "simple account access creates an owner session after the email code without password, TOTP or recovery codes",
+        "status": "passed"
+      },
+      {
+        "file": "simple-account-access.test.ts",
+        "name": "simple account access lets a returning owner request a fresh email code and sign in",
+        "status": "passed"
+      },
+      {
+        "file": "simple-account-access.test.ts",
+        "name": "simple account access requires an existing owner to return to login instead of registering twice",
+        "status": "passed"
+      },
+      {
+        "file": "simple-account-access.test.ts",
+        "name": "simple account access uses the proven mailbox instead of the existing TOTP without modifying credentials",
+        "status": "passed"
+      },
+      {
+        "file": "split-account-access.test.ts",
+        "name": "registers without a name through a single-use link, including in a different browser, then accepts the password",
+        "status": "passed"
+      },
+      {
+        "file": "split-account-access.test.ts",
+        "name": "never creates an account from passwordless login and rejects expired links",
+        "status": "passed"
+      },
+      {
+        "file": "split-account-access.test.ts",
+        "name": "guides a verified unknown login to signup without revealing account existence before the proof",
+        "status": "passed"
+      },
+      {
+        "file": "split-account-access.test.ts",
+        "name": "changes a password only after a fresh reset link and revokes older sessions",
+        "status": "passed"
+      },
+      {
+        "file": "split-account-access.test.ts",
+        "name": "accepts the reset mailbox proof once without an additional app code",
+        "status": "passed"
+      },
+      {
+        "file": "split-account-access.test.ts",
+        "name": "replaces the existing Authenticator check with an email code only for a protected login",
+        "status": "passed"
+      }
+    ]
+  },
+  "console": {
+    "success": true,
+    "passed": 14,
+    "failed": 0,
+    "pending": 0,
+    "tests": [
+      {
+        "file": "auth-flow-boundary.test.ts",
+        "name": "separate authentication screens keeps existing-account login distinct from signup and asks for no name",
+        "status": "passed"
+      },
+      {
+        "file": "account-continuation.test.ts",
+        "name": "account progress reconciliation reads a committed email session after a lost reply without retrying a code",
+        "status": "passed"
+      },
+      {
+        "file": "account-continuation.test.ts",
+        "name": "account progress reconciliation finds an active email verification using only reads",
+        "status": "passed"
+      },
+      {
+        "file": "account-continuation.test.ts",
+        "name": "account progress reconciliation recognizes a legacy verified profile for completion without a new name screen",
+        "status": "passed"
+      },
+      {
+        "file": "account-continuation.test.ts",
+        "name": "account progress reconciliation resumes email verification of a protected account",
+        "status": "passed"
+      },
+      {
+        "file": "account-continuation.test.ts",
+        "name": "account progress reconciliation does not reopen a retired authenticator enrollment",
+        "status": "passed"
+      },
+      {
+        "file": "account-continuation.test.ts",
+        "name": "account progress reconciliation keeps an unavailable server distinct from an absent session",
+        "status": "passed"
+      },
+      {
+        "file": "account-feedback.test.ts",
+        "name": "account verification feedback offers signup after a verified address has no account, without calling the code invalid or exhausted",
+        "status": "passed"
+      },
+      {
+        "file": "account-feedback.test.ts",
+        "name": "account verification feedback separates a rejected code from an expired verification and a server failure",
+        "status": "passed"
+      },
+      {
+        "file": "account-feedback.test.ts",
+        "name": "account verification feedback does not replace an explicit email delivery failure with a missing-challenge error",
+        "status": "passed"
+      },
+      {
+        "file": "account-feedback.test.ts",
+        "name": "account verification feedback reports an interrupted connection without asserting that the code was wrong",
+        "status": "passed"
+      },
+      {
+        "file": "account-feedback.test.ts",
+        "name": "account verification feedback preserves the initial failure when signup did not start, and only restarts a verification already started",
+        "status": "passed"
+      },
+      {
+        "file": "account-feedback.test.ts",
+        "name": "account verification feedback treats truncated JSON as an uncertain response without replaying the request",
+        "status": "passed"
+      },
+      {
+        "file": "account-feedback.test.ts",
+        "name": "account verification feedback bounds waiting and never automatically retries a verification",
+        "status": "passed"
+      }
+    ]
+  },
+  "build": {
+    "core-api": "PASS: tsc -p tsconfig.build.json",
+    "console": "PASS: next build, Next.js 16.3.5; TypeScript and generation successful",
+    "console-typecheck": "PASS"
+  }
+}
