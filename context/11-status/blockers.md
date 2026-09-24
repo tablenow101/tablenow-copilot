@@ -1,3 +1,7 @@
+# Blocage SMTP — 24 septembre 2026
+
+Le serveur SMTP refusait l'identifiant (`535 EAUTH`). Nouvelle clé limitée à l'envoi pour le domaine autorisé : authentification SMTP réussie, variable Preview remplacée. Réception réelle, lien de confirmation et reconnexion privée restent non vérifiés. La correction du message d'erreur seule n'avait pas résolu l'envoi. [Preuves](../../docs/qa/auth-consolidation-2026-09-24.md).
+
 # Authentification séparée — 23 septembre 2026
 
 Preview READY et écrans publics vérifiés au commit applicatif `e52ca14`. Restent non exécutés : réception réelle du lien, nouveau retour Google, saisie TOTP privée et essais sur appareil physique. Aucun lot produit clôturé. Mémoire canonique : sauvegarde en attente, connecteur Neon refuse le schéma des paramètres ; décision conservée dans le journal du dépôt. [Preuves et limites](../../docs/qa/auth-split-2026-09-23.md).

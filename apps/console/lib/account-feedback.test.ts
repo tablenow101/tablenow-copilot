@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ApiError } from "./api";
-import { accountFeedback, accountRequest, shouldReconcileAccountFailure } from "./account-feedback";
+import { accountFeedback, accountRequest, missingAccountProgressFeedback, shouldReconcileAccountFailure } from "./account-feedback";
 
 afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); vi.useRealTimers(); });
 
@@ -24,6 +24,14 @@ describe("account verification feedback", () => {
   it("reports an interrupted connection without asserting that the code was wrong", async () => {
     vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new TypeError("Failed to fetch")));
     await expect(accountRequest("/v1/account/continuation")).rejects.toMatchObject({ code: "ACCOUNT_NETWORK", status: 0 });
+  });
+
+  it("preserves the initial failure when signup did not start, and only restarts a verification already started", () => {
+    const interrupted = new ApiError(0, "ACCOUNT_NETWORK", "La connexion a été interrompue. Votre saisie est conservée.");
+    expect(missingAccountProgressFeedback(false, interrupted)).toEqual({ message: interrupted.message, restart: false });
+    expect(missingAccountProgressFeedback(false).restart).toBe(false);
+    expect(missingAccountProgressFeedback(false).message).not.toContain("vérification active");
+    expect(missingAccountProgressFeedback(true, interrupted).restart).toBe(true);
   });
 
   it("treats truncated JSON as an uncertain response without replaying the request", async () => {

@@ -1,3 +1,7 @@
+# Prochaine action — confirmer la réparation SMTP
+
+Vérifier le déploiement réunissant la clé SMTP réparée et le retour d'erreur corrigé. Tester l'envoi applicatif vers une adresse autorisée puis demander confirmation de réception. Laisser la saisie privée au propriétaire pour confirmer le lien et la connexion. Une seule branche de travail : `product/onboarding-owner`. Aucune suppression avant recette et accord, aucune production.
+
 # Prochaine action — authentification uniquement
 
 Preview publiée et rendu public contrôlé au commit applicatif `e52ca14`. Faire vérifier la réception réelle et la connexion privée au propriétaire sans fermer son onglet. Aucun autre écran ni main/production à modifier. [Rapport](../../docs/qa/auth-split-2026-09-23.md).

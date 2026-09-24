@@ -30,3 +30,11 @@ export function accountFeedback(error: unknown): { message: string; restart: boo
 export function shouldReconcileAccountFailure(error: unknown): boolean {
   return error instanceof ApiError && error.status === 0;
 }
+
+export function missingAccountProgressFeedback(verificationStarted: boolean, originalError?: unknown): { message: string; restart: boolean } {
+  if (verificationStarted) return { message: "Cette vérification n’est plus disponible. Recommencez pour continuer.", restart: true };
+  return originalError ? accountFeedback(originalError) : {
+    message: "La demande n’a pas pu être confirmée. Votre saisie est conservée. Réessayez.",
+    restart: false,
+  };
+}

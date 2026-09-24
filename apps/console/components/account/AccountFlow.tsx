@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, Eye, EyeOff, LoaderCircle, Moon, Sun } from "lucide-react";
 import { ApiError } from "@/lib/api";
-import { accountRequest as api, accountFeedback, shouldReconcileAccountFailure } from "@/lib/account-feedback";
+import { accountRequest as api, accountFeedback, missingAccountProgressFeedback, shouldReconcileAccountFailure } from "@/lib/account-feedback";
 import { readAccountProgress, type AccountContinuation } from "@/lib/account-continuation";
 import { challengeSecondsRemaining } from "@/lib/account-challenge";
 import { Brand } from "../Brand";
@@ -136,7 +136,7 @@ export function AccountFlow({ mode = "login" }: { mode?: Mode }) {
     if ((stage === "email" && delivery === "code") || stage === "mfa" || stage === "enroll") codeRef.current?.focus();
   }, [stage, delivery]);
 
-  async function reconcileProgress() {
+  async function reconcileProgress(originalError?: unknown) {
     setNeedsProgressCheck(true);
     setBusy(true);
     try {
@@ -147,8 +147,9 @@ export function AccountFlow({ mode = "login" }: { mode?: Mode }) {
         setError("");
         setNeedsProgressCheck(false);
       } else {
-        setChallengeUnavailable(stage !== "credentials");
-        setError("Aucune vérification active n’a été retrouvée. Recommencez la connexion.");
+        const feedback = missingAccountProgressFeedback(stage !== "credentials", originalError);
+        setChallengeUnavailable(feedback.restart);
+        setError(feedback.message);
         setNeedsProgressCheck(false);
       }
     } catch (caught) {
@@ -185,7 +186,7 @@ export function AccountFlow({ mode = "login" }: { mode?: Mode }) {
         } else await resumeChallenge({ ...next, email, purpose: "login", rememberMe });
       }
     } catch (caught) {
-      if (shouldReconcileAccountFailure(caught)) await reconcileProgress();
+      if (shouldReconcileAccountFailure(caught)) await reconcileProgress(caught);
       else {
         const feedback = accountFeedback(caught);
         setChallengeUnavailable(feedback.restart);
@@ -204,7 +205,7 @@ export function AccountFlow({ mode = "login" }: { mode?: Mode }) {
       setCooldown(60);
       recordChallengeExpiry(next.expiresInSeconds);
     } catch (caught) {
-      if (shouldReconcileAccountFailure(caught)) await reconcileProgress();
+      if (shouldReconcileAccountFailure(caught)) await reconcileProgress(caught);
       else {
         const feedback = accountFeedback(caught);
         setChallengeUnavailable(feedback.restart);
