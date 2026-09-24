@@ -27,8 +27,9 @@ La reprise après interruption conserve l'erreur d'origine quand aucune vérific
 ## Preuves et limites
 
 - Test de régression d'abord rouge, puis 13 tests ciblés de retour d'erreur, reprise et séparation des écrans réussis.
-- Authentification SMTP de la nouvelle clé réussie : cela ne prouve pas encore la réception d'un e-mail.
-- Nouveau déploiement nécessaire pour charger la clé ; recette réelle de l'envoi et confirmation par le destinataire encore attendues.
+- Authentification SMTP de la nouvelle clé réussie, puis déploiement Preview `dpl_EmbjB9PWupNR854ZiT7UpQCXtiYq` READY, commit exact `d554eb5e956cb24190c83636752085aaeccda735`, alias `preview.tablenow.io` vérifié.
+- Envoi réel déclenché depuis le parcours normal de connexion par code vers le destinataire autorisé à 13:29:30 UTC (15:29 Paris). L'interface affiche « Code reçu par e-mail ». Resend indique `delivered`, message `01a0d39b-5e9f-7248-9cfd-67e1412a0957`. Aucun code lu ni saisi par l'agent ; onglet laissé ouvert au propriétaire.
+- Cette preuve valide le transport applicatif d'un code de connexion. La réception visible par le destinataire, sa saisie privée, l'inscription par lien, Google, TOTP et la reprise d'onboarding ne sont pas validés par cet essai. Confirmation demandée au propriétaire, encore attendue.
 - Aucun compte créé, mot de passe modifié, facteur TOTP supprimé ou donnée métier de recette ajoutée pendant cette consolidation.
 - Aucun changement de main, production, politique d'authentification ou design.
 - Mémoire canonique inaccessible : le connecteur Neon rejette `project_id` malgré sa présence ; sauvegarde en attente. Les décisions sont consignées dans le dépôt.

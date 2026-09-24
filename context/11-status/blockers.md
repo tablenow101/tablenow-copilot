@@ -1,6 +1,6 @@
 # Blocage SMTP — 24 septembre 2026
 
-Le serveur SMTP refusait l'identifiant (`535 EAUTH`). Nouvelle clé limitée à l'envoi pour le domaine autorisé : authentification SMTP réussie, variable Preview remplacée. Réception réelle, lien de confirmation et reconnexion privée restent non vérifiés. La correction du message d'erreur seule n'avait pas résolu l'envoi. [Preuves](../../docs/qa/auth-consolidation-2026-09-24.md).
+Le refus SMTP (`535 EAUTH`) est levé : clé dédiée en Preview, déploiement `d554eb5` READY et code de connexion envoyé réellement depuis l'interface, marqué livré par Resend à 15:29 Paris. Restent non vérifiés : réception confirmée par le propriétaire, saisie privée, inscription par lien et connexion complète. L'onglet reste ouvert. La correction du message d'erreur seule n'avait pas résolu l'envoi. [Preuves](../../docs/qa/auth-consolidation-2026-09-24.md).
 
 # Authentification séparée — 23 septembre 2026
 

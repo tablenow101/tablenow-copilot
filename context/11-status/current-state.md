@@ -1,6 +1,6 @@
 # Authentification — 24 septembre 2026, correction SMTP
 
-L'inscription échoue sur un refus SMTP `535 EAUTH` confirmé dans les logs de la bonne Preview. Nouvelle clé dédiée au même domaine authentifiée avec succès et enregistrée uniquement pour Preview / `product/onboarding-owner`. Aucune correction d'authentification manquante dans les autres branches : la branche propriétaire rassemble déjà leur historique utile. Correction complémentaire du message de reprise testée (13 tests). Déploiement et réception réelle restent à vérifier avant validation. [Rapport](../../docs/qa/auth-consolidation-2026-09-24.md).
+Le refus SMTP `535 EAUTH` est corrigé avec une clé dédiée, limitée à Preview / `product/onboarding-owner`. Déploiement `d554eb5` READY et un code de connexion envoyé depuis l'interface à 15:29 Paris, marqué livré par Resend. Confirmation de réception et saisie privées attendues ; l'inscription par lien et le parcours complet restent à vérifier. Aucune correction d'authentification manquante dans les autres branches : la branche propriétaire rassemble déjà leur historique utile. Correction du message de reprise : 13 tests réussis. Aucune branche supprimée, main/production inchangés. [Rapport](../../docs/qa/auth-consolidation-2026-09-24.md).
 
 # Authentification séparée — 23 septembre 2026, Preview publiée
 

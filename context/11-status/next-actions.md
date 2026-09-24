@@ -1,6 +1,6 @@
 # Prochaine action — confirmer la réparation SMTP
 
-Vérifier le déploiement réunissant la clé SMTP réparée et le retour d'erreur corrigé. Tester l'envoi applicatif vers une adresse autorisée puis demander confirmation de réception. Laisser la saisie privée au propriétaire pour confirmer le lien et la connexion. Une seule branche de travail : `product/onboarding-owner`. Aucune suppression avant recette et accord, aucune production.
+Preview `d554eb5` READY ; envoi réel du code marqué livré par Resend à 15:29 Paris. Attendre la confirmation de réception du propriétaire et sa saisie privée dans l'onglet laissé ouvert, sans le fermer ni le recharger. Vérifier ensuite la connexion puis, séparément, l'inscription par lien et la reprise d'onboarding. Une seule branche de travail : `product/onboarding-owner`. Aucune suppression avant recette et accord, aucune production.
 
 # Prochaine action — authentification uniquement
 
